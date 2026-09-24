@@ -51,6 +51,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: termpilot-*
@@ -58,5 +59,6 @@ jobs:
           path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          name: TermPilot ${{ github.ref_name }}
+          body_path: .github/release-body.md
           files: artifacts/*
