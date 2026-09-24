@@ -62,13 +62,13 @@ Windows · macOS · Linux
 
 ## 下载
 
-最新版在 [Releases](https://github.com/xy200303/termpilot/releases/latest)。当前是 [v0.1.0](https://github.com/xy200303/termpilot/releases/tag/v0.1.0)，安装包没有代码签名。
+最新版在 [Releases](https://github.com/xy200303/termpilot/releases/latest)。当前是 [v0.2.0](https://github.com/xy200303/termpilot/releases/tag/v0.2.0)，安装包没有代码签名。
 
 | 平台 | 文件 |
 | --- | --- |
-| Windows x64 | `TermPilot.Setup.0.1.0.exe`、`TermPilot-0.1.0-win.zip` |
-| macOS（Apple Silicon） | `TermPilot-0.1.0-arm64.dmg`、`TermPilot-0.1.0-arm64-mac.zip` |
-| Linux x64 | `TermPilot-0.1.0.AppImage`、`termpilot_0.1.0_amd64.deb` |
+| Windows x64 | `TermPilot.Setup.0.2.0.exe`、`TermPilot-0.2.0-win.zip` |
+| macOS（Apple Silicon） | `TermPilot-0.2.0-arm64.dmg`、`TermPilot-0.2.0-arm64-mac.zip` |
+| Linux x64 | `TermPilot-0.2.0.AppImage`、`termpilot_0.2.0_amd64.deb` |
 
 ## 从源码运行
 
@@ -84,7 +84,7 @@ npm run typecheck
 npm run build
 ```
 
-推送到 `main` 会做类型检查和构建。打上和 `package.json` 里 `version` 一致的标签，例如 `v0.1.0`，会在 Windows、macOS、Linux 上各打一个安装包，并发到 GitHub Release。发布说明来自 [`.github/release-body.md`](.github/release-body.md)。本机只打当前系统：`npm run dist:win`、`npm run dist:mac` 或 `npm run dist:linux`。
+推送到 `main` 会做类型检查和构建。打上和 `package.json` 里 `version` 一致的标签，例如 `v0.2.0`，会在 Windows、macOS、Linux 上各打一个安装包，并发到 GitHub Release。发布说明来自 [`.github/release-body.md`](.github/release-body.md)。本机只打当前系统：`npm run dist:win`、`npm run dist:mac` 或 `npm run dist:linux`。
 
 ## 许可
 
