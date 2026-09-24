@@ -20,6 +20,10 @@ import type {
   SessionInput,
   TermCreateOptions,
   TermDataEvent,
+  TermLinesReply,
+  TermLinesRun,
+  TermModeReply,
+  TermModeRun,
   TermStatusEvent
 } from '../shared/types'
 
@@ -63,6 +67,22 @@ const api = {
       ipcRenderer.on(IPC.termStatus, listener)
       return () => {
         ipcRenderer.removeListener(IPC.termStatus, listener)
+      }
+    },
+    linesReply: (result: TermLinesReply) => ipcRenderer.send(IPC.termLinesReply, result),
+    onLines: (cb: (job: TermLinesRun) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, job: TermLinesRun) => cb(job)
+      ipcRenderer.on(IPC.termLines, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.termLines, listener)
+      }
+    },
+    modeReply: (result: TermModeReply) => ipcRenderer.send(IPC.termModeReply, result),
+    onMode: (cb: (job: TermModeRun) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, job: TermModeRun) => cb(job)
+      ipcRenderer.on(IPC.termMode, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.termMode, listener)
       }
     }
   },

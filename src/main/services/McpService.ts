@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { WebContents } from 'electron'
 import { z } from 'zod'
@@ -6,7 +7,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { IPC } from '../../shared/ipc-channels'
-import type { CaptureReply } from '../../shared/types'
+import { encodeTermInput, TERM_KEYS } from '../../shared/term-keys'
+import type { CaptureReply, TermLinesReply, TermModeReply } from '../../shared/types'
 import {
   MCP_DEFAULT_PORT,
   MCP_HOST,
@@ -50,6 +52,8 @@ export class McpService {
   private transports = new Map<string, StreamableHTTPServerTransport>()
   private confirms = new Map<string, (ok: boolean) => void>()
   private captures = new Map<string, (result: CaptureReply) => void>()
+  private lineReads = new Map<string, (result: TermLinesReply) => void>()
+  private modeReads = new Map<string, (result: TermModeReply) => void>()
   private token = ''
   private runtime: McpRuntime = { running: false, port: MCP_DEFAULT_PORT, clients: 0 }
 
@@ -96,6 +100,14 @@ export class McpService {
       this.captures.delete(id)
       settle({ id, error: '应用正在退出' })
     }
+    for (const [id, settle] of this.lineReads) {
+      this.lineReads.delete(id)
+      settle({ id, error: '应用正在退出' })
+    }
+    for (const [id, settle] of this.modeReads) {
+      this.modeReads.delete(id)
+      settle({ id, error: '应用正在退出' })
+    }
     const http = this.http
     this.http = null
     if (!http) return
@@ -107,6 +119,20 @@ export class McpService {
     const settle = this.captures.get(result.id)
     if (!settle) return
     this.captures.delete(result.id)
+    settle(result)
+  }
+
+  resolveLines(result: TermLinesReply): void {
+    const settle = this.lineReads.get(result.id)
+    if (!settle) return
+    this.lineReads.delete(result.id)
+    settle(result)
+  }
+
+  resolveMode(result: TermModeReply): void {
+    const settle = this.modeReads.get(result.id)
+    if (!settle) return
+    this.modeReads.delete(result.id)
     settle(result)
   }
 
@@ -295,7 +321,8 @@ export class McpService {
     server.registerTool(
       'term_exec',
       {
-        description: '在已连接的终端执行一条命令，等到输出安静后返回文本。',
+        description:
+          '在 shell 提示符下执行一条命令，等到输出安静后返回文本。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。',
         inputSchema: {
           termId: z.string(),
           command: z.string(),
@@ -313,17 +340,39 @@ export class McpService {
     server.registerTool(
       'term_write',
       {
-        description: '向终端写入原始按键，用于方向键、Ctrl 和交互程序。',
-        inputSchema: { termId: z.string(), data: z.string().max(65_536) }
+        description:
+          '向当前终端发送按键或文字，用于上下左右选择、输入内容、回车确认和 TUI。keys 按顺序先发，然后输入 text，submit 为 true 时最后回车。方向键会按程序当前的光标模式发送。发完返回当前画面。密码和验证码不要代填。',
+        inputSchema: {
+          termId: z.string(),
+          keys: z
+            .array(z.enum(TERM_KEYS))
+            .max(40)
+            .optional()
+            .describe('up down left right enter tab backspace esc space home end pageup pagedown ctrl-c ctrl-d ctrl-z ctrl-l f1-f12'),
+          text: z.string().max(4096).optional().describe('紧接在 keys 后面输入的文字'),
+          submit: z.boolean().optional().describe('输入后再补一次回车'),
+          data: z.string().max(65_536).optional().describe('原始字节，只在 keys 无法表达时使用')
+        }
       },
-      async ({ termId, data }) =>
+      async ({ termId, keys, text, submit, data }) =>
         this.run('term_write', termId, async () => {
+          if (!keys?.length && !text && !data && !submit) throw new Error('要提供 keys、text、submit 或 data')
           if (!this.terminal.listTerms().some((term) => term.id === termId)) {
             throw new Error('终端不存在或已断开')
           }
-          if (data.includes('\n') || data.includes('\r')) await this.guard(data)
-          this.terminal.input(termId, data)
-          return '已写入'
+          const applicationCursor = keys?.some((key) => MOVES.has(key))
+            ? await this.cursorMode(termId)
+            : false
+          const payload = encodeTermInput({ keys, text, data, submit, applicationCursor })
+          if (!payload) throw new Error('没有可发送的内容')
+          if (payload.includes('\n') || payload.includes('\r')) await this.guard(payload)
+          this.terminal.input(termId, payload)
+          await wait(200)
+          try {
+            return await this.lines(termId)
+          } catch {
+            return '已发送'
+          }
         })
     )
 
@@ -457,20 +506,10 @@ export class McpService {
     )
 
     server.registerTool(
-      'term_screenshot',
-      {
-        description: '截取终端当前画面。抓的是窗口里已经渲染出来的终端视图。',
-        annotations: { readOnlyHint: true },
-        inputSchema: { termId: z.string() }
-      },
-      async ({ termId }) => this.run('term_screenshot', termId, () => this.capture(termId, 'viewport'))
-    )
-
-    server.registerTool(
-      'term_screenshot_scrollback',
+      'term_lines',
       {
         description:
-          '滚动终端视图逐屏截图，再把这些实拍图按顺序接成长图。startLine / endLine 是缓冲行号，0 是最旧的一行。',
+          '读出终端缓冲里的文字，每行带行号。不填范围就是当前画面。0 是最旧的一行。先用它确定行号，再交给 term_screenshot。',
         annotations: { readOnlyHint: true },
         inputSchema: {
           termId: z.string(),
@@ -479,9 +518,49 @@ export class McpService {
         }
       },
       async ({ termId, startLine, endLine }) =>
-        this.run('term_screenshot_scrollback', termId, () =>
-          this.capture(termId, 'scrollback', startLine, endLine)
+        this.run('term_lines', termId, () => this.lines(termId, startLine, endLine))
+    )
+
+    server.registerTool(
+      'term_screenshot',
+      {
+        description:
+          '截取终端里已经渲染出来的画面。不填行号就截当前这一屏。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。行号用 term_lines 查。',
+        annotations: { readOnlyHint: true },
+        inputSchema: {
+          termId: z.string(),
+          startLine: z.number().int().min(0).optional(),
+          endLine: z.number().int().min(0).optional()
+        }
+      },
+      async ({ termId, startLine, endLine }) => {
+        const ranged = startLine !== undefined || endLine !== undefined
+        return this.shot('term_screenshot', termId, true, () =>
+          ranged
+            ? this.capture(termId, 'scrollback', startLine, endLine, true)
+            : this.capture(termId, 'viewport')
         )
+      }
+    )
+
+    server.registerTool(
+      'term_screenshot_scrollback',
+      {
+        description:
+          '把终端缓冲逐屏实拍后接成长图。startLine / endLine 两端都包含，0 是最旧的一行；填了范围就只返回裁好的这一段。',
+        annotations: { readOnlyHint: true },
+        inputSchema: {
+          termId: z.string(),
+          startLine: z.number().int().min(0).optional(),
+          endLine: z.number().int().min(0).optional()
+        }
+      },
+      async ({ termId, startLine, endLine }) => {
+        const ranged = startLine !== undefined || endLine !== undefined
+        return this.shot('term_screenshot_scrollback', termId, ranged, () =>
+          this.capture(termId, 'scrollback', startLine, endLine, ranged)
+        )
+      }
     )
 
     return server
@@ -636,8 +715,12 @@ export class McpService {
     termId: string,
     mode: 'viewport' | 'scrollback',
     startLine?: number,
-    endLine?: number
+    endLine?: number,
+    cropOnly = false
   ): Promise<string> {
+    if (startLine !== undefined && endLine !== undefined && endLine < startLine) {
+      return Promise.reject(new Error('endLine 要大于或等于 startLine，两端都包含'))
+    }
     const wc = this.getSender()
     if (!wc || wc.isDestroyed()) return Promise.reject(new Error('窗口不可用，无法截图'))
     const id = randomUUID()
@@ -654,8 +737,78 @@ export class McpService {
         }
         resolve([result.note, ...result.paths].filter(Boolean).join('\n'))
       })
-      wc.send(IPC.captureRun, { id, termId, mode, startLine, endLine })
+      wc.send(IPC.captureRun, {
+        id,
+        termId,
+        mode,
+        startLine,
+        endLine: endLine === undefined ? undefined : endLine + 1,
+        cropOnly
+      })
     })
+  }
+
+  private cursorMode(termId: string): Promise<boolean> {
+    const wc = this.getSender()
+    if (!wc || wc.isDestroyed()) return Promise.resolve(false)
+    const id = randomUUID()
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.modeReads.delete(id)
+        resolve(false)
+      }, 3_000)
+      this.modeReads.set(id, (result) => {
+        clearTimeout(timer)
+        resolve(result.applicationCursor === true)
+      })
+      wc.send(IPC.termMode, { id, termId })
+    })
+  }
+
+  private lines(termId: string, startLine?: number, endLine?: number): Promise<string> {
+    if (startLine !== undefined && endLine !== undefined && endLine < startLine) {
+      return Promise.reject(new Error('endLine 要大于或等于 startLine，两端都包含'))
+    }
+    const wc = this.getSender()
+    if (!wc || wc.isDestroyed()) return Promise.reject(new Error('窗口不可用，无法读取终端'))
+    const id = randomUUID()
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.lineReads.delete(id)
+        reject(new Error('读取终端行超时'))
+      }, 10_000)
+      this.lineReads.set(id, (result) => {
+        clearTimeout(timer)
+        if (result.error || !result.lines) {
+          reject(new Error(result.error || '读取终端行失败'))
+          return
+        }
+        resolve(formatLines(result))
+      })
+      const ranged = startLine !== undefined || endLine !== undefined
+      wc.send(IPC.termLines, {
+        id,
+        termId,
+        startLine: startLine ?? (ranged ? 0 : undefined),
+        endLine: endLine === undefined ? undefined : endLine + 1
+      })
+    })
+  }
+
+  private async shot(tool: string, detail: string, attach: boolean, fn: () => Promise<string>) {
+    try {
+      const text = await fn()
+      this.storage.appendAudit(tool, true, detail)
+      const content: Array<
+        { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: 'image/png' }
+      > = [{ type: 'text', text }]
+      if (attach) content.push(...pngsIn(text))
+      return { content }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.storage.appendAudit(tool, false, `${detail} ${message}`.trim())
+      return { isError: true, content: [{ type: 'text' as const, text: message }] }
+    }
   }
 
   private ask(command: string): Promise<boolean> {
@@ -692,6 +845,43 @@ export class McpService {
     if (!wc || wc.isDestroyed()) return
     wc.send(channel, payload)
   }
+}
+
+const MOVES = new Set(['up', 'down', 'left', 'right', 'home', 'end'])
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function formatLines(result: TermLinesReply): string {
+  const lines = result.lines ?? []
+  const length = result.length ?? 0
+  const from = result.viewportY ?? 0
+  const to = from + Math.max(0, (result.rows ?? 1) - 1)
+  if (lines.length === 0) {
+    return length === 0 ? '缓冲是空的' : `行号超出缓冲，一共 ${length} 行`
+  }
+  const body = lines.map((line) => `${line.n}|${line.text}`).join('\n')
+  const cap = lines.length >= 200 ? '\n一次最多返回 200 行，其余请缩小范围再查。' : ''
+  return `缓冲共 ${length} 行，当前画面是第 ${from}–${to} 行。\n${body}${cap}`
+}
+
+function pngsIn(text: string): { type: 'image'; data: string; mimeType: 'image/png' }[] {
+  const files = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.toLowerCase().endsWith('.png'))
+  const images: { type: 'image'; data: string; mimeType: 'image/png' }[] = []
+  for (const file of files) {
+    try {
+      const bytes = readFileSync(file)
+      if (bytes.length === 0 || bytes.length > 6_000_000) continue
+      images.push({ type: 'image', data: bytes.toString('base64'), mimeType: 'image/png' })
+    } catch {
+      continue
+    }
+  }
+  return images
 }
 
 function header(req: IncomingMessage, name: string): string | undefined {

@@ -28,8 +28,11 @@ interface PageShot {
 export async function captureTerminalView(opts: {
   termId: string
   mode: 'viewport' | 'scrollback'
+  /** 缓冲行号，含首不含尾 */
   startLine?: number
   endLine?: number
+  /** 只保存裁到这个行范围的图 */
+  cropOnly?: boolean
 }): Promise<CaptureDone> {
   const state = useAppStore.getState()
   if (!state.tabs.some((tab) => tab.id === opts.termId)) {
@@ -41,7 +44,8 @@ export async function captureTerminalView(opts: {
   if (opts.mode === 'viewport') {
     const shot = await grab(opts.termId)
     const paths = await window.api.capture.save([shot.png])
-    return { paths }
+    const last = shot.viewportY + shot.rows - 1
+    return { paths, note: `当前画面是第 ${shot.viewportY}–${Math.max(shot.viewportY, last)} 行` }
   }
 
   const info = terminalPool.pageInfo(opts.termId)
@@ -53,7 +57,13 @@ export async function captureTerminalView(opts: {
     start = Math.max(0, info.length - rows * MAX_PAGES)
     end = info.length
   }
-  if (end <= start) end = start + rows
+  if (opts.cropOnly) {
+    if (start >= info.length) throw new Error(`行号超出缓冲，一共 ${info.length} 行`)
+    end = Math.min(end, info.length)
+    if (end <= start) throw new Error('范围内没有行')
+  } else if (end <= start) {
+    end = start + rows
+  }
   const capped = Math.min(end, start + rows * MAX_PAGES)
   const saved = info.viewportY
   const shots: PageShot[] = []
@@ -75,11 +85,18 @@ export async function captureTerminalView(opts: {
   }
   if (shots.length === 0) throw new Error('没有可截的画面')
 
+  const longPaths = await window.api.capture.save(await stitch(shots))
+  const rangeNote = `第 ${start}–${Math.max(start, capped - 1)} 行`
+  if (opts.cropOnly) {
+    return {
+      paths: longPaths,
+      note: [rangeNote, capped < end ? `范围较长，只截了 ${MAX_PAGES} 屏` : ''].filter(Boolean).join('。')
+    }
+  }
   const framePaths = await window.api.capture.save(shots.map((shot) => shot.png))
   if (shots.length === 1 && shots[0]?.skipRows === 0 && shots[0].keepRows === shots[0].rows) {
     return { paths: framePaths, note: capped < end ? `范围较长，只截了前 ${MAX_PAGES} 屏` : undefined }
   }
-  const longPaths = await window.api.capture.save(await stitch(shots))
   const note = [
     `前 ${framePaths.length} 张是逐屏实拍，后面 ${longPaths.length} 张是按行连续接成的长图`,
     capped < end ? `范围较长，只截了 ${MAX_PAGES} 屏` : ''

@@ -55,6 +55,7 @@ class TerminalPool {
     host.style.overflow = 'hidden'
     term.open(host)
     host.style.background = this.palette.background ?? ''
+    bindClipboardKeys(term)
 
     this.enableWebgl(term)
 
@@ -77,6 +78,7 @@ class TerminalPool {
   attach(termId: string, el: HTMLElement): void {
     const e = this.ensure(termId)
     if (e.host.parentElement !== el) el.appendChild(e.host)
+    bindClipboardKeys(e.term)
     this.fit(termId)
     requestAnimationFrame(() => {
       if (e.host.parentElement === el) {
@@ -138,6 +140,56 @@ class TerminalPool {
     this.entries.get(termId)?.term.scrollToLine(line)
   }
 
+  /**
+   * 当前选区。startLine 含、endLine 不含，和截图的行号一致。
+   * xterm 内部行号是 0 起始的缓冲行。
+   */
+  selectionRange(termId: string): { text: string; startLine: number; endLine: number } | null {
+    const term = this.entries.get(termId)?.term
+    if (!term?.hasSelection()) return null
+    const pos = term.getSelectionPosition()
+    if (!pos) return null
+    const backward = pos.start.y > pos.end.y || (pos.start.y === pos.end.y && pos.start.x > pos.end.x)
+    const from = backward ? pos.end : pos.start
+    const to = backward ? pos.start : pos.end
+    let endLine = to.y
+    if (to.x === 0 && endLine > from.y) endLine -= 1
+    return { text: term.getSelection(), startLine: from.y, endLine: endLine + 1 }
+  }
+
+  /** 当前程序是否把方向键切到了应用光标模式。没有这个终端时当普通模式。 */
+  applicationCursor(termId: string): boolean {
+    return this.entries.get(termId)?.term.modes.applicationCursorKeysMode ?? false
+  }
+
+  paste(termId: string, text: string): void {
+    const term = this.entries.get(termId)?.term
+    if (!term || !text) return
+    term.paste(text)
+    term.focus()
+  }
+
+  /** 读出缓冲里的行。start 含、end 不含。没传范围时返回当前画面。 */
+  bufferLines(
+    termId: string,
+    start?: number,
+    end?: number
+  ): { length: number; viewportY: number; rows: number; lines: { n: number; text: string }[] } | null {
+    const term = this.entries.get(termId)?.term
+    if (!term) return null
+    const buffer = term.buffer.active
+    const length = buffer.length
+    const rows = Math.max(1, term.rows)
+    const from = clampLine(start ?? buffer.viewportY, length)
+    const to = clampLine(end ?? from + rows, length)
+    const lines: { n: number; text: string }[] = []
+    const last = Math.min(length, from + 200, Math.max(from, to))
+    for (let n = from; n < last; n++) {
+      lines.push({ n, text: buffer.getLine(n)?.translateToString(true) ?? '' })
+    }
+    return { length, viewportY: buffer.viewportY, rows, lines }
+  }
+
   dispose(termId: string): void {
     const e = this.entries.get(termId)
     if (!e) return
@@ -165,6 +217,41 @@ class TerminalPool {
       // WebGL 不可用时 xterm 自动回退 Canvas 渲染器
     }
   }
+}
+
+/** Ctrl/Cmd+C 有选区就复制，否则仍是中断。Ctrl/Cmd+V 只粘贴，不把控制字符发给远端。 */
+function bindClipboardKeys(term: Terminal): void {
+  term.attachCustomKeyEventHandler((event) => {
+    if (event.type !== 'keydown' || event.altKey) return true
+    const key = event.key.toLowerCase()
+    const mac = window.api.platform === 'darwin'
+    const mod = mac ? event.metaKey : event.ctrlKey
+    const copy = (mod && !event.shiftKey && key === 'c') || (event.ctrlKey && event.shiftKey && !event.metaKey && key === 'c')
+    const paste =
+      (mod && !event.shiftKey && key === 'v') || (event.ctrlKey && event.shiftKey && !event.metaKey && key === 'v')
+    const insertCopy = event.ctrlKey && !event.shiftKey && !event.metaKey && event.key === 'Insert'
+    const insertPaste = event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === 'Insert'
+
+    if ((copy || insertCopy) && (event.shiftKey || event.key === 'Insert' || term.hasSelection())) {
+      event.preventDefault()
+      const text = term.getSelection()
+      if (text) void navigator.clipboard.writeText(text)
+      return false
+    }
+    if (paste || insertPaste) {
+      event.preventDefault()
+      void navigator.clipboard.readText().then((text) => {
+        if (text) term.paste(text)
+      })
+      return false
+    }
+    return true
+  })
+}
+
+function clampLine(line: number, length: number): number {
+  if (!Number.isFinite(line)) return 0
+  return Math.max(0, Math.min(length, Math.floor(line)))
 }
 
 function boxOf(el: HTMLElement): { x: number; y: number; width: number; height: number } | null {

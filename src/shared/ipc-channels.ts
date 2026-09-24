@@ -52,6 +52,10 @@ export const IPC = {
   captureRead: 'capture:read',
   captureRun: 'capture:run',
   captureReply: 'capture:reply',
+  termLines: 'term:lines',
+  termLinesReply: 'term:lines-reply',
+  termMode: 'term:mode',
+  termModeReply: 'term:mode-reply',
 
   reverseStart: 'reverse:start',
   reverseStop: 'reverse:stop',

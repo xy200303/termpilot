@@ -187,8 +187,38 @@ export interface CaptureRun {
   id: string
   termId: string
   mode: 'viewport' | 'scrollback'
+  /** 缓冲行号，含首含尾。0 是最旧的一行。 */
   startLine?: number
   endLine?: number
+  /** 只要裁好的那一段，不附带整屏原图 */
+  cropOnly?: boolean
+}
+
+export interface TermLinesRun {
+  id: string
+  termId: string
+  startLine?: number
+  endLine?: number
+}
+
+export interface TermLinesReply {
+  id: string
+  error?: string
+  length?: number
+  viewportY?: number
+  rows?: number
+  lines?: { n: number; text: string }[]
+}
+
+export interface TermModeRun {
+  id: string
+  termId: string
+}
+
+export interface TermModeReply {
+  id: string
+  applicationCursor?: boolean
+  error?: string
 }
 
 export interface CaptureReply {

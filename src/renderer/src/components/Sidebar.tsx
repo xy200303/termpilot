@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/context-menu'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useAppStore } from '../stores/useAppStore'
+import { hostAgentPrompt, sessionAgentPrompt, tabAgentPrompt } from '../agentPrompt'
 
 const REPO_URL = 'https://github.com/xy200303/termpilot'
 
@@ -221,6 +222,7 @@ function LocalRoot() {
   const termState = useAppStore((s) => s.termState)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const closeTab = useAppStore((s) => s.closeTab)
+  const setNotice = useAppStore((s) => s.setNotice)
   const locals = tabs.filter((tab) => tab.kind === 'local')
 
   return (
@@ -241,6 +243,12 @@ function LocalRoot() {
                   />
                 </ContextMenuTrigger>
                 <ContextMenuContent>
+                  <ContextMenuItem
+                    onClick={() => void copyPrompt(tabAgentPrompt(tab, null), setNotice)}
+                  >
+                    复制为 Agent 提示词
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
                   <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
@@ -273,6 +281,8 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
   const setEditing = useAppStore((s) => s.setEditing)
   const duplicateSessions = useAppStore((s) => s.duplicateSessions)
   const deleteSession = useAppStore((s) => s.deleteSession)
+  const tabs = useAppStore((s) => s.tabs)
+  const setNotice = useAppStore((s) => s.setNotice)
 
   return (
     <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
@@ -302,6 +312,12 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          <ContextMenuItem
+            onClick={() => void copyPrompt(hostAgentPrompt(props.host, props.sessions, tabs), setNotice)}
+          >
+            复制为 Agent 提示词
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           <ContextMenuItem onClick={() => void duplicateSessions(props.sessions.map((session) => session.id))}>
             复制
           </ContextMenuItem>
@@ -341,6 +357,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   const toggleListen = useAppStore((s) => s.toggleListen)
   const selectSession = useAppStore((s) => s.selectSession)
   const closeTab = useAppStore((s) => s.closeTab)
+  const setNotice = useAppStore((s) => s.setNotice)
   const key = `session:${session.id}`
   const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
   const toggleGroup = useAppStore((s) => s.toggleGroup)
@@ -377,6 +394,12 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
+          <ContextMenuItem
+            onClick={() => void copyPrompt(sessionAgentPrompt(session, tabs), setNotice)}
+          >
+            复制为 Agent 提示词
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           <ContextMenuItem onClick={() => (isReverse ? void toggleListen(session) : openSessionTab(session))}>
             {isReverse ? (listener?.listening ? '停止监听' : '开始监听') : '连接'}
           </ContextMenuItem>
@@ -407,12 +430,27 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
               />
             </ContextMenuTrigger>
             <ContextMenuContent>
+              <ContextMenuItem
+                onClick={() => void copyPrompt(tabAgentPrompt(tab, session), setNotice)}
+              >
+                复制为 Agent 提示词
+              </ContextMenuItem>
+              <ContextMenuSeparator />
               <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
         ))}
     </div>
   )
+}
+
+async function copyPrompt(text: string, setNotice: (notice: string | null) => void): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+    setNotice('已复制 Agent 提示词，贴到对话里，在「任务：」后面写要做的事')
+  } catch (error) {
+    setNotice(error instanceof Error ? error.message : String(error))
+  }
 }
 
 /** 连接树每级只缩进 8px，和文件树一致。没有箭头的行不再留空位。 */

@@ -8,6 +8,8 @@ import {
   type AgentId,
   type CaptureRect,
   type CaptureReply,
+  type TermLinesReply,
+  type TermModeReply,
   type Appearance,
   type McpSettingsInput,
   type RemoteFile,
@@ -167,6 +169,8 @@ export function registerIpc(
   })
 
   ipcMain.on(IPC.captureReply, (_event, result: CaptureReply) => mcp.resolveCapture(result))
+  ipcMain.on(IPC.termLinesReply, (_event, result: TermLinesReply) => mcp.resolveLines(result))
+  ipcMain.on(IPC.termModeReply, (_event, result: TermModeReply) => mcp.resolveMode(result))
 
   // ---------------------------------------------------------- 反向监听
   ipcMain.handle(IPC.reverseStart, (_e, sessionId: string) => {

@@ -14,6 +14,7 @@ import { RemoteEditor } from './components/RemoteEditor'
 import { EmptyState } from './components/EmptyState'
 import { useAppStore } from './stores/useAppStore'
 import { runCapture } from './terminal/captureView'
+import { terminalPool } from './terminal/TerminalPool'
 
 export default function App() {
   const loadSessions = useAppStore((s) => s.loadSessions)
@@ -33,6 +34,30 @@ export default function App() {
   const editorTabs = useAppStore((s) => s.editorTabs)
 
   useEffect(() => window.api.capture.onRun((job) => void runCapture(job)), [])
+
+  useEffect(
+    () =>
+      window.api.term.onLines((job) => {
+        const listed = terminalPool.bufferLines(job.termId, job.startLine, job.endLine)
+        window.api.term.linesReply(
+          listed
+            ? { id: job.id, ...listed }
+            : { id: job.id, error: '终端不在画面上' }
+        )
+      }),
+    []
+  )
+
+  useEffect(
+    () =>
+      window.api.term.onMode((job) => {
+        window.api.term.modeReply({
+          id: job.id,
+          applicationCursor: terminalPool.applicationCursor(job.termId)
+        })
+      }),
+    []
+  )
 
   useEffect(() => {
     loadSessions()
