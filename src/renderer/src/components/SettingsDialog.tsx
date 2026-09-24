@@ -370,7 +370,7 @@ export function SettingsDialog() {
                   <div>
                     <h2 className="text-base font-medium">Agent 接入</h2>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      写入前会先保存当前 MCP 设置。只改各配置里的 termpilot 一条，其它服务器不动。写入后重新打开对应 Agent。
+                      写入前会先保存当前设置。只改各配置里的 termpilot 一条。桌面版和命令行经常不是同一个文件，写完后重新打开对应程序。不要写进连接器目录，重启会被盖掉。
                     </p>
                   </div>
                   <Button size="sm" disabled={busy !== null || agents.length === 0} onClick={() => void writeAll()}>

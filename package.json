@@ -68,6 +68,10 @@
       {
         "from": "resources/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "cli/termpilot.mjs",
+        "to": "cli/termpilot.mjs"
       }
     ],
     "asarUnpack": [

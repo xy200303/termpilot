@@ -2,8 +2,8 @@ import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { WebContents } from 'electron'
-import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { parseToolArgs, schemaText, TOOLS, toolsText } from './tool-catalog'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { IPC } from '../../shared/ipc-channels'
@@ -178,6 +178,11 @@ export class McpService {
         sendJson(res, 401, rpcError('Unauthorized'))
         return
       }
+      const path = (req.url ?? '/').split('?')[0]
+      if (path === '/cli') {
+        await this.onCli(req, res)
+        return
+      }
       if (req.method !== 'POST' && req.method !== 'GET' && req.method !== 'DELETE') {
         sendJson(res, 405, rpcError('Method not allowed'))
         return
@@ -231,339 +236,191 @@ export class McpService {
 
   private createServer(): McpServer {
     const server = new McpServer({ name: 'termpilot', version: '0.1.0' })
-
-    server.registerTool(
-      'session_list',
-      {
-        description: '列出已保存的连接。不含密码和私钥口令。',
-        annotations: { readOnlyHint: true }
-      },
-      async () => this.run('session_list', '', async () => JSON.stringify(this.storage.list(), null, 2))
-    )
-
-    server.registerTool(
-      'session_connect',
-      {
-        description: '按 id 或名称连接一条正向 SSH，并在界面打开终端。返回 termId。',
-        inputSchema: { session: z.string().describe('会话 id 或名称') }
-      },
-      async ({ session }) => this.run('session_connect', session, () => this.connectSession(session))
-    )
-
-    server.registerTool(
-      'session_disconnect',
-      {
-        description: '断开某个会话下所有终端，并关掉它的文件连接。',
-        inputSchema: { session: z.string().describe('会话 id 或名称') }
-      },
-      async ({ session }) =>
-        this.run('session_disconnect', session, async () => this.disconnectSession(session))
-    )
-
-    const sessionFields = {
-      mode: z
-        .enum(['forward', 'reverse'])
-        .optional()
-        .describe('forward 主动连服务器；reverse 只在 127.0.0.1 监听'),
-      host: z.string().optional().describe('正向 SSH 的主机'),
-      port: z.number().int().min(1).max(65535).optional().describe('正向 SSH 端口，默认 22'),
-      username: z.string().optional(),
-      authType: z.enum(['password', 'key']).optional().describe('password 或 key'),
-      keyPath: z.string().optional().describe('私钥文件的本机绝对路径'),
-      secret: z
-        .string()
-        .optional()
-        .describe('密码或私钥口令。加密保存，之后不会再返回。留空表示不修改'),
-      listenPort: z.number().int().min(1).max(65535).optional().describe('反向监听端口'),
-      group: z.string().optional().describe('侧边栏分组，留空归入未分组'),
-      remark: z.string().optional()
+    for (const tool of TOOLS) {
+      server.registerTool(
+        tool.name,
+        {
+          description: tool.description,
+          ...(tool.readOnly ? { annotations: { readOnlyHint: true as const } } : {}),
+          ...(tool.input ? { inputSchema: tool.input } : {})
+        },
+        async (args) => {
+          const input = (args ?? {}) as Record<string, unknown>
+          const work = () => this.invoke(tool.name, input)
+          if (!tool.images) return this.run(tool.name, auditDetail(input), work)
+          const ranged = input.startLine !== undefined || input.endLine !== undefined
+          const attach = tool.images === 'always' || ranged
+          return this.shot(tool.name, auditDetail(input), attach, work)
+        }
+      )
     }
-
-    server.registerTool(
-      'session_create',
-      {
-        description:
-          '新建并保存一条 SSH 连接。密码和私钥口令加密存在本机。创建后会出现在侧边栏，再用 session_connect 打开。',
-        inputSchema: { name: z.string().describe('显示名称，不能和已有连接重名'), ...sessionFields }
-      },
-      async (input) => this.run('session_create', input.name, async () => this.createSession(input))
-    )
-
-    server.registerTool(
-      'session_update',
-      {
-        description:
-          '修改已保存的 SSH 连接。只填要改的字段。secret 留空则保留原密码。已经打开的终端不会自动重连。',
-        inputSchema: { session: z.string().describe('会话 id 或名称'), name: z.string().optional(), ...sessionFields }
-      },
-      async ({ session, ...patch }) =>
-        this.run('session_update', session, async () => this.updateSession(session, patch))
-    )
-
-    server.registerTool(
-      'session_delete',
-      {
-        description: '删除一条已保存的 SSH 连接，并断开它打开的终端。开启危险确认时会先询问。',
-        inputSchema: { session: z.string().describe('会话 id 或名称') }
-      },
-      async ({ session }) => this.run('session_delete', session, () => this.deleteSession(session))
-    )
-
-    server.registerTool(
-      'term_list',
-      {
-        description: '列出当前打开的终端。',
-        annotations: { readOnlyHint: true }
-      },
-      async () => this.run('term_list', '', async () => JSON.stringify(this.terminal.listTerms(), null, 2))
-    )
-
-    server.registerTool(
-      'term_exec',
-      {
-        description:
-          '在 shell 提示符下执行一条命令，等到输出安静后返回文本。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。',
-        inputSchema: {
-          termId: z.string(),
-          command: z.string(),
-          timeoutMs: z.number().int().min(500).max(120_000).optional()
-        }
-      },
-      async ({ termId, command, timeoutMs }) =>
-        this.run('term_exec', `${termId} ${command}`, async () => {
-          await this.guard(command)
-          const output = await this.terminal.execCommand(termId, command, timeoutMs ?? 20_000)
-          return clip(stripAnsi(output))
-        })
-    )
-
-    server.registerTool(
-      'term_write',
-      {
-        description:
-          '向当前终端发送按键或文字，用于上下左右选择、输入内容、回车确认和 TUI。keys 按顺序先发，然后输入 text，submit 为 true 时最后回车。方向键会按程序当前的光标模式发送。发完返回当前画面。密码和验证码不要代填。',
-        inputSchema: {
-          termId: z.string(),
-          keys: z
-            .array(z.enum(TERM_KEYS))
-            .max(40)
-            .optional()
-            .describe('up down left right enter tab backspace esc space home end pageup pagedown ctrl-c ctrl-d ctrl-z ctrl-l f1-f12'),
-          text: z.string().max(4096).optional().describe('紧接在 keys 后面输入的文字'),
-          submit: z.boolean().optional().describe('输入后再补一次回车'),
-          data: z.string().max(65_536).optional().describe('原始字节，只在 keys 无法表达时使用')
-        }
-      },
-      async ({ termId, keys, text, submit, data }) =>
-        this.run('term_write', termId, async () => {
-          if (!keys?.length && !text && !data && !submit) throw new Error('要提供 keys、text、submit 或 data')
-          if (!this.terminal.listTerms().some((term) => term.id === termId)) {
-            throw new Error('终端不存在或已断开')
-          }
-          const applicationCursor = keys?.some((key) => MOVES.has(key))
-            ? await this.cursorMode(termId)
-            : false
-          const payload = encodeTermInput({ keys, text, data, submit, applicationCursor })
-          if (!payload) throw new Error('没有可发送的内容')
-          if (payload.includes('\n') || payload.includes('\r')) await this.guard(payload)
-          this.terminal.input(termId, payload)
-          await wait(200)
-          try {
-            return await this.lines(termId)
-          } catch {
-            return '已发送'
-          }
-        })
-    )
-
-    server.registerTool(
-      'term_read',
-      {
-        description: '读取终端最近输出，已去掉 ANSI 控制符。',
-        annotations: { readOnlyHint: true },
-        inputSchema: {
-          termId: z.string(),
-          maxChars: z.number().int().min(200).max(50_000).optional()
-        }
-      },
-      async ({ termId, maxChars }) =>
-        this.run('term_read', termId, async () => clip(stripAnsi(this.terminal.readTail(termId, maxChars ?? 8000))))
-    )
-
-    server.registerTool(
-      'term_close',
-      {
-        description: '断开并关闭一个终端标签。',
-        inputSchema: { termId: z.string() }
-      },
-      async ({ termId }) =>
-        this.run('term_close', termId, async () => {
-          this.terminal.close(termId)
-          this.send(IPC.mcpCloseTab, termId)
-          return '已关闭'
-        })
-    )
-
-    server.registerTool(
-      'sftp_list',
-      {
-        description: '列出正向 SSH 会话的远端目录。',
-        annotations: { readOnlyHint: true },
-        inputSchema: {
-          session: z.string().describe('会话 id 或名称'),
-          path: z.string().optional().describe('远端目录，默认家目录')
-        }
-      },
-      async ({ session, path }) =>
-        this.run('sftp_list', `${session} ${path ?? '.'}`, async () => {
-          const found = this.findSession(session)
-          if (found.mode === 'reverse') throw new Error('反向监听没有 SFTP')
-          const listed = await this.sftp.list(found.id, path ?? '.')
-          return JSON.stringify(listed, null, 2)
-        })
-    )
-
-    server.registerTool(
-      'sftp_mkdir',
-      {
-        description: '在正向 SSH 上新建远端目录。path 是完整远端路径。',
-        inputSchema: { session: z.string(), path: z.string() }
-      },
-      async ({ session, path }) =>
-        this.run('sftp_mkdir', path, async () => {
-          const found = this.requireForward(session)
-          await this.guardPath(path)
-          await this.sftp.mkdirPath(found.id, path)
-          return `已创建 ${path}`
-        })
-    )
-
-    server.registerTool(
-      'sftp_upload',
-      {
-        description: '把本机绝对路径的文件上传到远端路径。',
-        inputSchema: { session: z.string(), localPath: z.string(), remotePath: z.string() }
-      },
-      async ({ session, localPath, remotePath }) =>
-        this.run('sftp_upload', `${localPath} -> ${remotePath}`, async () => {
-          const found = this.requireForward(session)
-          await this.guardPath(remotePath)
-          await this.sftp.put(found.id, localPath, remotePath)
-          return `已上传到 ${remotePath}`
-        })
-    )
-
-    server.registerTool(
-      'sftp_download',
-      {
-        description: '把远端文件下载到本机绝对路径。',
-        inputSchema: { session: z.string(), remotePath: z.string(), localPath: z.string() }
-      },
-      async ({ session, remotePath, localPath }) =>
-        this.run('sftp_download', `${remotePath} -> ${localPath}`, async () => {
-          const found = this.requireForward(session)
-          await this.sftp.get(found.id, remotePath, localPath)
-          return `已下载到 ${localPath}`
-        })
-    )
-
-    server.registerTool(
-      'sftp_rename',
-      {
-        description: '重命名或移动远端文件。from 和 to 都是远端路径。',
-        inputSchema: { session: z.string(), from: z.string(), to: z.string() }
-      },
-      async ({ session, from, to }) =>
-        this.run('sftp_rename', `${from} -> ${to}`, async () => {
-          const found = this.requireForward(session)
-          await this.guardPath(to)
-          await this.sftp.rename(found.id, from, to)
-          return `已改名为 ${to}`
-        })
-    )
-
-    server.registerTool(
-      'sftp_remove',
-      {
-        description: '删除远端文件或目录。目录会连同里面的内容一起删除。',
-        inputSchema: { session: z.string(), path: z.string(), kind: z.enum(['file', 'dir', 'link']) }
-      },
-      async ({ session, path, kind }) =>
-        this.run('sftp_remove', path, async () => {
-          const found = this.requireForward(session)
-          await this.guard(`rm ${path}`)
-          await this.sftp.remove(found.id, path, kind)
-          return `已删除 ${path}`
-        })
-    )
-
-    server.registerTool(
-      'local_term_open',
-      {
-        description: '打开一个本机终端标签，返回 termId。之后用 term_exec 执行命令。'
-      },
-      async () => this.run('local_term_open', '', () => this.openLocal())
-    )
-
-    server.registerTool(
-      'term_lines',
-      {
-        description:
-          '读出终端缓冲里的文字，每行带行号。不填范围就是当前画面。0 是最旧的一行。先用它确定行号，再交给 term_screenshot。',
-        annotations: { readOnlyHint: true },
-        inputSchema: {
-          termId: z.string(),
-          startLine: z.number().int().min(0).optional(),
-          endLine: z.number().int().min(0).optional()
-        }
-      },
-      async ({ termId, startLine, endLine }) =>
-        this.run('term_lines', termId, () => this.lines(termId, startLine, endLine))
-    )
-
-    server.registerTool(
-      'term_screenshot',
-      {
-        description:
-          '截取终端里已经渲染出来的画面。不填行号就截当前这一屏。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。行号用 term_lines 查。',
-        annotations: { readOnlyHint: true },
-        inputSchema: {
-          termId: z.string(),
-          startLine: z.number().int().min(0).optional(),
-          endLine: z.number().int().min(0).optional()
-        }
-      },
-      async ({ termId, startLine, endLine }) => {
-        const ranged = startLine !== undefined || endLine !== undefined
-        return this.shot('term_screenshot', termId, true, () =>
-          ranged
-            ? this.capture(termId, 'scrollback', startLine, endLine, true)
-            : this.capture(termId, 'viewport')
-        )
-      }
-    )
-
-    server.registerTool(
-      'term_screenshot_scrollback',
-      {
-        description:
-          '把终端缓冲逐屏实拍后接成长图。startLine / endLine 两端都包含，0 是最旧的一行；填了范围就只返回裁好的这一段。',
-        annotations: { readOnlyHint: true },
-        inputSchema: {
-          termId: z.string(),
-          startLine: z.number().int().min(0).optional(),
-          endLine: z.number().int().min(0).optional()
-        }
-      },
-      async ({ termId, startLine, endLine }) => {
-        const ranged = startLine !== undefined || endLine !== undefined
-        return this.shot('term_screenshot_scrollback', termId, ranged, () =>
-          this.capture(termId, 'scrollback', startLine, endLine, ranged)
-        )
-      }
-    )
-
     return server
+  }
+
+  private async invoke(tool: string, raw: Record<string, unknown>): Promise<string> {
+    switch (tool) {
+      case 'session_list':
+        return JSON.stringify(this.storage.list(), null, 2)
+      case 'session_connect':
+        return this.connectSession(need(raw, 'session'))
+      case 'session_disconnect':
+        return this.disconnectSession(need(raw, 'session'))
+      case 'session_create':
+        return this.createSession({ name: need(raw, 'name'), ...sessionPatch(raw) })
+      case 'session_update':
+        return this.updateSession(need(raw, 'session'), { name: textArg(raw, 'name'), ...sessionPatch(raw) })
+      case 'session_delete':
+        return this.deleteSession(need(raw, 'session'))
+      case 'term_list':
+        return JSON.stringify(this.terminal.listTerms(), null, 2)
+      case 'term_exec': {
+        const termId = need(raw, 'termId')
+        let command = need(raw, 'command')
+        if (!command.endsWith('\n')) command += '\n'
+        await this.guard(command)
+        const output = await this.terminal.execCommand(termId, command, intArg(raw, 'timeoutMs') ?? 20_000)
+        return clip(stripAnsi(output))
+      }
+      case 'term_write':
+        return this.writeTerm(raw)
+      case 'term_read':
+        return clip(stripAnsi(this.terminal.readTail(need(raw, 'termId'), intArg(raw, 'maxChars') ?? 8000)))
+      case 'term_close': {
+        const termId = need(raw, 'termId')
+        this.terminal.close(termId)
+        this.send(IPC.mcpCloseTab, termId)
+        return '已关闭'
+      }
+      case 'local_term_open':
+        return this.openLocal()
+      case 'term_lines':
+        return this.lines(need(raw, 'termId'), intArg(raw, 'startLine'), intArg(raw, 'endLine'))
+      case 'term_screenshot': {
+        const termId = need(raw, 'termId')
+        const startLine = intArg(raw, 'startLine')
+        const endLine = intArg(raw, 'endLine')
+        const ranged = startLine !== undefined || endLine !== undefined
+        return ranged
+          ? this.capture(termId, 'scrollback', startLine, endLine, true)
+          : this.capture(termId, 'viewport')
+      }
+      case 'term_screenshot_scrollback': {
+        const termId = need(raw, 'termId')
+        const startLine = intArg(raw, 'startLine')
+        const endLine = intArg(raw, 'endLine')
+        const ranged = startLine !== undefined || endLine !== undefined
+        return this.capture(termId, 'scrollback', startLine, endLine, ranged)
+      }
+      case 'sftp_list': {
+        const found = this.findSession(need(raw, 'session'))
+        if (found.mode === 'reverse') throw new Error('反向监听没有 SFTP')
+        const listed = await this.sftp.list(found.id, textArg(raw, 'path') || '.')
+        return JSON.stringify(listed, null, 2)
+      }
+      case 'sftp_mkdir': {
+        const path = need(raw, 'path')
+        const found = this.requireForward(need(raw, 'session'))
+        await this.guardPath(path)
+        await this.sftp.mkdirPath(found.id, path)
+        return `已创建 ${path}`
+      }
+      case 'sftp_upload': {
+        const remotePath = need(raw, 'remotePath')
+        const found = this.requireForward(need(raw, 'session'))
+        await this.guardPath(remotePath)
+        await this.sftp.put(found.id, need(raw, 'localPath'), remotePath)
+        return `已上传到 ${remotePath}`
+      }
+      case 'sftp_download': {
+        const localPath = need(raw, 'localPath')
+        const found = this.requireForward(need(raw, 'session'))
+        await this.sftp.get(found.id, need(raw, 'remotePath'), localPath)
+        return `已下载到 ${localPath}`
+      }
+      case 'sftp_rename': {
+        const to = need(raw, 'to')
+        const found = this.requireForward(need(raw, 'session'))
+        await this.guardPath(to)
+        await this.sftp.rename(found.id, need(raw, 'from'), to)
+        return `已改名为 ${to}`
+      }
+      case 'sftp_remove': {
+        const path = need(raw, 'path')
+        const kind = need(raw, 'kind')
+        if (kind !== 'file' && kind !== 'dir' && kind !== 'link') throw new Error('kind 只能是 file、dir 或 link')
+        const found = this.requireForward(need(raw, 'session'))
+        await this.guard(`rm ${path}`)
+        await this.sftp.remove(found.id, path, kind)
+        return `已删除 ${path}`
+      }
+      default:
+        throw new Error(`未知命令: ${tool}`)
+    }
+  }
+
+  private async writeTerm(raw: Record<string, unknown>): Promise<string> {
+    const termId = need(raw, 'termId')
+    const keys = keyArg(raw)
+    const text = textArg(raw, 'text')
+    const data = textArg(raw, 'data')
+    const submit = boolArg(raw, 'submit')
+    if (!keys?.length && !text && !data && !submit) throw new Error('要提供 keys、text、submit 或 data')
+    if (!this.terminal.listTerms().some((term) => term.id === termId)) throw new Error('终端不存在或已断开')
+    const applicationCursor = keys?.some((key) => MOVES.has(key)) ? await this.cursorMode(termId) : false
+    const payload = encodeTermInput({ keys, text, data, submit, applicationCursor })
+    if (!payload) throw new Error('没有可发送的内容')
+    if (payload.includes('\n') || payload.includes('\r')) await this.guard(payload)
+    this.terminal.input(termId, payload)
+    await wait(200)
+    try {
+      return await this.lines(termId)
+    } catch {
+      return '已发送'
+    }
+  }
+
+  private async onCli(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { ok: false, text: '只接受 POST' })
+      return
+    }
+    let body: { op?: unknown; tool?: unknown; args?: unknown }
+    try {
+      body = JSON.parse((await readBody(req)) || '{}') as { op?: unknown; tool?: unknown; args?: unknown }
+    } catch {
+      sendJson(res, 400, { ok: false, text: 'Invalid JSON' })
+      return
+    }
+    if (body.op === 'tools') {
+      sendJson(res, 200, { ok: true, text: toolsText() })
+      return
+    }
+    if (body.op === 'schema') {
+      try {
+        sendJson(res, 200, { ok: true, text: schemaText(typeof body.tool === 'string' ? body.tool : undefined) })
+      } catch (error) {
+        sendJson(res, 200, { ok: false, text: error instanceof Error ? error.message : '失败' })
+      }
+      return
+    }
+    if (body.op !== 'call' || typeof body.tool !== 'string' || !body.tool) {
+      sendJson(res, 400, { ok: false, text: 'op 只能是 tools、schema 或 call' })
+      return
+    }
+    const raw =
+      body.args && typeof body.args === 'object' && !Array.isArray(body.args)
+        ? (body.args as Record<string, unknown>)
+        : {}
+    let args: Record<string, unknown>
+    try {
+      args = parseToolArgs(body.tool, raw)
+    } catch (error) {
+      sendJson(res, 200, { ok: false, text: error instanceof Error ? error.message : '参数不对' })
+      return
+    }
+    const result = await this.run(body.tool, auditDetail(args) || body.tool, () => this.invoke(body.tool as string, args))
+    const text = result.content[0]?.text ?? ''
+    sendJson(res, 200, { ok: result.isError !== true, text })
   }
 
   private async connectSession(key: string): Promise<string> {
@@ -939,6 +796,75 @@ function listenError(error: unknown, port: number): string {
     return `端口 ${port} 已被占用`
   }
   return error instanceof Error ? error.message : String(error)
+}
+
+function auditDetail(input: Record<string, unknown>): string {
+  return Object.entries(input)
+    .filter(([key, value]) => key !== 'secret' && value !== undefined && typeof value !== 'object')
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ')
+    .slice(0, 500)
+}
+
+function need(raw: Record<string, unknown>, key: string): string {
+  const value = textArg(raw, key)
+  if (!value) throw new Error(`缺少 ${key}`)
+  return value
+}
+
+function textArg(raw: Record<string, unknown>, key: string): string | undefined {
+  const value = raw[key]
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value !== 'string') throw new Error(`${key} 必须是字符串`)
+  return value
+}
+
+function intArg(raw: Record<string, unknown>, key: string): number | undefined {
+  const value = raw[key]
+  if (value === undefined || value === null || value === '') return undefined
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+  if (!Number.isInteger(parsed)) throw new Error(`${key} 必须是整数`)
+  return parsed
+}
+
+function boolArg(raw: Record<string, unknown>, key: string): boolean | undefined {
+  const value = raw[key]
+  if (value === undefined || value === null || value === '') return undefined
+  if (value === true || value === 'true') return true
+  if (value === false || value === 'false') return false
+  throw new Error(`${key} 必须是 true 或 false`)
+}
+
+function keyArg(raw: Record<string, unknown>): Array<(typeof TERM_KEYS)[number]> | undefined {
+  const value = raw.keys
+  if (value === undefined || value === null || value === '') return undefined
+  const list = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : null
+  if (!list) throw new Error('keys 必须是按键列表')
+  const allowed = new Set<string>(TERM_KEYS)
+  const keys = list.map((item) => String(item).trim()).filter(Boolean)
+  for (const key of keys) {
+    if (!allowed.has(key)) throw new Error(`不认识的按键: ${key}`)
+  }
+  return keys as Array<(typeof TERM_KEYS)[number]>
+}
+
+function sessionPatch(raw: Record<string, unknown>): SessionPatch {
+  const mode = textArg(raw, 'mode')
+  if (mode && mode !== 'forward' && mode !== 'reverse') throw new Error('mode 只能是 forward 或 reverse')
+  const authType = textArg(raw, 'authType')
+  if (authType && authType !== 'password' && authType !== 'key') throw new Error('authType 只能是 password 或 key')
+  return {
+    mode: mode === 'reverse' ? 'reverse' : mode === 'forward' ? 'forward' : undefined,
+    host: textArg(raw, 'host'),
+    port: intArg(raw, 'port'),
+    username: textArg(raw, 'username'),
+    authType: authType === 'key' ? 'key' : authType === 'password' ? 'password' : undefined,
+    keyPath: textArg(raw, 'keyPath'),
+    secret: textArg(raw, 'secret'),
+    listenPort: intArg(raw, 'listenPort'),
+    group: textArg(raw, 'group'),
+    remark: textArg(raw, 'remark')
+  }
 }
 
 function stripAnsi(text: string): string {

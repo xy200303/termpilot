@@ -49,8 +49,9 @@ function targets(): Target[] {
       name: 'Kimi Code',
       file: kimiFile(kimiHome),
       format: 'json',
-      entry: (_url, auth) => ({
-        url: _url,
+      entry: (url, auth) => ({
+        transport: 'http',
+        url,
         headers: { Authorization: auth }
       })
     },
@@ -62,6 +63,16 @@ function targets(): Target[] {
       entry: httpEntry
     },
     {
+      id: 'cursor',
+      name: 'Cursor',
+      file: join(homedir(), '.cursor', 'mcp.json'),
+      format: 'json',
+      entry: (url, auth) => ({
+        url,
+        headers: { Authorization: auth }
+      })
+    },
+    {
       id: 'workbuddy',
       name: 'WorkBuddy',
       file: join(homedir(), '.workbuddy', 'mcp.json'),
@@ -71,6 +82,13 @@ function targets(): Target[] {
         url,
         headers: { Authorization: auth }
       })
+    },
+    {
+      id: 'codebuddy',
+      name: 'CodeBuddy',
+      file: join(homedir(), '.codebuddy', 'mcp.json'),
+      format: 'json',
+      entry: httpEntry
     }
   ]
 }
@@ -85,10 +103,7 @@ function httpEntry(url: string, auth: string): Record<string, unknown> {
 
 function kimiFile(home: string | undefined): string {
   if (home) return join(home, 'mcp.json')
-  const codeDir = join(homedir(), '.kimi-code')
-  const legacy = join(homedir(), '.kimi', 'mcp.json')
-  if (!existsSync(codeDir) && (existsSync(legacy) || existsSync(join(homedir(), '.kimi')))) return legacy
-  return join(codeDir, 'mcp.json')
+  return join(homedir(), '.kimi-code', 'mcp.json')
 }
 
 function describe(target: Target, url: string): AgentTarget {

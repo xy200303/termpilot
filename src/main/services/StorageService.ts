@@ -382,7 +382,8 @@ export class StorageService {
           name: 'termpilot',
           url: `http://${settings.host}:${settings.port}/mcp`,
           token: settings.token,
-          enabled: settings.enabled
+          enabled: settings.enabled,
+          cli: join(app.getPath('userData'), 'bin', process.platform === 'win32' ? 'termpilot.cmd' : 'termpilot')
         },
         null,
         2

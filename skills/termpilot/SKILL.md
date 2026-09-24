@@ -19,15 +19,31 @@ TermPilot 是本机的 SSH 终端。人和 Agent 使用同一套已保存的连�
    - Kimi Code：`~/.kimi-code/skills/termpilot/SKILL.md`
    - Cursor：`~/.cursor/skills/termpilot/SKILL.md`
    - WorkBuddy：`~/.workbuddy/skills/termpilot/SKILL.md`
+   - CodeBuddy：`~/.codebuddy/skills/termpilot/SKILL.md`
 2. 读取本机 TermPilot 写下的端点文件。Windows 是 `%APPDATA%\TermPilot\mcp.json`，macOS 是 `~/Library/Application Support/TermPilot/mcp.json`，Linux 是 `~/.config/TermPilot/mcp.json`。
 3. 文件不存在时，请用户先打开一次 TermPilot。没有 `enabled: true` 时，请用户在 TermPilot 设置里启用 MCP 后再注册。
-4. 只把名为 `termpilot` 的这一条写进你自己的 MCP 配置。`Authorization` 的值是 `Bearer ` 加上文件里的 `token`。不要在回复、日志或仓库里打印令牌。
-   - Claude Code 的 `~/.claude.json`：`mcpServers.termpilot` 为 `{ "type": "http", "url", "headers": { "Authorization" } }`
-   - Codex 的 `~/.codex/config.toml`：`[mcp_servers.termpilot]`，字段是 `url` 和 `http_headers`
-   - Kimi Code 的 `~/.kimi-code/mcp.json`：`mcpServers.termpilot` 为 `{ "url", "headers": { "Authorization" } }`
-   - Cursor 的 `~/.cursor/mcp.json`：同样写入 `mcpServers.termpilot`
-   - WorkBuddy 的 `~/.workbuddy/mcp.json`：`mcpServers.termpilot` 为 `{ "transport": "streamable-http", "url", "headers": { "Authorization" } }`
-5. 注册后重新加载 MCP，再用下面的工具操作。不要另建 SSH 客户端，也不要使用 SSH Agent。
+4. 只把名为 `termpilot` 的这一条写进下面这份用户级配置。桌面版和命令行不一定读同一个文件，写错位置会在重启后消失。`Authorization` 的值是 `Bearer ` 加上文件里的 `token`。不要在回复、日志或仓库里打印令牌。不要写入 `connectors` 目录，那个文件由程序自己重写。
+   - Claude Code 只认 `~/.claude.json` 里的 `mcpServers`，不认 `~/.claude/settings.json`。`termpilot` 为 `{ "type": "http", "url", "headers": { "Authorization" } }`。
+   - Codex 的桌面版和命令行共用 `~/.codex/config.toml`。节名是 `[mcp_servers.termpilot]`，字段是 `url` 和 `http_headers`。
+   - Kimi Code 的桌面版和命令行共用 `~/.kimi-code/mcp.json`（环境变量 `KIMI_CODE_HOME` 有值时用那个目录）。条目为 `{ "transport": "http", "url", "headers": { "Authorization" } }`。旧的 `~/.kimi` 不是这份配置。项目根目录的 `.mcp.json` 和当前目录的 `.kimi-code/mcp.json` 是另外两份，用户级注册不要写到那里。
+   - Cursor 的全局配置是 `~/.cursor/mcp.json`。项目里的 `.cursor/mcp.json` 是另一份。`termpilot` 为 `{ "url", "headers": { "Authorization" } }`。
+   - WorkBuddy 桌面版读 `~/.workbuddy/mcp.json`。条目为 `{ "transport": "streamable-http", "url", "headers": { "Authorization" } }`。
+   - CodeBuddy 编辑器读 `~/.codebuddy/mcp.json`，不读 `~/.codebuddy/.mcp.json`。条目为 `{ "type": "http", "url", "headers": { "Authorization" } }`。
+5. 注册后重新打开对应程序。TermPilot 本身也要开着，关掉之后这些连接都会失败。不要另建 SSH 客户端，也不要使用 SSH Agent。
+
+## 命令行
+
+MCP 工具没有出现、注册失败或调用报错时，改用 TermPilot 放在本机的命令。它和 MCP 操作同一个窗口，不需要用户把令牌贴给你。命令自己读端点文件里的 `cli` 字段；没有这个字段时，Windows 用 `%APPDATA%\TermPilot\bin\termpilot.cmd`，macOS 和 Linux 用同一目录下的 `termpilot`。
+
+```text
+termpilot tools
+termpilot schema term_exec
+termpilot call term_list
+termpilot call term_exec '{"termId":"<id>","command":"uname -a"}'
+termpilot call term_write '{"termId":"<id>","keys":["up","down"],"text":"你好","submit":true}'
+```
+
+`tools` 列出工具，`schema` 看参数，`call` 用 JSON 调用。这三者和窗口里的 MCP 是同一份定义。先看文字：`term_lines` 比截图快。截图返回的是本机图片路径，需要看画面时再读那个文件。已经有 `termId` 就接着用，不要为了同一件事再连一次。
 
 ## 操作
 

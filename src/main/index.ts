@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import { followAppTheme, titleBarOverlay, watchSystemChrome, windowBackground } from './window-chrome'
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // 固定到 %APPDATA%\TermPilot。必须在 ready 之前设置，
@@ -28,6 +28,31 @@ let terminal: TerminalService | null = null
 let reverse: ReverseListenerService | null = null
 let sftp: SftpService | null = null
 let mcp: McpService | null = null
+
+function cliSource(): string {
+  const packaged = join(process.resourcesPath, 'cli', 'termpilot.mjs')
+  if (app.isPackaged && existsSync(packaged)) return packaged
+  return join(app.getAppPath(), 'cli', 'termpilot.mjs')
+}
+
+/** 把命令放到固定目录，助手不靠 MCP 注册也能调用。 */
+function installCli(): void {
+  const source = cliSource()
+  if (!existsSync(source)) {
+    console.error('[TermPilot] CLI script missing:', source)
+    return
+  }
+  const dir = join(app.getPath('userData'), 'bin')
+  mkdirSync(dir, { recursive: true })
+  copyFileSync(source, join(dir, 'termpilot.mjs'))
+  if (process.platform === 'win32') {
+    writeFileSync(join(dir, 'termpilot.cmd'), '@echo off\r\nnode "%~dp0termpilot.mjs" %*\r\n', 'utf8')
+    return
+  }
+  const launcher = join(dir, 'termpilot')
+  writeFileSync(launcher, '#!/bin/sh\nexec node "$(dirname "$0")/termpilot.mjs" "$@"\n', 'utf8')
+  chmodSync(launcher, 0o755)
+}
 
 function appIcon(): string {
   const packaged = join(process.resourcesPath, 'icon.png')
@@ -94,6 +119,7 @@ function createWindow(storage: StorageService): void {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
   watchSystemChrome()
+  installCli()
   const sessions = new StorageService()
   storage = sessions
   createWindow(sessions)

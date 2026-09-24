@@ -156,7 +156,7 @@ export interface McpAuditEntry {
   detail: string
 }
 
-export type AgentId = 'claude' | 'kimi' | 'codex' | 'workbuddy'
+export type AgentId = 'claude' | 'kimi' | 'codex' | 'cursor' | 'workbuddy' | 'codebuddy'
 
 /** 一键写入时能改到的本机 Agent 配置 */
 export interface AgentTarget {
