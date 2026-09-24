@@ -62,7 +62,7 @@ Windows · macOS · Linux
 
 ## 下载
 
-最新版在 [Releases](https://github.com/xy200303/termpilot/releases/latest)。当前是 [v0.2.0](https://github.com/xy200303/termpilot/releases/tag/v0.2.0)，安装包没有代码签名。
+最新版在 [Releases](https://github.com/xy200303/termpilot/releases/latest)。当前是 [v0.2.0](https://github.com/xy200303/termpilot/releases/tag/v0.2.0)，安装包没有代码签名。各版改了什么见 [更新日志](CHANGELOG.md)。
 
 | 平台 | 文件 |
 | --- | --- |
