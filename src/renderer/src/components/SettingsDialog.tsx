@@ -315,13 +315,13 @@ export function SettingsDialog() {
                   <Row
                     title={
                       <span className="inline-flex items-center gap-2">
-                        长截图
+                        离开屏幕渲染
                         <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
                           实验性算法
                         </span>
                       </span>
                     }
-                    detail="另画一块终端再截，不滚动正在看的画面。关闭后仍逐屏拍摄，拨动立刻生效。"
+                    detail="在界面后面另画一块终端再截，不滚动正在看的画面。画不出来会停下来并提示关掉。关闭后仍逐屏拍摄，拨动立刻生效。"
                   >
                     <Switch
                       checked={appearance.experimentalScreenshot}

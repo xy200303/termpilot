@@ -127,6 +127,11 @@
     margin: 0;
     overflow: hidden;
   }
+  #root {
+    position: relative;
+    z-index: 1;
+    background: var(--background);
+  }
   body {
     @apply bg-background text-foreground;
     font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;

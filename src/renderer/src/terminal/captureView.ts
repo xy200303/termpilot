@@ -27,7 +27,7 @@ interface PageShot {
  * 截终端画面。
  * 当前这一屏用 capturePage 抓已经画出来的字符网格。
  * 不超过一屏的行范围，滚到那一行再拍。
- * 更长的范围另开一块终端重画，不滚动正在看的会话。
+ * 更长的范围在界面后面另画一块 WebGL 终端，读它自己的画面。画不出来就停。
  */
 export async function captureTerminalView(opts: {
   termId: string
@@ -119,18 +119,10 @@ export async function captureTerminalView(opts: {
 
 /** 显卡单边像素上限。再高的画布容易创建失败。 */
 const DEVICE_CAP = 4096
+const OFFSCREEN_FAILED = '离开屏幕渲染没有画出来。请到设置里关掉「离开屏幕渲染」。'
 
 async function captureReplay(termId: string, start: number, end: number, capped: number): Promise<CaptureDone> {
-  let drawn: { pngs: string[]; covered: number }
-  try {
-    drawn = await replayCanvases(termId, start, capped)
-  } catch (error) {
-    if (error instanceof Error && error.message === '终端不在画面上') throw error
-    const overlay = await replayOverlay(termId, start, capped)
-    const images = await stitch(overlay.shots)
-    const paths = await window.api.capture.save(images)
-    return { paths, note: replayNote(start, overlay.covered, end) }
-  }
+  const drawn = await replayCanvases(termId, start, capped)
   return deliverReplay(drawn.pngs, start, drawn.covered, end)
 }
 
@@ -172,7 +164,7 @@ async function paintRange(
   const cols = Math.max(2, look.cols)
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
-  host.style.cssText = `position:fixed;left:0;top:0;width:${Math.ceil(cellWidth * cols)}px;height:${Math.ceil(cellHeight * rows)}px;opacity:0;pointer-events:none;overflow:hidden;`
+  host.style.cssText = `position:fixed;left:0;top:0;z-index:0;width:${Math.ceil(cellWidth * cols)}px;height:${Math.ceil(cellHeight * rows)}px;pointer-events:none;overflow:hidden;`
   document.body.appendChild(host)
   const term = new Terminal({
     cols,
@@ -197,69 +189,16 @@ async function paintRange(
     const canvas = await renderedCanvas(host)
     const url = canvas.toDataURL('image/png')
     const comma = url.indexOf(',')
-    if (comma < 0) throw new Error('截图没有画出来')
+    if (comma < 0) throw new Error(OFFSCREEN_FAILED)
     return url.slice(comma + 1)
+  } catch (error) {
+    if (error instanceof Error && error.message === '终端不在画面上') throw error
+    throw new Error(OFFSCREEN_FAILED)
   } finally {
     webgl?.dispose()
     term.dispose()
     host.remove()
   }
-}
-
-/** 画布读不出来时，把同样的内容盖在画面上，按窗口能拍到的高度逐段拍。 */
-async function replayOverlay(
-  termId: string,
-  start: number,
-  capped: number
-): Promise<{ shots: PageShot[]; covered: number }> {
-  const look = terminalPool.look(termId)
-  const rect = terminalPool.screenRect(termId)
-  if (!look || !rect) throw new Error('终端不在画面上')
-  const host = document.createElement('div')
-  host.setAttribute('aria-hidden', 'true')
-  host.style.cssText = `position:fixed;left:${rect.x}px;top:${rect.y}px;width:${rect.width}px;height:${rect.height}px;z-index:2147483646;pointer-events:none;overflow:hidden;`
-  document.body.appendChild(host)
-  const term = new Terminal({
-    cols: Math.max(2, look.cols),
-    rows: Math.max(1, look.rows),
-    fontFamily: look.fontFamily,
-    fontSize: look.fontSize,
-    lineHeight: look.lineHeight,
-    cursorBlink: false,
-    scrollback: 0,
-    theme: look.theme,
-    disableStdin: true,
-    allowProposedApi: true
-  })
-  const deadline = performance.now() + CAPTURE_BUDGET_MS
-  const shots: PageShot[] = []
-  let covered = start
-  try {
-    term.open(host)
-    host.style.background = look.background
-    while (covered < capped && shots.length < MAX_PAGES) {
-      if (shots.length > 0 && performance.now() >= deadline) break
-      const chunkEnd = Math.min(capped, covered + look.rows)
-      const data = terminalPool.rangeAnsi(termId, covered, chunkEnd)
-      if (!data) throw new Error('终端不在画面上')
-      term.reset()
-      await written(term, data)
-      term.refresh(0, term.rows - 1)
-      await paint()
-      shots.push({
-        png: await window.api.capture.page(rect),
-        skipRows: 0,
-        keepRows: chunkEnd - covered,
-        rows: look.rows
-      })
-      covered = chunkEnd
-    }
-  } finally {
-    term.dispose()
-    host.remove()
-  }
-  if (shots.length === 0) throw new Error('没有可截的画面')
-  return { shots, covered }
 }
 
 async function deliverReplay(pngs: string[], start: number, covered: number, end: number): Promise<CaptureDone> {
@@ -294,7 +233,7 @@ async function renderedCanvas(host: HTMLElement): Promise<HTMLCanvasElement> {
       return canvas
     }
   }
-  throw new Error('截图没有画出来')
+  throw new Error(OFFSCREEN_FAILED)
 }
 
 function opaque(canvas: HTMLCanvasElement): boolean {
@@ -347,7 +286,41 @@ async function grab(termId: string): Promise<{ png: string; viewportY: number; r
   const rect = terminalPool.screenRect(termId)
   const info = terminalPool.pageInfo(termId)
   if (!rect || !info) throw new Error('终端不在画面上')
-  return { png: await window.api.capture.page(rect), viewportY: info.viewportY, rows: info.rows }
+  return { png: await shoot(rect), viewportY: info.viewportY, rows: info.rows }
+}
+
+/** 窗口实拍会把盖在终端上的弹窗和菜单一起拍进去。拍的时候藏起来，拍完恢复。 */
+async function shoot(rect: CaptureRect): Promise<string> {
+  const hidden = hideFloaters()
+  try {
+    if (hidden.length > 0) await paint()
+    return await window.api.capture.page(rect)
+  } finally {
+    showFloaters(hidden)
+  }
+}
+
+const FLOATERS = [
+  '[data-slot="dialog-overlay"]',
+  '[data-slot="dialog-content"]',
+  '[data-slot="context-menu-content"]'
+].join(',')
+
+function hideFloaters(): HTMLElement[] {
+  const hidden: HTMLElement[] = []
+  for (const node of document.querySelectorAll<HTMLElement>(FLOATERS)) {
+    node.dataset.shotVisibility = node.style.visibility
+    node.style.visibility = 'hidden'
+    hidden.push(node)
+  }
+  return hidden
+}
+
+function showFloaters(nodes: HTMLElement[]): void {
+  for (const node of nodes) {
+    node.style.visibility = node.dataset.shotVisibility ?? ''
+    delete node.dataset.shotVisibility
+  }
 }
 
 function paint(): Promise<void> {
