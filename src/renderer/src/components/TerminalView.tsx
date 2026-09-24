@@ -28,5 +28,5 @@ export function TerminalView(props: { termId: string }) {
     }
   }, [props.termId])
 
-  return <div ref={ref} className="min-h-0 flex-1 p-1" />
+  return <div ref={ref} className="min-h-0 flex-1 p-1" style={{ background: 'var(--terminal-background)' }} />
 }

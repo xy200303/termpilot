@@ -33,6 +33,9 @@ export const IPC = {
   mcpAudit: 'mcp:audit',
   mcpGet: 'mcp:get',
   mcpSave: 'mcp:save',
+
+  appearanceGet: 'appearance:get',
+  appearanceSave: 'appearance:save',
   mcpState: 'mcp:state',
   mcpStateEvent: 'mcp:state-event',
   mcpBound: 'mcp:bound',

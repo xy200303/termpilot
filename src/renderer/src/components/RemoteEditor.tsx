@@ -25,6 +25,7 @@ export function RemoteEditor(props: { tab: EditorTab }) {
   const tab = props.tab
   const setEditorDirty = useAppStore((s) => s.setEditorDirty)
   const pinEditorTab = useAppStore((s) => s.pinEditorTab)
+  const editorTheme = useAppStore((s) => (s.resolvedApp === 'dark' ? 'vs-dark' : 'vs'))
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -90,7 +91,7 @@ export function RemoteEditor(props: { tab: EditorTab }) {
           <Editor
             height="100%"
             language={languageOf(tab.name)}
-            theme="vs"
+            theme={editorTheme}
             value={text}
             onChange={(value) => {
               const next = value ?? ''

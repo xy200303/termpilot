@@ -17,6 +17,8 @@ import { runCapture } from './terminal/captureView'
 
 export default function App() {
   const loadSessions = useAppStore((s) => s.loadSessions)
+  const loadAppearance = useAppStore((s) => s.loadAppearance)
+  const syncSystemTheme = useAppStore((s) => s.syncSystemTheme)
   const loadMcp = useAppStore((s) => s.loadMcp)
   const onTermStatus = useAppStore((s) => s.onTermStatus)
   const onReverseState = useAppStore((s) => s.onReverseState)
@@ -34,7 +36,11 @@ export default function App() {
 
   useEffect(() => {
     loadSessions()
+    loadAppearance()
     loadMcp()
+    const themeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const onTheme = () => syncSystemTheme()
+    themeQuery.addEventListener('change', onTheme)
     const offStatus = window.api.term.onStatus(onTermStatus)
     const offListen = window.api.reverse.onState(onReverseState)
     const offIncoming = window.api.reverse.onIncoming(onReverseIncoming)
@@ -43,6 +49,7 @@ export default function App() {
     const offMcpClose = window.api.mcp.onCloseTab(onMcpCloseTab)
     const offSessions = window.api.sessions.onChanged(onSessionsChanged)
     return () => {
+      themeQuery.removeEventListener('change', onTheme)
       offStatus()
       offListen()
       offIncoming()
@@ -53,6 +60,8 @@ export default function App() {
     }
   }, [
     loadSessions,
+    loadAppearance,
+    syncSystemTheme,
     loadMcp,
     onTermStatus,
     onReverseState,

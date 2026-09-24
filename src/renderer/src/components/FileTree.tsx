@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { ChevronRight, Download, FolderPlus, Pencil, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { Download, FolderInput, FolderPlus, Pencil, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
@@ -38,32 +38,50 @@ export function FileTree() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [folderName, setFolderName] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
+  const [draft, setDraft] = useState('')
   const [renaming, setRenaming] = useState<RemoteFile | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const openRemoteEditor = useAppStore((s) => s.openRemoteEditor)
 
-  const loadRoot = useCallback(
-    async (path: string) => {
-      if (!forward) return
-      setBusy(true)
-      setError('')
-      try {
-        const res = await window.api.sftp.list(forward.id, path)
-        setRoot(res.path)
-        setEntries(sortEntries(res.entries))
-        setCache({})
-        setOpen({ [res.path]: true })
-        setSelected(res.path)
-        setError('')
-      } catch (e) {
-        setEntries([])
-        setError(sftpMessage(e))
-      } finally {
-        setBusy(false)
+  const sessionId = forward?.id ?? null
+
+  const showRoot = async (id: string, path: string) => {
+    const requested = path.trim().replaceAll('\\', '/') || '.'
+    const res = await window.api.sftp.list(id, requested)
+    setRoot(res.path)
+    setEntries(sortEntries(res.entries))
+    setCache({})
+    setOpen({ [res.path]: true })
+    setSelected(res.path)
+    setError('')
+    writeRoot(id, res.path)
+  }
+
+  const loadRoot = useCallback(async (id: string, path: string, fallback = false) => {
+    setBusy(true)
+    setError('')
+    try {
+      await showRoot(id, path)
+      setPicking(false)
+    } catch (e) {
+      if (fallback && path !== '.') {
+        try {
+          await showRoot(id, '.')
+          setError('上次打开的目录打不开，已回到登录目录')
+          setPicking(false)
+          return
+        } catch (again) {
+          setEntries([])
+          setError(sftpMessage(again))
+          return
+        }
       }
-    },
-    [forward]
-  )
+      setError(sftpMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [])
 
   useEffect(() => {
     setRoot('.')
@@ -72,8 +90,12 @@ export function FileTree() {
     setOpen({})
     setSelected(null)
     setError('')
-    if (forward) void loadRoot('.')
-  }, [forward, loadRoot])
+    setPicking(false)
+    setFolderName(null)
+    if (!sessionId) return
+    const saved = readRoot(sessionId)
+    void loadRoot(sessionId, saved || '.', Boolean(saved))
+  }, [sessionId, loadRoot])
 
   const listInto = useCallback(
     async (path: string) => {
@@ -282,25 +304,21 @@ export function FileTree() {
                     }
                   }}
                 >
-                  {isDir && (
-                    <span className="flex size-4 shrink-0 items-center justify-center">
-                      <button
-                        type="button"
-                        className="flex size-4 items-center justify-center text-muted-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void toggle(item.path)
-                        }}
-                      >
-                        <ChevronRight className={`size-3.5 ${expanded ? 'rotate-90' : ''}`} />
-                      </button>
-                    </span>
-                  )}
+                  <Twistie
+                    dir={isDir}
+                    open={expanded}
+                    onToggle={() => void toggle(item.path)}
+                  />
                   <FileIcon name={item.name} kind={item.kind} open={expanded} />
                   <span className="min-w-0 flex-1 truncate pl-1">{item.name}</span>
                 </div>
               </ContextMenuTrigger>
               <ContextMenuContent>
+                {item.kind === 'dir' && (
+                  <ContextMenuItem onClick={() => void loadRoot(forward.id, item.path)}>
+                    <FolderInput /> 打开此目录
+                  </ContextMenuItem>
+                )}
                 {item.kind !== 'dir' && (
                   <ContextMenuItem
                     onClick={() => openRemoteEditor(forward.id, { path: item.path, name: item.name }, true)}
@@ -358,6 +376,22 @@ export function FileTree() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-1 px-2 py-1">
         <p className="min-w-0 flex-1 truncate text-xs font-medium">{forward.name}</p>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="打开目录"
+          aria-expanded={picking}
+          onClick={() => {
+            setFolderName(null)
+            setPicking((open) => {
+              if (open) return false
+              setDraft(root === '.' ? '/' : root)
+              return true
+            })
+          }}
+        >
+          <FolderInput />
+        </Button>
         <Button variant="ghost" size="icon-sm" title="刷新" disabled={busy} onClick={() => void refresh()}>
           <RefreshCw />
         </Button>
@@ -376,6 +410,32 @@ export function FileTree() {
         <Hint text="这台机器没有 SFTP。已经试过在当前 SSH 连接里安装。需要 root 或免密 sudo，并且机器能访问软件源。不需要另开端口。" />
       ) : (
         <>
+          {picking && (
+            <form
+              className="flex gap-1 px-2 pb-1"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const path = draft.trim()
+                if (!path) return
+                void loadRoot(forward.id, path)
+              }}
+            >
+              <Input
+                autoFocus
+                value={draft}
+                placeholder="/root 或 /home"
+                title="远程绝对路径"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setPicking(false)
+                }}
+                className="h-7 font-mono text-xs"
+              />
+              <Button type="submit" size="sm" disabled={busy || draft.trim() === ''}>
+                打开
+              </Button>
+            </form>
+          )}
           {folderName !== null && (
             <form
               className="flex gap-1 px-2 pb-1"
@@ -402,35 +462,45 @@ export function FileTree() {
           {error && <p className="px-3 pb-1 text-[11px] text-destructive">{error}</p>}
           <ScrollArea className="min-h-0 flex-1">
             <div role="tree" className="pb-2">
-              <div
-                role="treeitem"
-                aria-expanded={rootOpen}
-                aria-selected={selected === root}
-                title={root}
-                className={`flex h-[22px] w-full cursor-pointer items-center pr-2 text-[13px] select-none hover:bg-foreground/5 ${
-                  selected === root ? 'bg-foreground/10' : ''
-                }`}
-                style={{ paddingLeft: 0 }}
-                onClick={() => {
-                  setSelected(root)
-                  if (!rootOpen) void toggle(root)
-                }}
-              >
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                  <button
-                    type="button"
-                    className="flex size-4 items-center justify-center text-muted-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void toggle(root)
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div
+                    role="treeitem"
+                    aria-expanded={rootOpen}
+                    aria-selected={selected === root}
+                    title={root}
+                    className={`flex h-[22px] w-full cursor-pointer items-center pr-2 text-[13px] select-none hover:bg-foreground/5 ${
+                      selected === root ? 'bg-foreground/10' : ''
+                    }`}
+                    style={{ paddingLeft: 0 }}
+                    onContextMenu={() => setSelected(root)}
+                    onClick={() => {
+                      setSelected(root)
+                      if (!rootOpen) void toggle(root)
                     }}
                   >
-                    <ChevronRight className={`size-3.5 ${rootOpen ? 'rotate-90' : ''}`} />
-                  </button>
-                </span>
-                <FileIcon name={rootName} kind="dir" open={rootOpen} />
-                <span className="min-w-0 flex-1 truncate pl-1">{rootName}</span>
-              </div>
+                    <Twistie dir open={rootOpen} onToggle={() => void toggle(root)} />
+                    <FileIcon name={rootName} kind="dir" open={rootOpen} />
+                    <span className="min-w-0 flex-1 truncate pl-1">{rootName}</span>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  {parentDir(root) && (
+                    <ContextMenuItem onClick={() => void loadRoot(forward.id, parentDir(root)!)}>
+                      打开上级目录
+                    </ContextMenuItem>
+                  )}
+                  <ContextMenuItem
+                    onClick={() => {
+                      setFolderName(null)
+                      setDraft(root === '.' ? '/' : root)
+                      setPicking(true)
+                    }}
+                  >
+                    <FolderInput /> 打开其他目录
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
               {rootOpen && (
                 <>
                   {entries.length === 0 && !busy && !error && (
@@ -449,9 +519,38 @@ export function FileTree() {
   )
 }
 
-/** 与 VS Code 资源管理器相同：每级缩进 8px。文件图标和同级目录的箭头对齐。 */
+/** 与 VS Code 资源管理器相同：每级缩进 8px，箭头槽和图标都是 16px，图标自成一列。 */
 const TREE_INDENT = 8
 const TREE_TWISTIE = 16
+
+function Twistie(props: { dir: boolean; open?: boolean; onToggle?: () => void }) {
+  if (!props.dir) return <span className="size-4 shrink-0" />
+  return (
+    <button
+      type="button"
+      className="flex size-4 shrink-0 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground"
+      onClick={(e) => {
+        e.stopPropagation()
+        props.onToggle?.()
+      }}
+    >
+      <svg
+        viewBox="0 0 16 16"
+        className={`size-4 origin-center ${props.open ? 'rotate-90' : ''}`}
+        aria-hidden
+      >
+        <path
+          d="M6 3.5 11 8 6 12.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  )
+}
 
 function findFile(
   path: string,
@@ -501,6 +600,33 @@ function parentDir(path: string): string | null {
 
 function Hint(props: { text: string }) {
   return <p className="px-3 py-6 text-center text-xs leading-5 text-muted-foreground">{props.text}</p>
+}
+
+const ROOTS_KEY = 'termpilot.fileRoots'
+
+function readRoot(sessionId: string): string {
+  try {
+    const raw = localStorage.getItem(ROOTS_KEY)
+    if (!raw) return ''
+    const saved = JSON.parse(raw) as Record<string, unknown>
+    return typeof saved[sessionId] === 'string' ? saved[sessionId] : ''
+  } catch {
+    return ''
+  }
+}
+
+function writeRoot(sessionId: string, path: string): void {
+  const saved = (() => {
+    try {
+      const raw = localStorage.getItem(ROOTS_KEY)
+      const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  })()
+  saved[sessionId] = path
+  localStorage.setItem(ROOTS_KEY, JSON.stringify(saved))
 }
 
 const NO_SFTP = '这台机器没有 SFTP'

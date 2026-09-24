@@ -1,7 +1,8 @@
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import { terminalPalette } from '../theme/terminalThemes'
 
 /**
  * 进程级 xterm 单例池（关键设计，见 docs/技术方案.md §4.2）：
@@ -22,6 +23,13 @@ interface PoolEntry {
 
 class TerminalPool {
   private entries = new Map<string, PoolEntry>()
+  private palette: ITheme = terminalPalette('light').theme
+
+  /** 换终端配色。已经打开的终端一起改，后面新建的也用这一套。 */
+  setTheme(theme: ITheme): void {
+    this.palette = theme
+    for (const entry of this.entries.values()) this.paint(entry)
+  }
 
   ensure(termId: string): PoolEntry {
     const existing = this.entries.get(termId)
@@ -35,30 +43,7 @@ class TerminalPool {
       cursorStyle: 'block',
       scrollback: 50000,
       allowProposedApi: true,
-      // 浅色终端主题（与整体浅色 UI 一致）
-      theme: {
-        background: '#ffffff',
-        foreground: '#1f2937',
-        cursor: '#2563eb',
-        cursorAccent: '#ffffff',
-        selectionBackground: '#bfdbfe',
-        black: '#1f2937',
-        red: '#dc2626',
-        green: '#16a34a',
-        yellow: '#ca8a04',
-        blue: '#2563eb',
-        magenta: '#c026d3',
-        cyan: '#0891b2',
-        white: '#e2e8f0',
-        brightBlack: '#64748b',
-        brightRed: '#ef4444',
-        brightGreen: '#22c55e',
-        brightYellow: '#eab308',
-        brightBlue: '#3b82f6',
-        brightMagenta: '#d946ef',
-        brightCyan: '#06b6d4',
-        brightWhite: '#f8fafc'
-      }
+      theme: this.palette
     })
 
     const fit = new FitAddon()
@@ -69,6 +54,7 @@ class TerminalPool {
     host.style.height = '100%'
     host.style.overflow = 'hidden'
     term.open(host)
+    host.style.background = this.palette.background ?? ''
 
     this.enableWebgl(term)
 
@@ -158,6 +144,12 @@ class TerminalPool {
     e.disposeData()
     e.term.dispose()
     this.entries.delete(termId)
+  }
+
+  private paint(entry: PoolEntry): void {
+    entry.term.options.theme = this.palette
+    entry.host.style.background = this.palette.background ?? ''
+    entry.term.refresh(0, Math.max(0, entry.term.rows - 1))
   }
 
   private enableWebgl(term: Terminal): void {

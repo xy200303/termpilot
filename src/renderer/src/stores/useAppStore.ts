@@ -1,5 +1,13 @@
 import { create } from 'zustand'
-import { MCP_DEFAULT_PORT, type ConnectMode, type McpOpenTab, type McpRuntime, type McpSettings, type McpSettingsInput } from '../../../shared/types'
+import {
+  MCP_DEFAULT_PORT,
+  type Appearance,
+  type ConnectMode,
+  type McpOpenTab,
+  type McpRuntime,
+  type McpSettings,
+  type McpSettingsInput
+} from '../../../shared/types'
 import type {
   ReverseIncoming,
   ReverseListenState,
@@ -11,6 +19,7 @@ import type {
 } from '../../../shared/types'
 import { dropBuffer, editorKey } from '../editor/editorBuffers'
 import { terminalPool } from '../terminal/TerminalPool'
+import { applyAppearance, readCachedAppearance, resolveAppTheme, type ResolvedAppTheme } from '../theme/applyAppearance'
 
 export interface EditorTab {
   key: string
@@ -57,11 +66,17 @@ interface AppState {
     | { action: 'create'; mode: ConnectMode; host?: string; port?: number }
     | { action: 'edit'; session: SessionConfig }
   settingsOpen: boolean
+  appearance: Appearance
+  /** 跟随系统时，这里是当前真正用上的浅色或深色。 */
+  resolvedApp: ResolvedAppTheme
   mcp: McpSettings | null
   mcpRuntime: McpRuntime
   notice: string | null
 
   loadSessions: () => Promise<void>
+  loadAppearance: () => Promise<void>
+  setAppearance: (patch: Partial<Appearance>) => Promise<void>
+  syncSystemTheme: () => void
   loadMcp: () => Promise<void>
   onMcpState: (state: McpRuntime) => void
   onMcpOpenTab: (tab: McpOpenTab) => void
@@ -101,6 +116,7 @@ interface AppState {
 
 let tabSeq = 0
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
+const bootAppearance = readCachedAppearance()
 
 export const useAppStore = create<AppState>((set, get) => ({
   sessions: [],
@@ -118,6 +134,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   listeners: {},
   editing: null,
   settingsOpen: false,
+  appearance: bootAppearance,
+  resolvedApp: resolveAppTheme(bootAppearance.app),
   mcp: null,
   mcpRuntime: { running: false, port: MCP_DEFAULT_PORT, clients: 0 },
   notice: null,
@@ -125,6 +143,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadSessions: async () => {
     const sessions = await window.api.sessions.list()
     set({ sessions })
+  },
+
+  loadAppearance: async () => {
+    const appearance = await window.api.appearance.get()
+    set({ appearance, resolvedApp: applyAppearance(appearance) })
+  },
+
+  setAppearance: async (patch) => {
+    const prev = get().appearance
+    const next = { ...prev, ...patch }
+    set({ appearance: next, resolvedApp: applyAppearance(next, false) })
+    try {
+      const saved = await window.api.appearance.save(next)
+      set({ appearance: saved, resolvedApp: applyAppearance(saved) })
+    } catch (error) {
+      set({ appearance: prev, resolvedApp: applyAppearance(prev) })
+      throw error
+    }
+  },
+
+  syncSystemTheme: () => {
+    if (get().appearance.app !== 'system') return
+    set({ resolvedApp: applyAppearance(get().appearance, false) })
   },
 
   loadMcp: async () => {

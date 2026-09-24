@@ -204,3 +204,34 @@ export interface McpSettingsInput {
   token: string
   confirmDangerous: boolean
 }
+
+/** 应用界面：浅色、深色，或跟着系统。 */
+export const APP_THEMES = ['light', 'dark', 'system'] as const
+export type AppTheme = (typeof APP_THEMES)[number]
+
+/** 终端配色，和上面的应用主题互不影响。 */
+export const TERMINAL_THEMES = [
+  'light',
+  'dark',
+  'solarized-light',
+  'solarized-dark',
+  'one-dark',
+  'dracula',
+  'nord',
+  'monokai'
+] as const
+export type TerminalThemeId = (typeof TERMINAL_THEMES)[number]
+
+export interface Appearance {
+  app: AppTheme
+  terminal: TerminalThemeId
+}
+
+export const DEFAULT_APPEARANCE: Appearance = { app: 'light', terminal: 'light' }
+
+export function parseAppearance(input: unknown): Appearance {
+  const row = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
+  const app = APP_THEMES.find((id) => id === row.app) ?? DEFAULT_APPEARANCE.app
+  const terminal = TERMINAL_THEMES.find((id) => id === row.terminal) ?? DEFAULT_APPEARANCE.terminal
+  return { app, terminal }
+}

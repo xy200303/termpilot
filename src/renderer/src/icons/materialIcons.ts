@@ -41,12 +41,22 @@ for (const [path, url] of Object.entries(iconUrls)) {
 }
 
 const light = theme.light
-const fileNames = { ...theme.fileNames, ...light?.fileNames }
-const fileExtensions = { ...theme.fileExtensions, ...light?.fileExtensions }
-const folderNames = { ...theme.folderNames, ...light?.folderNames }
-const folderNamesExpanded = { ...theme.folderNamesExpanded, ...light?.folderNamesExpanded }
-const rootFolderNames = { ...theme.rootFolderNames, ...light?.rootFolderNames }
-const rootFolderNamesExpanded = { ...theme.rootFolderNamesExpanded, ...light?.rootFolderNamesExpanded }
+const darkMaps = {
+  fileNames: theme.fileNames,
+  fileExtensions: theme.fileExtensions,
+  folderNames: theme.folderNames,
+  folderNamesExpanded: theme.folderNamesExpanded,
+  rootFolderNames: theme.rootFolderNames ?? {},
+  rootFolderNamesExpanded: theme.rootFolderNamesExpanded ?? {}
+}
+const lightMaps = {
+  fileNames: { ...theme.fileNames, ...light?.fileNames },
+  fileExtensions: { ...theme.fileExtensions, ...light?.fileExtensions },
+  folderNames: { ...theme.folderNames, ...light?.folderNames },
+  folderNamesExpanded: { ...theme.folderNamesExpanded, ...light?.folderNamesExpanded },
+  rootFolderNames: { ...theme.rootFolderNames, ...light?.rootFolderNames },
+  rootFolderNamesExpanded: { ...theme.rootFolderNamesExpanded, ...light?.rootFolderNamesExpanded }
+}
 
 function srcOf(id: string | undefined): string {
   const def = (id && theme.iconDefinitions[id]) || theme.iconDefinitions[theme.file]
@@ -59,23 +69,25 @@ export function materialIconSrc(
   name: string,
   kind: 'dir' | 'file' | 'link',
   open = false,
-  root = false
+  root = false,
+  lightMode = true
 ): string {
+  const maps = lightMode ? lightMaps : darkMaps
   const lower = name.toLowerCase()
   if (kind === 'dir') {
     if (root) {
-      const id = open ? rootFolderNamesExpanded[lower] : rootFolderNames[lower]
+      const id = open ? maps.rootFolderNamesExpanded[lower] : maps.rootFolderNames[lower]
       return srcOf(id ?? (open ? theme.rootFolderExpanded : theme.rootFolder) ?? (open ? theme.folderExpanded : theme.folder))
     }
-    const id = open ? folderNamesExpanded[lower] : folderNames[lower]
+    const id = open ? maps.folderNamesExpanded[lower] : maps.folderNames[lower]
     return srcOf(id ?? (open ? theme.folderExpanded : theme.folder))
   }
-  const named = fileNames[lower]
+  const named = maps.fileNames[lower]
   if (named) return srcOf(named)
   const parts = lower.split('.')
   for (let i = 1; i < parts.length; i++) {
     const ext = parts.slice(i).join('.')
-    const id = fileExtensions[ext]
+    const id = maps.fileExtensions[ext]
     if (id) return srcOf(id)
   }
   return srcOf(theme.file)

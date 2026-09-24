@@ -14,6 +14,7 @@ import type {
   SftpInstallEvent,
   ReverseIncoming,
   ReverseListenState,
+  Appearance,
   McpSettingsInput,
   SessionConfig,
   SessionInput,
@@ -92,6 +93,10 @@ const api = {
         ipcRenderer.removeListener(IPC.sftpInstall, listener)
       }
     }
+  },
+  appearance: {
+    get: () => ipcRenderer.invoke(IPC.appearanceGet) as Promise<Appearance>,
+    save: (input: Appearance) => ipcRenderer.invoke(IPC.appearanceSave, input) as Promise<Appearance>
   },
   mcp: {
     get: () => ipcRenderer.invoke(IPC.mcpGet),

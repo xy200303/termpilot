@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
+import { followAppTheme, titleBarOverlay, watchSystemChrome, windowBackground } from './window-chrome'
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -29,13 +30,14 @@ let sftp: SftpService | null = null
 let mcp: McpService | null = null
 
 function createWindow(storage: StorageService): void {
+  const dark = followAppTheme(storage.getAppearance().app)
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 960,
     minHeight: 600,
     show: false,
-    backgroundColor: '#f3f5f8',
+    backgroundColor: windowBackground(dark),
     title: 'TermPilot',
     icon: join(app.getAppPath(), 'resources', 'icon.png'),
     autoHideMenuBar: true,
@@ -43,11 +45,7 @@ function createWindow(storage: StorageService): void {
       ? {
           // 系统按钮留在右上角，左边这一行由界面自己画，和它们齐平。
           titleBarStyle: 'hidden' as const,
-          titleBarOverlay: {
-            color: '#ffffff',
-            symbolColor: '#3f3f46',
-            height: 40
-          }
+          titleBarOverlay: titleBarOverlay(dark)
         }
       : {}),
     webPreferences: {
@@ -89,6 +87,7 @@ function createWindow(storage: StorageService): void {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
+  watchSystemChrome()
   const sessions = new StorageService()
   storage = sessions
   createWindow(sessions)

@@ -8,6 +8,7 @@ import {
   type AgentId,
   type CaptureRect,
   type CaptureReply,
+  type Appearance,
   type McpSettingsInput,
   type RemoteFile,
   type SessionInput,
@@ -19,6 +20,7 @@ import type { ReverseListenerService } from './services/ReverseListenerService'
 import type { McpService } from './services/McpService'
 import type { SftpService } from './services/SftpService'
 import { listAgentTargets, writeAgentTarget } from './services/AgentConfigService'
+import { paintFromContents } from './window-chrome'
 
 /** 注册主进程 IPC handler（白名单，渲染进程只能调这些） */
 export function registerIpc(
@@ -90,6 +92,14 @@ export function registerIpc(
   )
 
   // --------------------------------------------------------------- MCP
+  ipcMain.handle(IPC.appearanceGet, () => storage.getAppearance())
+
+  ipcMain.handle(IPC.appearanceSave, (event, input: Appearance) => {
+    const saved = storage.saveAppearance(input)
+    paintFromContents(event.sender, saved.app)
+    return saved
+  })
+
   ipcMain.handle(IPC.mcpGet, () => storage.getMcpSettings())
 
   ipcMain.handle(IPC.mcpAudit, () => storage.listAudit())

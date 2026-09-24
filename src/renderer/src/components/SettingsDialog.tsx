@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Blocks, Check, Copy, RefreshCw, ScrollText, Server, X } from 'lucide-react'
+import { Blocks, Check, Copy, Palette, RefreshCw, ScrollText, Server, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import {
@@ -11,17 +12,27 @@ import {
   MCP_HOST,
   type AgentId,
   type AgentTarget,
+  type AppTheme,
   type McpAuditEntry,
-  type McpSettingsInput
+  type McpSettingsInput,
+  type TerminalThemeId
 } from '../../../shared/types'
 import { useAppStore } from '../stores/useAppStore'
+import { terminalPalette, terminalPalettes } from '../theme/terminalThemes'
 
-type Pane = 'mcp' | 'agents' | 'audit'
+type Pane = 'appearance' | 'mcp' | 'agents' | 'audit'
 
 const panes: { id: Pane; label: string; icon: typeof Server }[] = [
+  { id: 'appearance', label: '外观', icon: Palette },
   { id: 'mcp', label: 'MCP 服务', icon: Server },
   { id: 'agents', label: 'Agent 接入', icon: Blocks },
   { id: 'audit', label: '调用记录', icon: ScrollText }
+]
+
+const appThemes: { id: AppTheme; label: string }[] = [
+  { id: 'light', label: '浅色' },
+  { id: 'dark', label: '深色' },
+  { id: 'system', label: '跟随系统' }
 ]
 
 const empty = (): McpSettingsInput => ({
@@ -36,6 +47,8 @@ export function SettingsDialog() {
   const open = useAppStore((s) => s.settingsOpen)
   const setOpen = useAppStore((s) => s.setSettingsOpen)
   const mcp = useAppStore((s) => s.mcp)
+  const appearance = useAppStore((s) => s.appearance)
+  const setAppearance = useAppStore((s) => s.setAppearance)
   const loadMcp = useAppStore((s) => s.loadMcp)
   const saveMcp = useAppStore((s) => s.saveMcp)
   const runtime = useAppStore((s) => s.mcpRuntime)
@@ -49,6 +62,7 @@ export function SettingsDialog() {
   const [agents, setAgents] = useState<AgentTarget[]>([])
   const [busy, setBusy] = useState<AgentId | 'all' | null>(null)
   const [wrote, setWrote] = useState<string>('')
+  const [themeError, setThemeError] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -56,6 +70,7 @@ export function SettingsDialog() {
     setCopied(null)
     setShowToken(false)
     setWrote('')
+    setThemeError('')
     setPane('mcp')
     void loadMcp().catch((e) => setError(e instanceof Error ? e.message : String(e)))
     void window.api.mcp.audit().then(setAudit).catch(() => setAudit([]))
@@ -110,6 +125,15 @@ export function SettingsDialog() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       return false
+    }
+  }
+
+  const changeAppearance = async (patch: Parameters<typeof setAppearance>[0]) => {
+    setThemeError('')
+    try {
+      await setAppearance(patch)
+    } catch (e) {
+      setThemeError(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -170,6 +194,7 @@ export function SettingsDialog() {
                   setPane(item.id)
                   setError('')
                   setWrote('')
+                  setThemeError('')
                 }}
               >
                 <item.icon className="size-4 shrink-0" />
@@ -187,6 +212,63 @@ export function SettingsDialog() {
               </DialogClose>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">
+            {pane === 'appearance' && (
+              <section className="grid gap-4">
+                <div>
+                  <h2 className="text-base font-medium">外观</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    应用和终端分开配色，改完立刻生效。
+                  </p>
+                </div>
+                <Card>
+                  <Row title="应用主题" detail="侧边栏、设置和文件编辑器">
+                    <Select
+                      value={appearance.app}
+                      onValueChange={(value) => void changeAppearance({ app: value as AppTheme })}
+                    >
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {appThemes.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Row>
+                </Card>
+                <Card>
+                  <div className="grid gap-3 px-4 py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="text-sm">终端主题</div>
+                        <div className="text-xs text-muted-foreground">只影响终端画面，不跟着应用主题走</div>
+                      </div>
+                      <Select
+                        value={appearance.terminal}
+                        onValueChange={(value) => void changeAppearance({ terminal: value as TerminalThemeId })}
+                      >
+                        <SelectTrigger className="w-44">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {terminalPalettes.map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <TerminalPreview id={appearance.terminal} />
+                  </div>
+                </Card>
+                {themeError && <p className="text-xs text-destructive">{themeError}</p>}
+              </section>
+            )}
+
             {pane === 'mcp' && (
               <section className="grid gap-4">
                 <div>
@@ -345,6 +427,30 @@ export function SettingsDialog() {
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function TerminalPreview(props: { id: TerminalThemeId }) {
+  const palette = terminalPalette(props.id)
+  const theme = palette.theme
+  const swatches = [theme.red, theme.green, theme.yellow, theme.blue, theme.magenta, theme.cyan]
+  return (
+    <div
+      className="overflow-hidden rounded-lg font-mono text-xs"
+      style={{ background: theme.background, color: theme.foreground }}
+    >
+      <div className="flex gap-1.5 px-3 pt-3">
+        {swatches.map((color) => (
+          <span key={color} className="size-3 rounded-full" style={{ background: color }} />
+        ))}
+      </div>
+      <p className="px-3 py-3">
+        <span style={{ color: theme.green }}>user@host</span>
+        <span style={{ color: theme.blue }}> ~ </span>
+        <span>$ </span>
+        <span style={{ color: theme.yellow }}>ls</span>
+      </p>
+    </div>
   )
 }
 

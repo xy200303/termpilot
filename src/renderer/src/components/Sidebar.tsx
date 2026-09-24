@@ -278,8 +278,8 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
     <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="group/host flex items-center" style={{ paddingLeft: props.depth * 14 }}>
-            <CollapsibleTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
+          <div className="group/host flex items-center" style={{ paddingLeft: props.depth * CONNECT_INDENT }}>
+            <CollapsibleTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
               <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />
               <Server className="size-3.5 shrink-0" />
               <span className="truncate">{props.host}</span>
@@ -415,10 +415,13 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   )
 }
 
+/** 连接树每级只缩进 8px，和文件树一致。没有箭头的行不再留空位。 */
+const CONNECT_INDENT = 8
+
 function SectionHead(props: { icon: ReactNode; title: string; actionTitle: string; onAdd: () => void }) {
   return (
     <div className="group/section flex items-center">
-      <CollapsibleTrigger className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
+      <CollapsibleTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
         <span className="[&_svg]:size-4">{props.icon}</span>
         <span className="truncate">{props.title}</span>
       </CollapsibleTrigger>
@@ -464,12 +467,12 @@ function TreeRow({
         active && 'bg-sidebar-accent',
         className
       )}
-      style={{ paddingLeft: 8 + depth * 14, ...style }}
+      style={{ paddingLeft: depth * CONNECT_INDENT, ...style }}
     >
-      {onToggle ? (
+      {onToggle && (
         <button
           type="button"
-          className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+          className="flex size-4 shrink-0 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground"
           onClick={(event) => {
             event.stopPropagation()
             onToggle()
@@ -477,8 +480,6 @@ function TreeRow({
         >
           <ChevronRight className={cn('size-3 transition-transform', open && 'rotate-90')} />
         </button>
-      ) : (
-        <span className="size-4 shrink-0" />
       )}
       <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onClick}>
         <span

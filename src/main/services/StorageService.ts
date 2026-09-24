@@ -6,13 +6,15 @@ import { DatabaseSync, type SQLOutputValue } from 'node:sqlite'
 import {
   MCP_DEFAULT_PORT,
   MCP_HOST,
+  type Appearance,
   type AuthType,
   type ConnectMode,
   type McpAuditEntry,
   type McpSettings,
   type McpSettingsInput,
   type SessionConfig,
-  type SessionInput
+  type SessionInput,
+  parseAppearance
 } from '../../shared/types'
 
 /**
@@ -55,6 +57,13 @@ export class StorageService {
         port INTEGER NOT NULL DEFAULT ${MCP_DEFAULT_PORT},
         token_encrypted TEXT,
         confirm_dangerous INTEGER NOT NULL DEFAULT 1
+      )
+    `)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS appearance (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        app_theme TEXT NOT NULL DEFAULT 'light',
+        terminal_theme TEXT NOT NULL DEFAULT 'light'
       )
     `)
     this.db.exec(`
@@ -225,6 +234,23 @@ export class StorageService {
     this.db
       .prepare('INSERT INTO mcp_audit (at, tool, ok, detail) VALUES (?, ?, ?, ?)')
       .run(Date.now(), tool, ok ? 1 : 0, detail.slice(0, 500))
+  }
+
+  getAppearance(): Appearance {
+    this.db
+      .prepare(`INSERT OR IGNORE INTO appearance (id, app_theme, terminal_theme) VALUES (1, 'light', 'light')`)
+      .run()
+    const row = this.db.prepare('SELECT app_theme, terminal_theme FROM appearance WHERE id = 1').get()
+    return parseAppearance({ app: row?.app_theme, terminal: row?.terminal_theme })
+  }
+
+  saveAppearance(input: Appearance): Appearance {
+    const next = parseAppearance(input)
+    this.getAppearance()
+    this.db
+      .prepare('UPDATE appearance SET app_theme = ?, terminal_theme = ? WHERE id = 1')
+      .run(next.app, next.terminal)
+    return next
   }
 
   saveMcpSettings(input: McpSettingsInput): McpSettings {
