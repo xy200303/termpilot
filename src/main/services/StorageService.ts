@@ -25,6 +25,8 @@ import {
 export class StorageService {
   private db: DatabaseSync
   private closed = false
+  private launchApp = ''
+  private launchArgs: string[] = []
 
   constructor() {
     const dir = app.getPath('userData')
@@ -66,6 +68,7 @@ export class StorageService {
         terminal_theme TEXT NOT NULL DEFAULT 'light'
       )
     `)
+    this.ensureColumn('appearance', 'experimental_screenshot', 'INTEGER NOT NULL DEFAULT 0')
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mcp_audit (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,10 +81,22 @@ export class StorageService {
     this.importLegacyJson(join(dir, 'sessions.json'))
   }
 
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const rows = this.db.prepare(`PRAGMA table_info(${table})`).all()
+    if (rows.some((row) => row.name === column)) return
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+
   close(): void {
     if (this.closed) return
     this.closed = true
     this.db.close()
+  }
+
+  /** 命令行在窗口没开时用这个路径把应用拉起来。 */
+  setLaunch(appPath: string, args: string[]): void {
+    this.launchApp = appPath
+    this.launchArgs = args
   }
 
   list(): SessionConfig[] {
@@ -242,16 +257,24 @@ export class StorageService {
     this.db
       .prepare(`INSERT OR IGNORE INTO appearance (id, app_theme, terminal_theme) VALUES (1, 'light', 'light')`)
       .run()
-    const row = this.db.prepare('SELECT app_theme, terminal_theme FROM appearance WHERE id = 1').get()
-    return parseAppearance({ app: row?.app_theme, terminal: row?.terminal_theme })
+    const row = this.db
+      .prepare('SELECT app_theme, terminal_theme, experimental_screenshot FROM appearance WHERE id = 1')
+      .get()
+    return parseAppearance({
+      app: row?.app_theme,
+      terminal: row?.terminal_theme,
+      experimentalScreenshot: flag(row?.experimental_screenshot ?? 0)
+    })
   }
 
   saveAppearance(input: Appearance): Appearance {
     const next = parseAppearance(input)
     this.getAppearance()
     this.db
-      .prepare('UPDATE appearance SET app_theme = ?, terminal_theme = ? WHERE id = 1')
-      .run(next.app, next.terminal)
+      .prepare(
+        'UPDATE appearance SET app_theme = ?, terminal_theme = ?, experimental_screenshot = ? WHERE id = 1'
+      )
+      .run(next.app, next.terminal, next.experimentalScreenshot ? 1 : 0)
     return next
   }
 
@@ -383,7 +406,9 @@ export class StorageService {
           url: `http://${settings.host}:${settings.port}/mcp`,
           token: settings.token,
           enabled: settings.enabled,
-          cli: join(app.getPath('userData'), 'bin', process.platform === 'win32' ? 'termpilot.cmd' : 'termpilot')
+          cli: join(app.getPath('userData'), 'bin', process.platform === 'win32' ? 'termpilot.exe' : 'termpilot'),
+          app: this.launchApp,
+          args: this.launchArgs
         },
         null,
         2

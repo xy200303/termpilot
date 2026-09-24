@@ -49,7 +49,7 @@ Windows · macOS · Linux
 
 助手会自己装好用法说明，并接上 TermPilot。之后直接说连哪台机器、做什么就行。连接用的口令写在你电脑上的 `mcp.json`，不会放进代码仓库。
 
-助手如果接不上，也可以直接运行 TermPilot 放好的命令，不必再要一遍口令。Windows 是 `%APPDATA%\TermPilot\bin\termpilot.cmd`。用 `tools` 看有哪些，`schema` 看参数，`call` 来执行。参数复杂时写进文件，用 `--json-file` 或 `--json-stdin`，不要塞进 Windows 的 `.cmd` 参数里。先看文字，需要看画面时再截图。已经打开的终端会接着用，不会再新开一个。
+助手如果接不上，也可以直接运行 `termpilot`。窗口没开时，这条命令会先把 TermPilot 打开。用 `tools` 看有哪些，`schema` 看参数，`call` 来执行。先看文字，需要看画面时再截图。已经打开的终端会接着用，不会再新开一个。
 
 ## 功能
 

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { basename, dirname, isAbsolute, posix } from 'node:path'
 import { dialog, type WebContents } from 'electron'
-import { Client, type SFTPWrapper } from 'ssh2'
+import { Client, type OpenMode, type SFTPWrapper } from 'ssh2'
 import { IPC } from '../../shared/ipc-channels'
 import type { RemoteFile, SftpInstallEvent } from '../../shared/types'
 import { buildConnectConfig } from '../ssh-config'
@@ -27,45 +27,56 @@ export class SftpService {
   async list(sessionId: string, dir: string): Promise<{ path: string; entries: RemoteFile[] }> {
     const sftp = await this.sftpOf(sessionId)
     const requested = dir && dir !== '' ? dir : '.'
-    const path = await realpath(sftp, requested).catch(() => requested)
-    const entries = await readdir(sftp, path)
-    return { path, entries }
+    return using(sftp, requested, async (target) => {
+      const path = await realpath(sftp, target).catch(() => target)
+      const entries = await readdir(sftp, path)
+      return { path, entries }
+    })
   }
 
   async mkdir(sessionId: string, dir: string, name: string): Promise<void> {
     const sftp = await this.sftpOf(sessionId)
     const target = posix.join(dir || '.', name)
-    await call((cb) => sftp.mkdir(target, cb))
+    await using(sftp, target, (path) => call((cb) => sftp.mkdir(path, cb)))
   }
 
   async mkdirPath(sessionId: string, path: string): Promise<void> {
     const sftp = await this.sftpOf(sessionId)
-    await call((cb) => sftp.mkdir(path, cb))
+    await using(sftp, path, (target) => call((cb) => sftp.mkdir(target, cb)))
   }
 
   async put(sessionId: string, localPath: string, remotePath: string): Promise<void> {
     assertLocal(localPath)
     if (!existsSync(localPath)) throw new Error('本地文件不存在')
     const sftp = await this.sftpOf(sessionId)
-    await call((cb) => sftp.fastPut(localPath, remotePath, cb))
+    await using(sftp, remotePath, (target) => call((cb) => sftp.fastPut(localPath, target, cb)))
   }
 
   async get(sessionId: string, remotePath: string, localPath: string): Promise<void> {
     assertLocal(localPath)
     if (!existsSync(dirname(localPath))) throw new Error('本地目录不存在')
     const sftp = await this.sftpOf(sessionId)
-    await call((cb) => sftp.fastGet(remotePath, localPath, cb))
+    await using(sftp, remotePath, (target) => call((cb) => sftp.fastGet(target, localPath, cb)))
   }
 
   async rename(sessionId: string, from: string, to: string): Promise<void> {
     const sftp = await this.sftpOf(sessionId)
-    await call((cb) => sftp.rename(from, to, cb))
+    try {
+      await call((cb) => sftp.rename(from, to, cb))
+    } catch (error) {
+      const nextFrom = (await loginRelative(sftp, from)) ?? from
+      const nextTo = (await loginRelative(sftp, to)) ?? to
+      if (!noSuchFile(error) || (nextFrom === from && nextTo === to)) throw error
+      await call((cb) => sftp.rename(nextFrom, nextTo, cb))
+    }
   }
 
   async remove(sessionId: string, path: string, kind: RemoteFile['kind']): Promise<void> {
     const sftp = await this.sftpOf(sessionId)
-    if (kind === 'dir') await removeDir(sftp, path)
-    else await call((cb) => sftp.unlink(path, cb))
+    await using(sftp, path, async (target) => {
+      if (kind === 'dir') await removeDir(sftp, target)
+      else await call((cb) => sftp.unlink(target, cb))
+    })
   }
 
   async upload(sessionId: string, dir: string): Promise<number> {
@@ -77,7 +88,7 @@ export class SftpService {
     const sftp = await this.sftpOf(sessionId)
     for (const local of picked.filePaths) {
       const remote = posix.join(dir || '.', basename(local))
-      await call((cb) => sftp.fastPut(local, remote, cb))
+      await using(sftp, remote, (target) => call((cb) => sftp.fastPut(local, target, cb)))
     }
     return picked.filePaths.length
   }
@@ -90,22 +101,19 @@ export class SftpService {
     })
     if (picked.canceled || !picked.filePath) return false
     const sftp = await this.sftpOf(sessionId)
-    await call((cb) => sftp.fastGet(file.path, picked.filePath!, cb))
+    await using(sftp, file.path, (target) => call((cb) => sftp.fastGet(target, picked.filePath!, cb)))
     return true
   }
 
   async readText(sessionId: string, path: string): Promise<string> {
     const sftp = await this.sftpOf(sessionId)
-    const size = await statSize(sftp, path)
-    if (size > MAX_EDIT_BYTES) throw new Error('文件超过 1.5MB，不在编辑器里打开')
-    const buf = await readAll(sftp, path)
-    if (buf.includes(0)) throw new Error('这是二进制文件，不能用文本编辑器打开')
-    return buf.toString('utf8')
+    return using(sftp, path, (target) => readTextAt(sftp, target))
   }
 
   async writeText(sessionId: string, path: string, text: string): Promise<void> {
     const sftp = await this.sftpOf(sessionId)
-    await writeAll(sftp, path, Buffer.from(text, 'utf8'))
+    const data = Buffer.from(text, 'utf8')
+    await using(sftp, path, (target) => writeAll(sftp, target, data))
   }
 
   close(sessionId: string): void {
@@ -399,7 +407,7 @@ async function removeDir(sftp: SFTPWrapper, path: string, depth = 0): Promise<vo
   const entries = await readdir(sftp, path).catch(() => [] as RemoteFile[])
   for (const item of entries) {
     if (item.kind === 'dir') await removeDir(sftp, item.path, depth + 1)
-    else await call((cb) => sftp.unlink(item.path, cb))
+    else await using(sftp, item.path, (target) => call((cb) => sftp.unlink(target, cb)))
   }
   await call((cb) => sftp.rmdir(path, cb))
 }
@@ -415,6 +423,16 @@ function call(run: (cb: (err: Error | undefined | null) => void) => void): Promi
 }
 
 const MAX_EDIT_BYTES = 1_500_000
+const CHUNK = 32 * 1024
+const loginDirs = new WeakMap<SFTPWrapper, Promise<string>>()
+
+async function readTextAt(sftp: SFTPWrapper, path: string): Promise<string> {
+  const size = await statSize(sftp, path)
+  if (size > MAX_EDIT_BYTES) throw new Error('文件超过 1.5MB，不在编辑器里打开')
+  const buf = await readAll(sftp, path)
+  if (buf.includes(0)) throw new Error('这是二进制文件，不能用文本编辑器打开')
+  return buf.toString('utf8')
+}
 
 function statSize(sftp: SFTPWrapper, path: string): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -425,23 +443,105 @@ function statSize(sftp: SFTPWrapper, path: string): Promise<number> {
   })
 }
 
-function readAll(sftp: SFTPWrapper, path: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
+async function readAll(sftp: SFTPWrapper, path: string): Promise<Buffer> {
+  const handle = await openFile(sftp, path, 'r')
+  try {
     const chunks: Buffer[] = []
-    const stream = sftp.createReadStream(path)
-    stream.on('data', (chunk: Buffer | string) => {
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+    let pos = 0
+    for (;;) {
+      const chunk = await readChunk(sftp, handle, pos)
+      if (chunk.length === 0) break
+      chunks.push(chunk)
+      pos += chunk.length
+    }
+    return Buffer.concat(chunks)
+  } finally {
+    await closeFile(sftp, handle).catch(() => undefined)
+  }
+}
+
+async function writeAll(sftp: SFTPWrapper, path: string, data: Buffer): Promise<void> {
+  const handle = await openFile(sftp, path, 'w')
+  try {
+    for (let pos = 0; pos < data.length; pos += CHUNK) {
+      const end = Math.min(pos + CHUNK, data.length)
+      await writeChunk(sftp, handle, data.subarray(pos, end), pos)
+    }
+  } catch (error) {
+    await closeFile(sftp, handle).catch(() => undefined)
+    throw error
+  }
+  await closeFile(sftp, handle)
+}
+
+function openFile(sftp: SFTPWrapper, path: string, flags: OpenMode): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    sftp.open(path, flags, (err, handle) => {
+      if (err || !handle) reject(err ?? new Error('无法打开文件'))
+      else resolve(handle)
     })
-    stream.on('error', reject)
-    stream.on('end', () => resolve(Buffer.concat(chunks)))
   })
 }
 
-function writeAll(sftp: SFTPWrapper, path: string, data: Buffer): Promise<void> {
+function readChunk(sftp: SFTPWrapper, handle: Buffer, position: number): Promise<Buffer> {
+  const buffer = Buffer.allocUnsafe(CHUNK)
   return new Promise((resolve, reject) => {
-    const stream = sftp.createWriteStream(path)
-    stream.on('error', reject)
-    stream.on('close', () => resolve())
-    stream.end(data)
+    sftp.read(handle, buffer, 0, buffer.length, position, (err, bytesRead) => {
+      if (err) {
+        if (codeOf(err) === 1) resolve(Buffer.alloc(0))
+        else reject(err)
+        return
+      }
+      resolve(Buffer.from(buffer.subarray(0, bytesRead)))
+    })
   })
+}
+
+function writeChunk(sftp: SFTPWrapper, handle: Buffer, data: Buffer, position: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.write(handle, data, 0, data.length, position, (err) => (err ? reject(err) : resolve()))
+  })
+}
+
+function closeFile(sftp: SFTPWrapper, handle: Buffer): Promise<void> {
+  return call((cb) => sftp.close(handle, cb))
+}
+
+async function using<T>(sftp: SFTPWrapper, path: string, run: (path: string) => Promise<T>): Promise<T> {
+  try {
+    return await run(path)
+  } catch (error) {
+    const alt = await loginRelative(sftp, path)
+    if (!alt || !noSuchFile(error)) throw error
+    return await run(alt)
+  }
+}
+
+async function loginRelative(sftp: SFTPWrapper, path: string): Promise<string | null> {
+  if (!path.startsWith('/')) return null
+  const home = await loginDir(sftp)
+  const root = home.replace(/\/+$/, '')
+  if (!root.startsWith('/')) return null
+  const prefix = root === '/' ? '/' : `${root}/`
+  if (!path.startsWith(prefix)) return null
+  const rest = path.slice(prefix.length)
+  return rest && rest !== path ? rest : null
+}
+
+function loginDir(sftp: SFTPWrapper): Promise<string> {
+  const cached = loginDirs.get(sftp)
+  if (cached) return cached
+  const pending = realpath(sftp, '.').catch(() => '')
+  loginDirs.set(sftp, pending)
+  return pending
+}
+
+function noSuchFile(error: unknown): boolean {
+  return codeOf(error) === 2
+}
+
+function codeOf(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('code' in error)) return undefined
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'number' ? code : undefined
 }

@@ -296,24 +296,17 @@ export class McpService {
       case 'term_lines':
         return this.lines(need(raw, 'termId'), intArg(raw, 'startLine'), intArg(raw, 'endLine'))
       case 'term_screenshot': {
-        const termId = need(raw, 'termId')
-        const startLine = intArg(raw, 'startLine')
-        const endLine = intArg(raw, 'endLine')
-        const ranged = startLine !== undefined || endLine !== undefined
-        return ranged
-          ? this.capture(termId, 'scrollback', startLine, endLine, true)
-          : this.capture(termId, 'viewport')
+        const shot = lineShot(raw)
+        return shot.ranged
+          ? this.capture(shot.termId, 'scrollback', shot.startLine, shot.endLine, true)
+          : this.capture(shot.termId, 'viewport')
       }
       case 'term_screenshot_scrollback': {
-        const termId = need(raw, 'termId')
-        const startLine = intArg(raw, 'startLine')
-        const endLine = intArg(raw, 'endLine')
-        const ranged = startLine !== undefined || endLine !== undefined
-        return this.capture(termId, 'scrollback', startLine, endLine, ranged)
+        const shot = lineShot(raw)
+        return this.capture(shot.termId, 'scrollback', shot.startLine, shot.endLine, shot.ranged)
       }
       case 'sftp_list': {
-        const found = this.findSession(need(raw, 'session'))
-        if (found.mode === 'reverse') throw new Error('反向监听没有 SFTP')
+        const found = this.requireForward(need(raw, 'session'))
         const listed = await this.sftp.list(found.id, textArg(raw, 'path') || '.')
         return JSON.stringify(listed, null, 2)
       }
@@ -796,6 +789,17 @@ function listenError(error: unknown, port: number): string {
     return `端口 ${port} 已被占用`
   }
   return error instanceof Error ? error.message : String(error)
+}
+
+function lineShot(raw: Record<string, unknown>): {
+  termId: string
+  startLine: number | undefined
+  endLine: number | undefined
+  ranged: boolean
+} {
+  const startLine = intArg(raw, 'startLine')
+  const endLine = intArg(raw, 'endLine')
+  return { termId: need(raw, 'termId'), startLine, endLine, ranged: startLine !== undefined || endLine !== undefined }
 }
 
 function auditDetail(input: Record<string, unknown>): string {

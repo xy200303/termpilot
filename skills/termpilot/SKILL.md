@@ -33,7 +33,7 @@ TermPilot 是本机的 SSH 终端。人和 Agent 使用同一套已保存的连�
 
 ## 命令行
 
-MCP 工具没有出现、注册失败或调用报错时，改用 TermPilot 放在本机的命令。它和 MCP 操作同一个窗口，不需要用户把令牌贴给你。命令自己读端点文件里的 `cli` 字段；没有这个字段时，Windows 用 `%APPDATA%\TermPilot\bin\termpilot.cmd`，macOS 和 Linux 用同一目录下的 `termpilot`。
+MCP 工具没有出现、注册失败或调用报错时，改用 TermPilot 放在本机的命令 `termpilot`。它和 MCP 操作同一个窗口，不需要用户把令牌贴给你。命令自己读端点文件里的 `cli` 字段。窗口没开时，这条命令会先启动 TermPilot。
 
 ```text
 termpilot tools
@@ -44,7 +44,7 @@ termpilot call term_exec --json-file args.json --json
 
 `tools` 列出工具，`schema` 看参数，`call` 用 JSON 调用。这三者和窗口里的 MCP 是同一份定义。
 
-Windows 上不要把带引号的 JSON 直接放在 `termpilot.cmd` 后面，批处理会把参数拆坏。把 JSON 写进文件，用 `call <工具名> --json-file <路径>`；或从标准输入传，用 `--json-stdin`。加上 `--json` 时，输出是一行 `{"ok":true,"text":"..."}`，中文用 `\u` 转义。参数不是对象时，报错会带上实际收到的前 200 个字符。
+参数可以直接写在命令后面。很长的 JSON 可以写进文件，用 `call <工具名> --json-file <路径>`；或从标准输入传，用 `--json-stdin`。加上 `--json` 时，输出是一行 `{"ok":true,"text":"..."}`，中文用 `\u` 转义。参数不是对象时，报错会带上实际收到的前 200 个字符。
 
 先看文字：`term_lines` 比截图快。截图返回的是本机图片路径，需要看画面时再读那个文件。已经有 `termId` 就接着用，不要为了同一件事再连一次。
 

@@ -1,4 +1,4 @@
-import { Terminal, type ITheme } from '@xterm/xterm'
+import { Terminal, type IBufferCell, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
@@ -19,6 +19,16 @@ interface PoolEntry {
   fit: FitAddon
   host: HTMLDivElement
   disposeData: () => void
+}
+
+export interface TermLook {
+  cols: number
+  rows: number
+  fontFamily: string
+  fontSize: number
+  lineHeight: number
+  theme: ITheme
+  background: string
 }
 
 class TerminalPool {
@@ -124,6 +134,32 @@ class TerminalPool {
     const host = this.entries.get(termId)?.host
     if (!host?.isConnected) return null
     return boxOf(host)
+  }
+
+  /** 新建一块终端重画某一段时，沿用这一份字体和颜色。 */
+  look(termId: string): TermLook | null {
+    const term = this.entries.get(termId)?.term
+    if (!term) return null
+    const theme = term.options.theme ?? this.palette
+    return {
+      cols: term.cols,
+      rows: term.rows,
+      fontFamily: term.options.fontFamily || 'Consolas, "Cascadia Mono", "Microsoft YaHei", monospace',
+      fontSize: term.options.fontSize ?? 14,
+      lineHeight: term.options.lineHeight ?? 1.2,
+      theme,
+      background: theme.background ?? this.palette.background ?? '#000000'
+    }
+  }
+
+  /**
+   * 把缓冲里的一段行变成 ANSI。行号含首不含尾。
+   * 每一行缓冲对应重画后的一行，不重新折行。
+   */
+  rangeAnsi(termId: string, start: number, end: number): string | null {
+    const term = this.entries.get(termId)?.term
+    if (!term || end <= start) return null
+    return ansiSlice(term, start, end)
   }
 
   pageInfo(termId: string): { viewportY: number; length: number; rows: number } | null {
@@ -247,6 +283,72 @@ function bindClipboardKeys(term: Terminal): void {
     }
     return true
   })
+}
+
+function ansiSlice(term: Terminal, start: number, end: number): string {
+  const buffer = term.buffer.active
+  const cols = Math.max(2, term.cols)
+  const cell = buffer.getNullCell()
+  const parts: string[] = ['\x1b[?25l']
+  let style = ''
+  const last = Math.min(end, buffer.length)
+  for (let y = Math.max(0, start); y < last; y++) {
+    const line = buffer.getLine(y)
+    if (line) {
+      for (let x = 0; x < cols; x++) {
+        const current = line.getCell(x, cell)
+        if (!current || current.getWidth() === 0) continue
+        const next = sgr(current)
+        if (next !== style) {
+          parts.push('\x1b[0m', next)
+          style = next
+        }
+        parts.push(current.getChars() || ' ')
+      }
+    }
+    if (style) {
+      parts.push('\x1b[0m')
+      style = ''
+    }
+    if (y + 1 < last) parts.push('\r\n')
+  }
+  const cursorLine = buffer.baseY + buffer.cursorY
+  if (cursorLine >= start && cursorLine < last) {
+    parts.push(`\x1b[?25h\x1b[${cursorLine - start + 1};${buffer.cursorX + 1}H`)
+  }
+  return parts.join('')
+}
+
+function sgr(cell: IBufferCell): string {
+  if (cell.isAttributeDefault()) return ''
+  const parts: string[] = []
+  if (cell.isBold()) parts.push('1')
+  if (cell.isDim()) parts.push('2')
+  if (cell.isItalic()) parts.push('3')
+  if (cell.isUnderline()) parts.push('4')
+  if (cell.isBlink()) parts.push('5')
+  if (cell.isInverse()) parts.push('7')
+  if (cell.isInvisible()) parts.push('8')
+  if (cell.isStrikethrough()) parts.push('9')
+  if (cell.isOverline()) parts.push('53')
+  if (cell.isFgRGB()) parts.push(rgbSgr(cell.getFgColor(), true))
+  else if (cell.isFgPalette()) parts.push(paletteSgr(cell.getFgColor(), true))
+  if (cell.isBgRGB()) parts.push(rgbSgr(cell.getBgColor(), false))
+  else if (cell.isBgPalette()) parts.push(paletteSgr(cell.getBgColor(), false))
+  return parts.length ? `\x1b[${parts.join(';')}m` : ''
+}
+
+function rgbSgr(color: number, fg: boolean): string {
+  const red = (color >> 16) & 255
+  const green = (color >> 8) & 255
+  const blue = color & 255
+  return `${fg ? 38 : 48};2;${red};${green};${blue}`
+}
+
+function paletteSgr(color: number, fg: boolean): string {
+  if (color < 8) return String((fg ? 30 : 40) + color)
+  if (color < 16) return String((fg ? 90 : 100) + (color - 8))
+  return `${fg ? 38 : 48};5;${color}`
 }
 
 function clampLine(line: number, length: number): number {

@@ -255,13 +255,19 @@ export type TerminalThemeId = (typeof TERMINAL_THEMES)[number]
 export interface Appearance {
   app: AppTheme
   terminal: TerminalThemeId
+  /** 长截图另画一块终端。默认关闭，沿用逐屏拍摄。 */
+  experimentalScreenshot: boolean
 }
 
-export const DEFAULT_APPEARANCE: Appearance = { app: 'light', terminal: 'light' }
+export const DEFAULT_APPEARANCE: Appearance = {
+  app: 'light',
+  terminal: 'light',
+  experimentalScreenshot: false
+}
 
 export function parseAppearance(input: unknown): Appearance {
   const row = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const app = APP_THEMES.find((id) => id === row.app) ?? DEFAULT_APPEARANCE.app
   const terminal = TERMINAL_THEMES.find((id) => id === row.terminal) ?? DEFAULT_APPEARANCE.terminal
-  return { app, terminal }
+  return { app, terminal, experimentalScreenshot: row.experimentalScreenshot === true }
 }

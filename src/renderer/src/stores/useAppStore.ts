@@ -6,16 +6,14 @@ import {
   type McpOpenTab,
   type McpRuntime,
   type McpSettings,
-  type McpSettingsInput
-} from '../../../shared/types'
-import type {
-  ReverseIncoming,
-  ReverseListenState,
-  SessionConfig,
-  SessionInput,
-  SessionStatus,
-  Tab,
-  TermStatusEvent
+  type McpSettingsInput,
+  type ReverseIncoming,
+  type ReverseListenState,
+  type SessionConfig,
+  type SessionInput,
+  type SessionStatus,
+  type Tab,
+  type TermStatusEvent
 } from '../../../shared/types'
 import { dropBuffer, editorKey } from '../editor/editorBuffers'
 import { terminalPool } from '../terminal/TerminalPool'

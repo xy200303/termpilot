@@ -1,6 +1,6 @@
 {
   "name": "termpilot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TermPilot - Agent 可操控的 SSH 终端（XShell 风格 GUI + 内置 MCP Server）",
   "main": "out/main/index.js",
   "license": "MIT",
@@ -9,10 +9,11 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "dist": "electron-vite build && electron-builder --publish never",
-    "dist:win": "electron-vite build && electron-builder --win --publish never",
-    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
-    "dist:linux": "electron-vite build && electron-builder --linux --publish never"
+    "dist": "npm run cli:build && electron-vite build && electron-builder --publish never",
+    "dist:win": "npm run cli:build && electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "npm run cli:build && electron-vite build && electron-builder --mac --publish never",
+    "dist:linux": "npm run cli:build && electron-vite build && electron-builder --linux --publish never",
+    "cli:build": "node scripts/build-cli.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
@@ -70,8 +71,16 @@
         "to": "icon.png"
       },
       {
-        "from": "cli/termpilot.mjs",
-        "to": "cli/termpilot.mjs"
+        "from": "cli/dist",
+        "to": "cli",
+        "filter": [
+          "termpilot",
+          "termpilot.exe"
+        ]
+      },
+      {
+        "from": "resources/uninstall-path.ps1",
+        "to": "uninstall-path.ps1"
       }
     ],
     "asarUnpack": [
@@ -99,7 +108,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     },
     "mac": {
       "category": "public.app-category.developer-tools",

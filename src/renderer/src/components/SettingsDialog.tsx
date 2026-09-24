@@ -285,6 +285,28 @@ export function SettingsDialog() {
 
                 <Card>
                   <Row
+                    title={
+                      <span className="inline-flex items-center gap-2">
+                        长截图
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                          实验性算法
+                        </span>
+                      </span>
+                    }
+                    detail="另画一块终端再截，不滚动正在看的画面。关闭后仍逐屏拍摄，拨动立刻生效。"
+                  >
+                    <Switch
+                      checked={appearance.experimentalScreenshot}
+                      onCheckedChange={(experimentalScreenshot) =>
+                        void changeAppearance({ experimentalScreenshot })
+                      }
+                    />
+                  </Row>
+                </Card>
+                {themeError && <p className="text-xs text-destructive">{themeError}</p>}
+
+                <Card>
+                  <Row
                     title="启用"
                     detail={`保存后立刻在 ${MCP_HOST} 监听。关掉再保存就停止。`}
                   >
@@ -458,7 +480,7 @@ function Card(props: { children: React.ReactNode }) {
   return <div className="divide-y overflow-hidden rounded-xl border">{props.children}</div>
 }
 
-function Row(props: { title: string; detail: string; children: React.ReactNode }) {
+function Row(props: { title: React.ReactNode; detail: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
