@@ -39,11 +39,14 @@ MCP 工具没有出现、注册失败或调用报错时，改用 TermPilot 放�
 termpilot tools
 termpilot schema term_exec
 termpilot call term_list
-termpilot call term_exec '{"termId":"<id>","command":"uname -a"}'
-termpilot call term_write '{"termId":"<id>","keys":["up","down"],"text":"你好","submit":true}'
+termpilot call term_exec --json-file args.json --json
 ```
 
-`tools` 列出工具，`schema` 看参数，`call` 用 JSON 调用。这三者和窗口里的 MCP 是同一份定义。先看文字：`term_lines` 比截图快。截图返回的是本机图片路径，需要看画面时再读那个文件。已经有 `termId` 就接着用，不要为了同一件事再连一次。
+`tools` 列出工具，`schema` 看参数，`call` 用 JSON 调用。这三者和窗口里的 MCP 是同一份定义。
+
+Windows 上不要把带引号的 JSON 直接放在 `termpilot.cmd` 后面，批处理会把参数拆坏。把 JSON 写进文件，用 `call <工具名> --json-file <路径>`；或从标准输入传，用 `--json-stdin`。加上 `--json` 时，输出是一行 `{"ok":true,"text":"..."}`，中文用 `\u` 转义。参数不是对象时，报错会带上实际收到的前 200 个字符。
+
+先看文字：`term_lines` 比截图快。截图返回的是本机图片路径，需要看画面时再读那个文件。已经有 `termId` 就接着用，不要为了同一件事再连一次。
 
 ## 操作
 

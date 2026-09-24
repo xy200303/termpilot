@@ -46,7 +46,11 @@ function installCli(): void {
   mkdirSync(dir, { recursive: true })
   copyFileSync(source, join(dir, 'termpilot.mjs'))
   if (process.platform === 'win32') {
-    writeFileSync(join(dir, 'termpilot.cmd'), '@echo off\r\nnode "%~dp0termpilot.mjs" %*\r\n', 'utf8')
+    writeFileSync(
+      join(dir, 'termpilot.cmd'),
+      '@echo off\r\nsetlocal DisableDelayedExpansion\r\nchcp 65001 >nul\r\nnode "%~dp0termpilot.mjs" %*\r\n',
+      'utf8'
+    )
     return
   }
   const launcher = join(dir, 'termpilot')
