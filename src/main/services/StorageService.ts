@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron'
-import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { DatabaseSync, type SQLOutputValue } from 'node:sqlite'
@@ -209,13 +209,15 @@ export class StorageService {
         .run(this.encryptSecret(token) ?? null)
     }
 
-    return {
+    const settings: McpSettings = {
       enabled: flag(row.enabled),
       host: MCP_HOST,
       port: integer(row.port, MCP_DEFAULT_PORT),
       token,
       confirmDangerous: flag(row.confirm_dangerous)
     }
+    this.writeMcpFile(settings)
+    return settings
   }
 
   listAudit(limit = 40): McpAuditEntry[] {
@@ -368,6 +370,25 @@ export class StorageService {
     let n = 2
     while (taken.has(`${base} 副本 ${n}`)) n += 1
     return `${base} 副本 ${n}`
+  }
+
+  /** 给本机 Agent 自己注册 MCP 用。令牌只写在 userData，不进仓库。 */
+  private writeMcpFile(settings: McpSettings): void {
+    const file = join(app.getPath('userData'), 'mcp.json')
+    writeFileSync(
+      file,
+      `${JSON.stringify(
+        {
+          name: 'termpilot',
+          url: `http://${settings.host}:${settings.port}/mcp`,
+          token: settings.token,
+          enabled: settings.enabled
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
   }
 
   private encryptSecret(secret?: string): string | undefined {
