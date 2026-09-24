@@ -20,11 +20,26 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useAppStore } from '../stores/useAppStore'
 
+const REPO_URL = 'https://github.com/xy200303/termpilot'
+
+function openRepo() {
+  window.open(REPO_URL, '_blank')
+}
+
+function GithubMark() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"
+      />
+    </svg>
+  )
+}
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
 const noDrag = { WebkitAppRegion: 'no-drag' } as CSSProperties
 import type { ConnectMode, SessionConfig } from '../../../shared/types'
 import { FileTree } from './FileTree'
-import logo from '../assets/logo.png'
 
 /**
  * 应用侧边栏。不用 shadcn Sidebar 的 fixed 布局：
@@ -54,10 +69,6 @@ export function AppSidebar() {
         </Button>
       </div>
       <SidebarHeader>
-        <div className={cn('flex items-center gap-2 px-1', collapsed && 'justify-center px-0')}>
-          <img src={logo} alt="" className="size-6 rounded-md" />
-          {!collapsed && <div className="text-sm font-semibold">TermPilot</div>}
-        </div>
         {!collapsed && (
           <Tabs value={pane} onValueChange={(v) => setPane(v as 'connect' | 'files')}>
             <TabsList className="w-full">
@@ -85,27 +96,34 @@ export function AppSidebar() {
           >
             <Folder />
           </Button>
-          <Button
-            className="mt-auto"
-            variant="ghost"
-            size="icon-sm"
-            title="设置"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings />
-          </Button>
+          <div className="mt-auto flex flex-col items-center gap-1">
+            <Button variant="ghost" size="icon-sm" title="GitHub" onClick={openRepo}>
+              <GithubMark />
+            </Button>
+            <Button variant="ghost" size="icon-sm" title="设置" onClick={() => setSettingsOpen(true)}>
+              <Settings />
+            </Button>
+          </div>
         </div>
       ) : (
         <>
           <SidebarContent>{pane === 'connect' ? <ConnectTree /> : <FileTree />}</SidebarContent>
-          <div className="border-t px-2 py-2">
+          <div className="flex items-center gap-1 border-t px-2 py-2">
             <button
               type="button"
-              className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
               onClick={() => setSettingsOpen(true)}
             >
               <Settings className="size-4" />
               设置
+            </button>
+            <button
+              type="button"
+              title="GitHub"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              onClick={openRepo}
+            >
+              <GithubMark />
             </button>
           </div>
         </>
