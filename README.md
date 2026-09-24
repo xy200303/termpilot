@@ -44,7 +44,7 @@ Agent 会自己装上 skill，并把自己的 MCP 配置写好。之后直接说
 - 应用主题和终端主题分开配置。
 - 终端截图和滚动长图。截完可以打开目录，或复制图片。
 - 内置 MCP，默认 `http://127.0.0.1:3927/mcp`。删除和危险命令会先在窗口里请人确认。
-- 在连接或服务器上右键「复制为 Agent 提示词」。人和 Agent 共用同一个终端：密码由人输入，菜单和 TUI 由 Agent 用按键接着操作。
+- 在会话或服务器上右键「复制为 Agent 提示词」，把这一条连接交给 Agent。已打开的终端会接着用。
 
 ## 快速开始
 
@@ -59,6 +59,18 @@ npm run dev
 npm run typecheck
 npm run build
 ```
+
+## 打包和发版
+
+推送到 `main` 的改动会做类型检查和构建。打上和 `package.json` 里 `version` 一致的标签，例如 `v0.1.0`，会在 Windows、macOS、Linux 上各打一个安装包，并发到 GitHub Release。也可以在 Actions 里手动运行 Release，产物留在那次运行的附件里。
+
+| 平台 | 产物 |
+| --- | --- |
+| Windows x64 | 安装包和 zip |
+| macOS（打包机的架构，GitHub 上是 Apple Silicon） | dmg 和 zip |
+| Linux x64 | AppImage 和 deb |
+
+本机只打当前系统：`npm run dist:win`、`npm run dist:mac` 或 `npm run dist:linux`。这些包没有代码签名。
 
 ## 许可
 

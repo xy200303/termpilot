@@ -31,19 +31,12 @@ TermPilot 是本机的 SSH 终端。人和 Agent 使用同一套已保存的连�
 
 ## 操作
 
-先 `session_list` 确认连接。用名称连接，例如 `session_connect` 的 `session` 填用户说的那一台。`term_exec` 的命令末尾带换行。改远程文件前先确认目录；用户没有明确要求删除时，不要 `sftp_remove`，也不要在命令里使用 `rm`。危险操作会在 TermPilot 窗口里等用户点允许。
+用户如果贴了会话、主机或 `termId`，就用这一份。已经打开的终端优先接着用：有 `termId` 就直接用它；没有就先 `term_list`，这个会话已经有终端时不要再 `session_connect` 新开一个。没有现成终端时，再用名称 `session_connect`。`term_exec` 的命令末尾带换行。改远程文件前先确认目录；用户没有明确要求删除时，不要 `sftp_remove`，也不要在命令里使用 `rm`。危险操作会在 TermPilot 窗口里等用户点允许。
 
 可用工具：`session_list`、`session_connect`、`session_disconnect`、`session_create`、`session_update`、`session_delete`、`term_list`、`term_exec`、`term_write`、`term_read`、`term_close`、`local_term_open`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`。
 
 要截指定行时，先 `term_lines` 看行号（不填范围就是当前画面），再把 `startLine` 和 `endLine` 传给 `term_screenshot`。两端都包含，返回的是这一段已经裁好的一张图，不要自己按像素裁。整段历史才用 `term_screenshot_scrollback`。
 
-## 人机协同
-
-用户给的提示词里如果有会话名或 `termId`，接管的是 TermPilot 里已经存在的那一个终端。你和用户看的是同一个画面。
-
-- 提示词里已经有 `termId` 时直接用它，不要再 `session_connect`。没有时才按会话名连接。
-- 密码、私钥口令、验证码只由用户在 TermPilot 窗口里输入。看到这类提示就停下来说明，等用户说操作完了，再 `term_lines` 继续。不要索取，也不要代填。
-- 菜单、安装向导、编辑器和其它 TUI：用 `term_write`。上下选择用 `keys: ["up"]` 或 `["down"]`，左右用 `left` / `right`，输入内容用 `text`，确认用 `submit: true`。一次可以组合，例如先 `keys: ["down", "down"]`，看返回的画面，再 `text` 加 `submit`。方向键会按程序当前的光标模式发出。不要自己拼转义序列。
-- `term_exec` 只用于已经回到 shell 提示符的普通命令。交互程序还在跑时不要用它。
+人和你看的是同一个终端。密码和验证码由用户在窗口里输入。菜单和 TUI 用 `term_write`：`keys` 取 `up`、`down`、`left`、`right`，文字放 `text`，回车用 `submit: true`。已经回到 shell 提示符时再用 `term_exec`。
 
 新建或修改测试用的连接可以删掉。服务器上的已有文件不要删。需要试文件时，单独建一个测试目录。

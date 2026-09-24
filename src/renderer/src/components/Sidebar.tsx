@@ -281,7 +281,6 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
   const setEditing = useAppStore((s) => s.setEditing)
   const duplicateSessions = useAppStore((s) => s.duplicateSessions)
   const deleteSession = useAppStore((s) => s.deleteSession)
-  const tabs = useAppStore((s) => s.tabs)
   const setNotice = useAppStore((s) => s.setNotice)
 
   return (
@@ -313,7 +312,7 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem
-            onClick={() => void copyPrompt(hostAgentPrompt(props.host, props.sessions, tabs), setNotice)}
+            onClick={() => void copyPrompt(hostAgentPrompt(props.host, props.sessions), setNotice)}
           >
             复制为 Agent 提示词
           </ContextMenuItem>
@@ -447,7 +446,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
 async function copyPrompt(text: string, setNotice: (notice: string | null) => void): Promise<void> {
   try {
     await navigator.clipboard.writeText(text)
-    setNotice('已复制 Agent 提示词，贴到对话里，在「任务：」后面写要做的事')
+    setNotice('已复制 Agent 提示词')
   } catch (error) {
     setNotice(error instanceof Error ? error.message : String(error))
   }

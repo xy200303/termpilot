@@ -29,6 +29,12 @@ let reverse: ReverseListenerService | null = null
 let sftp: SftpService | null = null
 let mcp: McpService | null = null
 
+function appIcon(): string {
+  const packaged = join(process.resourcesPath, 'icon.png')
+  if (app.isPackaged && existsSync(packaged)) return packaged
+  return join(app.getAppPath(), 'resources', 'icon.png')
+}
+
 function createWindow(storage: StorageService): void {
   const dark = followAppTheme(storage.getAppearance().app)
   const win = new BrowserWindow({
@@ -39,7 +45,7 @@ function createWindow(storage: StorageService): void {
     show: false,
     backgroundColor: windowBackground(dark),
     title: 'TermPilot',
-    icon: join(app.getAppPath(), 'resources', 'icon.png'),
+    icon: appIcon(),
     autoHideMenuBar: true,
     ...(process.platform === 'win32'
       ? {
