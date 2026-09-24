@@ -61,5 +61,9 @@ export const IPC = {
   reverseStop: 'reverse:stop',
   reverseBind: 'reverse:bind',
   reverseState: 'reverse:state',
-  reverseIncoming: 'reverse:incoming'
+  reverseIncoming: 'reverse:incoming',
+
+  appVersion: 'app:version',
+  appCheckUpdate: 'app:check-update',
+  appOpenRelease: 'app:open-release'
 } as const

@@ -169,6 +169,14 @@ export interface AgentTarget {
   configured: boolean
 }
 
+/** 对照 GitHub 最新发布得到的结果 */
+export interface UpdateCheck {
+  current: string
+  latest: string | null
+  url: string | null
+  newer: boolean
+}
+
 /** 危险命令确认 */
 export interface McpConfirmRequest {
   id: string

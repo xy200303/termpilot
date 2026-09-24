@@ -24,7 +24,8 @@ import type {
   TermLinesRun,
   TermModeReply,
   TermModeRun,
-  TermStatusEvent
+  TermStatusEvent,
+  UpdateCheck
 } from '../shared/types'
 
 /**
@@ -190,6 +191,11 @@ const api = {
         ipcRenderer.removeListener(IPC.reverseIncoming, listener)
       }
     }
+  },
+  app: {
+    version: () => ipcRenderer.invoke(IPC.appVersion) as Promise<string>,
+    checkUpdate: () => ipcRenderer.invoke(IPC.appCheckUpdate) as Promise<UpdateCheck>,
+    openRelease: (url: string) => ipcRenderer.invoke(IPC.appOpenRelease, url) as Promise<void>
   }
 }
 

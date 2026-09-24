@@ -22,6 +22,7 @@ import type { ReverseListenerService } from './services/ReverseListenerService'
 import type { McpService } from './services/McpService'
 import type { SftpService } from './services/SftpService'
 import { listAgentTargets, writeAgentTarget } from './services/AgentConfigService'
+import { checkUpdate, releaseUrl } from './update-check'
 import { paintFromContents } from './window-chrome'
 
 /** 注册主进程 IPC handler（白名单，渲染进程只能调这些） */
@@ -184,6 +185,14 @@ export function registerIpc(
   ipcMain.handle(IPC.reverseStop, (_e, sessionId: string) => reverse.stop(sessionId))
 
   ipcMain.on(IPC.reverseBind, (_e, termId: string) => reverse.bind(termId))
+
+  ipcMain.handle(IPC.appVersion, () => app.getVersion())
+  ipcMain.handle(IPC.appCheckUpdate, () => checkUpdate())
+  ipcMain.handle(IPC.appOpenRelease, (_e, url: string) => {
+    const target = releaseUrl(url)
+    if (!target) throw new Error('不是 TermPilot 的发布页')
+    return shell.openExternal(target)
+  })
 }
 
 function screenshotsDir(): string {

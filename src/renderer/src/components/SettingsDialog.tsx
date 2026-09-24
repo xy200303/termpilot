@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Blocks, Check, Copy, Palette, RefreshCw, ScrollText, Server, X } from 'lucide-react'
+import { Blocks, Check, Copy, Info, Palette, RefreshCw, ScrollText, Server, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -15,18 +15,20 @@ import {
   type AppTheme,
   type McpAuditEntry,
   type McpSettingsInput,
-  type TerminalThemeId
+  type TerminalThemeId,
+  type UpdateCheck
 } from '../../../shared/types'
 import { useAppStore } from '../stores/useAppStore'
 import { terminalPalette, terminalPalettes } from '../theme/terminalThemes'
 
-type Pane = 'appearance' | 'mcp' | 'agents' | 'audit'
+type Pane = 'appearance' | 'mcp' | 'agents' | 'audit' | 'about'
 
 const panes: { id: Pane; label: string; icon: typeof Server }[] = [
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'mcp', label: 'MCP 服务', icon: Server },
   { id: 'agents', label: 'Agent 接入', icon: Blocks },
-  { id: 'audit', label: '调用记录', icon: ScrollText }
+  { id: 'audit', label: '调用记录', icon: ScrollText },
+  { id: 'about', label: '关于', icon: Info }
 ]
 
 const appThemes: { id: AppTheme; label: string }[] = [
@@ -63,6 +65,10 @@ export function SettingsDialog() {
   const [busy, setBusy] = useState<AgentId | 'all' | null>(null)
   const [wrote, setWrote] = useState<string>('')
   const [themeError, setThemeError] = useState('')
+  const [version, setVersion] = useState('')
+  const [update, setUpdate] = useState<UpdateCheck | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [updateError, setUpdateError] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -75,6 +81,7 @@ export function SettingsDialog() {
     void loadMcp().catch((e) => setError(e instanceof Error ? e.message : String(e)))
     void window.api.mcp.audit().then(setAudit).catch(() => setAudit([]))
     void window.api.mcp.agents().then(setAgents).catch(() => setAgents([]))
+    void window.api.app.version().then(setVersion).catch(() => setVersion(''))
   }, [open, loadMcp])
 
   useEffect(() => {
@@ -134,6 +141,27 @@ export function SettingsDialog() {
       await setAppearance(patch)
     } catch (e) {
       setThemeError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const checkUpdate = async () => {
+    setChecking(true)
+    setUpdateError('')
+    try {
+      setUpdate(await window.api.app.checkUpdate())
+    } catch (e) {
+      setUpdate(null)
+      setUpdateError(e instanceof Error ? e.message : '检查更新失败')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const openRelease = async (url: string) => {
+    try {
+      await window.api.app.openRelease(url)
+    } catch (e) {
+      setUpdateError(e instanceof Error ? e.message : '打开发布页失败')
     }
   }
 
@@ -427,6 +455,34 @@ export function SettingsDialog() {
               </section>
             )}
 
+            {pane === 'about' && (
+              <section className="grid gap-4">
+                <div>
+                  <h2 className="text-base font-medium">关于</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    当前安装的版本。检查更新会查看 GitHub 上的最新发布，不在这里下载。
+                  </p>
+                </div>
+                <Card>
+                  <Row title="当前版本" detail="安装包里的版本号">
+                    <span className="text-sm tabular-nums">{version ? `v${version}` : '…'}</span>
+                  </Row>
+                  <Row title="检查更新" detail={updateDetail(update, updateError)}>
+                    <div className="flex items-center gap-2">
+                      {update?.newer && update.url && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => void openRelease(update.url!)}>
+                          去 GitHub 下载
+                        </Button>
+                      )}
+                      <Button type="button" size="sm" disabled={checking} onClick={() => void checkUpdate()}>
+                        {checking ? '正在检查' : '检查更新'}
+                      </Button>
+                    </div>
+                  </Row>
+                </Card>
+              </section>
+            )}
+
             {pane === 'audit' && (
               <section className="grid gap-4">
                 <div>
@@ -474,6 +530,14 @@ function TerminalPreview(props: { id: TerminalThemeId }) {
       </p>
     </div>
   )
+}
+
+function updateDetail(update: UpdateCheck | null, error: string): string {
+  if (error) return error
+  if (!update) return '对照 GitHub 上的最新发布'
+  if (!update.latest) return '还没有可下载的发布'
+  if (update.newer) return `最新是 v${update.latest}`
+  return '已是最新版本'
 }
 
 function Card(props: { children: React.ReactNode }) {
