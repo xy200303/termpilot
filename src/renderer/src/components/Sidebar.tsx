@@ -1,0 +1,477 @@
+import type { ComponentProps, CSSProperties, ReactNode } from 'react'
+import { ChevronRight, Folder, Monitor, PanelLeft, Plus, Radio, Search, Server, Settings, TerminalSquare } from 'lucide-react'
+import {
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  useSidebar
+} from '@/components/ui/sidebar'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { useAppStore } from '../stores/useAppStore'
+
+const drag = { WebkitAppRegion: 'drag' } as CSSProperties
+const noDrag = { WebkitAppRegion: 'no-drag' } as CSSProperties
+import type { ConnectMode, SessionConfig } from '../../../shared/types'
+import { FileTree } from './FileTree'
+import logo from '../assets/logo.png'
+
+/**
+ * 应用侧边栏。不用 shadcn Sidebar 的 fixed 布局：
+ * 那一层会和文档流占位各画一次，在 Electron 里左边会露出重影。
+ * 收纳状态仍走 SidebarProvider。
+ */
+export function AppSidebar() {
+  const { state, toggleSidebar } = useSidebar()
+  const collapsed = state === 'collapsed'
+  const pane = useAppStore((s) => s.sidebarPane)
+  const setPane = useAppStore((s) => s.setSidebarPane)
+  const setSettingsOpen = useAppStore((s) => s.setSettingsOpen)
+
+  return (
+    <div
+      className={cn(
+        'flex h-full shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200',
+        collapsed ? 'w-12' : 'w-64'
+      )}
+    >
+      <div
+        className={cn('flex h-10 shrink-0 items-center border-b', collapsed ? 'justify-center' : 'px-2')}
+        style={drag}
+      >
+        <Button variant="ghost" size="icon-sm" title="收纳侧边栏" style={noDrag} onClick={toggleSidebar}>
+          <PanelLeft />
+        </Button>
+      </div>
+      <SidebarHeader>
+        <div className={cn('flex items-center gap-2 px-1', collapsed && 'justify-center px-0')}>
+          <img src={logo} alt="" className="size-6 rounded-md" />
+          {!collapsed && <div className="text-sm font-semibold">TermPilot</div>}
+        </div>
+        {!collapsed && (
+          <Tabs value={pane} onValueChange={(v) => setPane(v as 'connect' | 'files')}>
+            <TabsList className="w-full">
+              <TabsTrigger value="connect">连接</TabsTrigger>
+              <TabsTrigger value="files">文件</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+      </SidebarHeader>
+      {collapsed ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-1 py-1">
+          <Button
+            variant={pane === 'connect' ? 'secondary' : 'ghost'}
+            size="icon-sm"
+            title="连接"
+            onClick={() => setPane('connect')}
+          >
+            <Monitor />
+          </Button>
+          <Button
+            variant={pane === 'files' ? 'secondary' : 'ghost'}
+            size="icon-sm"
+            title="文件"
+            onClick={() => setPane('files')}
+          >
+            <Folder />
+          </Button>
+          <Button
+            className="mt-auto"
+            variant="ghost"
+            size="icon-sm"
+            title="设置"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings />
+          </Button>
+        </div>
+      ) : (
+        <>
+          <SidebarContent>{pane === 'connect' ? <ConnectTree /> : <FileTree />}</SidebarContent>
+          <div className="border-t px-2 py-2">
+            <button
+              type="button"
+              className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="size-4" />
+              设置
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ConnectTree() {
+  const sessions = useAppStore((s) => s.sessions)
+  const search = useAppStore((s) => s.search)
+  const setSearch = useAppStore((s) => s.setSearch)
+  const kw = search.trim().toLowerCase()
+  const filtered = kw
+    ? sessions.filter(
+        (s) =>
+          s.name.toLowerCase().includes(kw) ||
+          s.host.toLowerCase().includes(kw) ||
+          (s.remark ?? '').toLowerCase().includes(kw)
+      )
+    : sessions
+
+  return (
+    <>
+      <div className="px-2 pb-1">
+        <label className="flex h-7 items-center gap-1.5 rounded-md bg-sidebar-accent px-2 text-muted-foreground">
+          <Search className="size-3.5 shrink-0" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜索连接"
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-sidebar-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+      </div>
+      <ModeRoot
+        mode="forward"
+        title="正向 SSH"
+        sessions={filtered.filter((s) => (s.mode ?? 'forward') === 'forward')}
+      />
+      <ModeRoot
+        mode="reverse"
+        title="反向监听"
+        sessions={filtered.filter((s) => s.mode === 'reverse')}
+      />
+      <LocalRoot />
+    </>
+  )
+}
+
+function ModeRoot(props: { mode: ConnectMode; title: string; sessions: SessionConfig[] }) {
+  const key = `root:${props.mode}`
+  const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
+  const toggleGroup = useAppStore((s) => s.toggleGroup)
+  const setEditing = useAppStore((s) => s.setEditing)
+
+  return (
+    <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
+      <SidebarGroup className="px-2 py-0.5">
+        <SectionHead
+          icon={props.mode === 'forward' ? <Monitor /> : <Radio />}
+          title={props.title}
+          actionTitle={props.mode === 'forward' ? '新建正向 SSH' : '新建反向监听'}
+          onAdd={() => setEditing({ action: 'create', mode: props.mode })}
+        />
+        <CollapsibleContent>
+          <SidebarGroupContent className="grid gap-0.5">
+            {props.mode === 'forward'
+              ? machinesOf(props.sessions).map((machine) => (
+                  <HostNode
+                    key={machine.key}
+                    hostKey={machine.key}
+                    host={machine.host}
+                    sessions={machine.sessions}
+                    depth={1}
+                  />
+                ))
+              : props.sessions.map((session) => (
+                  <SessionNode key={session.id} session={session} depth={1} />
+                ))}
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
+  )
+}
+
+function LocalRoot() {
+  const key = 'root:local'
+  const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
+  const toggleGroup = useAppStore((s) => s.toggleGroup)
+  const openLocalTab = useAppStore((s) => s.openLocalTab)
+  const tabs = useAppStore((s) => s.tabs)
+  const activeTabId = useAppStore((s) => s.activeTabId)
+  const termState = useAppStore((s) => s.termState)
+  const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const closeTab = useAppStore((s) => s.closeTab)
+  const locals = tabs.filter((tab) => tab.kind === 'local')
+
+  return (
+    <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
+      <SidebarGroup className="px-2 py-0.5">
+        <SectionHead icon={<TerminalSquare />} title="本机终端" actionTitle="新建本机终端" onAdd={openLocalTab} />
+        <CollapsibleContent>
+          <SidebarGroupContent className="grid gap-0.5">
+            {locals.map((tab) => (
+              <ContextMenu key={tab.id}>
+                <ContextMenuTrigger asChild>
+                  <TreeRow
+                    depth={1}
+                    label={tab.title}
+                    active={tab.id === activeTabId}
+                    live={termState[tab.id]?.status === 'connected'}
+                    onClick={() => setActiveTab(tab.id)}
+                  />
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            ))}
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
+  )
+}
+
+function machinesOf(sessions: SessionConfig[]): { key: string; host: string; sessions: SessionConfig[] }[] {
+  const map = new Map<string, { host: string; sessions: SessionConfig[] }>()
+  for (const session of sessions) {
+    const host = session.host.trim()
+    const key = host.toLowerCase().replace(/^\[|\]$/g, '') || 'unknown'
+    const bucket = map.get(key)
+    if (bucket) bucket.sessions.push(session)
+    else map.set(key, { host: host || '未填写主机', sessions: [session] })
+  }
+  return [...map.entries()]
+    .sort((a, b) => a[1].host.localeCompare(b[1].host, 'zh'))
+    .map(([key, machine]) => ({ key, ...machine }))
+}
+
+function HostNode(props: { hostKey: string; host: string; sessions: SessionConfig[]; depth: number }) {
+  const key = `host:${props.hostKey}`
+  const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
+  const toggleGroup = useAppStore((s) => s.toggleGroup)
+  const setEditing = useAppStore((s) => s.setEditing)
+  const duplicateSessions = useAppStore((s) => s.duplicateSessions)
+  const deleteSession = useAppStore((s) => s.deleteSession)
+
+  return (
+    <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="group/host flex items-center" style={{ paddingLeft: props.depth * 14 }}>
+            <CollapsibleTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
+              <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />
+              <Server className="size-3.5 shrink-0" />
+              <span className="truncate">{props.host}</span>
+            </CollapsibleTrigger>
+            <button
+              type="button"
+              title="在这台机器上新建连接"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              onClick={() =>
+                setEditing({
+                  action: 'create',
+                  mode: 'forward',
+                  host: props.hostKey === 'unknown' ? undefined : props.host,
+                  port: props.sessions[0]?.port
+                })
+              }
+            >
+              <Plus className="size-3.5" />
+            </button>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => void duplicateSessions(props.sessions.map((session) => session.id))}>
+            复制
+          </ContextMenuItem>
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => {
+              for (const session of props.sessions) void deleteSession(session.id)
+            }}
+          >
+            删除
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <CollapsibleContent className="grid gap-0.5">
+        {props.sessions.map((session) => (
+          <SessionNode key={session.id} session={session} depth={props.depth + 1} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function SessionNode(props: { session: SessionConfig; depth: number }) {
+  const session = props.session
+  const isReverse = session.mode === 'reverse'
+  const status = useAppStore((s) => s.sessionStatus[session.id] ?? 'disconnected')
+  const listener = useAppStore((s) => s.listeners[session.id])
+  const tabs = useAppStore((s) => s.tabs)
+  const activeTabId = useAppStore((s) => s.activeTabId)
+  const termState = useAppStore((s) => s.termState)
+  const selectedId = useAppStore((s) => s.selectedSessionId)
+  const openSessionTab = useAppStore((s) => s.openSessionTab)
+  const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const setEditing = useAppStore((s) => s.setEditing)
+  const deleteSession = useAppStore((s) => s.deleteSession)
+  const duplicateSessions = useAppStore((s) => s.duplicateSessions)
+  const toggleListen = useAppStore((s) => s.toggleListen)
+  const selectSession = useAppStore((s) => s.selectSession)
+  const closeTab = useAppStore((s) => s.closeTab)
+  const key = `session:${session.id}`
+  const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
+  const toggleGroup = useAppStore((s) => s.toggleGroup)
+
+  const nested = tabs.filter((tab) => tab.sessionId === session.id && tab.kind === 'reverse')
+  const live = isReverse ? Boolean(listener?.listening) : status === 'connected'
+  const meta = isReverse
+    ? session.listenPort
+      ? `:${session.listenPort}`
+      : ''
+    : session.port === 22
+      ? session.username
+      : `${session.username}:${session.port}`
+  const active =
+    tabs.some((tab) => tab.id === activeTabId && tab.sessionId === session.id && tab.kind === 'ssh') ||
+    (selectedId === session.id && nested.every((tab) => tab.id !== activeTabId))
+
+  return (
+    <div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <TreeRow
+            depth={props.depth}
+            label={session.name}
+            meta={meta}
+            active={active}
+            live={live}
+            open={open}
+            onToggle={nested.length > 0 ? () => toggleGroup(key) : undefined}
+            onClick={() => {
+              selectSession(session.id)
+              if (!isReverse) openSessionTab(session)
+            }}
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => (isReverse ? void toggleListen(session) : openSessionTab(session))}>
+            {isReverse ? (listener?.listening ? '停止监听' : '开始监听') : '连接'}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() =>
+              isReverse ? void duplicateSessions([session.id]) : openSessionTab(session, true)
+            }
+          >
+            复制
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => setEditing({ action: 'edit', session })}>编辑</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onClick={() => deleteSession(session.id)}>
+            删除
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      {open &&
+        nested.map((tab) => (
+          <ContextMenu key={tab.id}>
+            <ContextMenuTrigger asChild>
+              <TreeRow
+                depth={props.depth + 1}
+                label={tab.title}
+                active={tab.id === activeTabId}
+                live={termState[tab.id]?.status === 'connected' || tab.kind === 'reverse'}
+                onClick={() => setActiveTab(tab.id)}
+              />
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        ))}
+    </div>
+  )
+}
+
+function SectionHead(props: { icon: ReactNode; title: string; actionTitle: string; onAdd: () => void }) {
+  return (
+    <div className="group/section flex items-center">
+      <CollapsibleTrigger className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
+        <span className="[&_svg]:size-4">{props.icon}</span>
+        <span className="truncate">{props.title}</span>
+      </CollapsibleTrigger>
+      <button
+        type="button"
+        title={props.actionTitle}
+        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        onClick={props.onAdd}
+      >
+        <Plus className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
+function TreeRow({
+  label,
+  meta,
+  active,
+  live,
+  depth = 0,
+  open,
+  onToggle,
+  onClick,
+  className,
+  style,
+  ...rest
+}: {
+  label: string
+  meta?: string
+  active?: boolean
+  live?: boolean
+  depth?: number
+  open?: boolean
+  onToggle?: () => void
+  onClick: () => void
+} & Omit<ComponentProps<'div'>, 'onClick'>) {
+  return (
+    <div
+      {...rest}
+      className={cn(
+        'flex h-7 w-full items-center gap-1 rounded-md pr-2 text-[13px] hover:bg-sidebar-accent',
+        active && 'bg-sidebar-accent',
+        className
+      )}
+      style={{ paddingLeft: 8 + depth * 14, ...style }}
+    >
+      {onToggle ? (
+        <button
+          type="button"
+          className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggle()
+          }}
+        >
+          <ChevronRight className={cn('size-3 transition-transform', open && 'rotate-90')} />
+        </button>
+      ) : (
+        <span className="size-4 shrink-0" />
+      )}
+      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onClick}>
+        <span
+          className={cn(
+            'size-1.5 shrink-0 rounded-full border',
+            live ? 'border-primary bg-primary' : 'border-muted-foreground/50'
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {meta && <span className="max-w-16 shrink-0 truncate text-[11px] text-muted-foreground">{meta}</span>}
+      </button>
+    </div>
+  )
+}
