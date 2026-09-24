@@ -28,10 +28,14 @@ jobs:
         run: node -e "const v=require('./package.json').version; const t=process.env.GITHUB_REF_NAME.slice(1); if(v!==t){console.error('tag v'+t+' does not match package version '+v); process.exit(1)}"
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run build
+      - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run build
       - name: Package
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npx electron-builder --publish never
       - uses: actions/upload-artifact@v4
         with:
