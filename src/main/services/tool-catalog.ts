@@ -117,14 +117,15 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'term_screenshot',
     description:
-      '截取终端里已经渲染出来的画面。不填行号就截当前这一屏。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。行号用 term_lines 查。',
+      '截取终端画面。不填行号就截当前这一屏。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。行号用 term_lines 查。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时拍摄已经画出来的画面。',
     readOnly: true,
     images: 'always',
     input: lineFields
   },
   {
     name: 'term_screenshot_scrollback',
-    description: '把终端缓冲逐屏实拍后接成长图。startLine / endLine 两端都包含，0 是最旧的一行；填了范围就只返回裁好的这一段。',
+    description:
+      '把终端缓冲接成长图。startLine / endLine 两端都包含，0 是最旧的一行；填了范围就只返回裁好的这一段。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时逐屏拍摄再接上。',
     readOnly: true,
     images: 'ranged',
     input: lineFields

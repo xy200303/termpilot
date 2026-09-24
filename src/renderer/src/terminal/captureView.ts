@@ -1,5 +1,3 @@
-import { Terminal } from '@xterm/xterm'
-import { WebglAddon } from '@xterm/addon-webgl'
 import type { CaptureRect, CaptureRun } from '../../../shared/types'
 import { useAppStore } from '../stores/useAppStore'
 import { terminalPool, type TermLook } from './TerminalPool'
@@ -24,10 +22,8 @@ interface PageShot {
 }
 
 /**
- * 截终端画面。
- * 当前这一屏用 capturePage 抓已经画出来的字符网格。
- * 不超过一屏的行范围，滚到那一行再拍。
- * 更长的范围在界面后面另画一块 WebGL 终端，读它自己的画面。画不出来就停。
+ * 截终端画面。设置里的「合成算法」打开时，当前画面、滚动缓冲、选中范围和助手调用都按缓冲拼图。
+ * 关闭时，当前这一屏用 capturePage。更长的范围滚到那一行再逐屏拍。
  */
 export async function captureTerminalView(opts: {
   termId: string
@@ -46,6 +42,14 @@ export async function captureTerminalView(opts: {
   await waitVisible(opts.termId)
 
   if (opts.mode === 'viewport') {
+    if (composeOn()) {
+      const info = terminalPool.pageInfo(opts.termId)
+      if (!info) throw new Error('终端不在画面上')
+      const start = info.viewportY
+      const end = Math.min(info.length, start + Math.max(1, info.rows))
+      if (end <= start) throw new Error('没有可截的画面')
+      return captureReplay(opts.termId, start, end, end)
+    }
     const shot = await grab(opts.termId)
     const paths = await window.api.capture.save([shot.png])
     const last = shot.viewportY + shot.rows - 1
@@ -69,9 +73,7 @@ export async function captureTerminalView(opts: {
     end = start + rows
   }
   const capped = Math.min(end, start + rows * MAX_PAGES)
-  if (useAppStore.getState().appearance.experimentalScreenshot && capped - start > rows) {
-    return captureReplay(opts.termId, start, end, capped)
-  }
+  if (composeOn()) return captureReplay(opts.termId, start, end, capped)
   const saved = info.viewportY
   const shots: PageShot[] = []
   const deadline = performance.now() + CAPTURE_BUDGET_MS
@@ -117,9 +119,11 @@ export async function captureTerminalView(opts: {
   return { paths: [...framePaths, ...longPaths], note }
 }
 
-/** 显卡单边像素上限。再高的画布容易创建失败。 */
-const DEVICE_CAP = 4096
-const OFFSCREEN_FAILED = '离开屏幕渲染没有画出来。请到设置里关掉「离开屏幕渲染」。'
+const COMPOSE_FAILED = '合成没有画出来。请到设置里关掉「合成算法」。'
+
+function composeOn(): boolean {
+  return useAppStore.getState().appearance.experimentalScreenshot
+}
 
 async function captureReplay(termId: string, start: number, end: number, capped: number): Promise<CaptureDone> {
   const drawn = await replayCanvases(termId, start, capped)
@@ -134,7 +138,7 @@ async function replayCanvases(
   const look = terminalPool.look(termId)
   const rect = terminalPool.screenRect(termId)
   if (!look || !rect) throw new Error('终端不在画面上')
-  const pageRows = maxReplayRows(rect.height / Math.max(1, look.rows))
+  const pageRows = Math.max(1, look.rows)
   const deadline = performance.now() + CAPTURE_BUDGET_MS
   const pngs: string[] = []
   let covered = start
@@ -151,53 +155,20 @@ async function replayCanvases(
 }
 
 async function paintRange(
-  look: TermLook,
+  _look: TermLook,
   termId: string,
   start: number,
   end: number,
   cellWidth: number,
   cellHeight: number
 ): Promise<string> {
-  const data = terminalPool.rangeAnsi(termId, start, end)
-  if (!data) throw new Error('终端不在画面上')
-  const rows = Math.max(1, end - start)
-  const cols = Math.max(2, look.cols)
-  const host = document.createElement('div')
-  host.setAttribute('aria-hidden', 'true')
-  host.style.cssText = `position:fixed;left:0;top:0;z-index:0;width:${Math.ceil(cellWidth * cols)}px;height:${Math.ceil(cellHeight * rows)}px;pointer-events:none;overflow:hidden;`
-  document.body.appendChild(host)
-  const term = new Terminal({
-    cols,
-    rows,
-    fontFamily: look.fontFamily,
-    fontSize: look.fontSize,
-    lineHeight: look.lineHeight,
-    cursorBlink: false,
-    scrollback: 0,
-    theme: look.theme,
-    disableStdin: true,
-    allowProposedApi: true
-  })
-  let webgl: WebglAddon | undefined
   try {
-    term.open(host)
-    host.style.background = look.background
-    webgl = new WebglAddon(true)
-    term.loadAddon(webgl)
-    await written(term, data)
-    term.refresh(0, Math.max(0, term.rows - 1))
-    const canvas = await renderedCanvas(host)
-    const url = canvas.toDataURL('image/png')
-    const comma = url.indexOf(',')
-    if (comma < 0) throw new Error(OFFSCREEN_FAILED)
-    return url.slice(comma + 1)
+    const png = terminalPool.composeRange(termId, start, end, cellWidth, cellHeight)
+    if (!png) throw new Error('终端不在画面上')
+    return png
   } catch (error) {
     if (error instanceof Error && error.message === '终端不在画面上') throw error
-    throw new Error(OFFSCREEN_FAILED)
-  } finally {
-    webgl?.dispose()
-    term.dispose()
-    host.remove()
+    throw new Error(COMPOSE_FAILED)
   }
 }
 
@@ -212,38 +183,6 @@ function replayNote(start: number, covered: number, end: number): string {
   const shown = `第 ${start}–${Math.max(start, covered - 1)} 行`
   const partial = covered < end ? `范围较长，只截了前 ${covered - start} 行` : ''
   return [shown, partial].filter(Boolean).join('。')
-}
-
-function maxReplayRows(cellCss: number): number {
-  const dpr = window.devicePixelRatio || 1
-  const cssCap = Math.floor(DEVICE_CAP / Math.max(1, dpr))
-  const heightCap = Math.min(MAX_STITCH_HEIGHT, cssCap)
-  return Math.max(1, Math.floor(heightCap / Math.max(1, cellCss)))
-}
-
-function written(term: Terminal, data: string): Promise<void> {
-  return new Promise((resolve) => term.write(data, () => resolve()))
-}
-
-async function renderedCanvas(host: HTMLElement): Promise<HTMLCanvasElement> {
-  for (let i = 0; i < 8; i++) {
-    await paint()
-    const canvas = host.querySelector('.xterm-screen canvas')
-    if (canvas instanceof HTMLCanvasElement && canvas.width >= 2 && canvas.height >= 2 && opaque(canvas)) {
-      return canvas
-    }
-  }
-  throw new Error(OFFSCREEN_FAILED)
-}
-
-function opaque(canvas: HTMLCanvasElement): boolean {
-  const gl = canvas.getContext('webgl2', { antialias: false, depth: false, preserveDrawingBuffer: true })
-  if (!gl) return false
-  const pixel = new Uint8Array(4)
-  const x = Math.min(canvas.width - 1, 2)
-  const y = Math.max(0, canvas.height - 3)
-  gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
-  return pixel[3] > 0
 }
 
 let captureTail: Promise<void> = Promise.resolve()

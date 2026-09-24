@@ -20,6 +20,7 @@ export function TerminalView(props: { termId: string }) {
   const setNotice = useAppStore((s) => s.setNotice)
   const [selection, setSelection] = useState<{ text: string; startLine: number; endLine: number } | null>(null)
   const [shot, setShot] = useState<CaptureDone | null>(null)
+  const [shotError, setShotError] = useState<string | null>(null)
 
   useEffect(() => {
     const el = ref.current
@@ -53,16 +54,27 @@ export function TerminalView(props: { termId: string }) {
 
   const shoot = () => {
     if (!selection) return
-    void captureTerminalView({
-      termId: props.termId,
-      mode: 'scrollback',
-      startLine: selection.startLine,
-      endLine: selection.endLine,
-      cropOnly: true
-    }).then(
-      (done) => setShot(done),
-      (error) => setNotice(error instanceof Error ? error.message : String(error))
-    )
+    const range = selection
+    setShotError(null)
+    setNotice('正在截图…')
+    void (async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      try {
+        const done = await captureTerminalView({
+          termId: props.termId,
+          mode: 'scrollback',
+          startLine: range.startLine,
+          endLine: range.endLine,
+          cropOnly: true
+        })
+        setNotice(null)
+        setShot(done)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setNotice(message)
+        setShotError(message)
+      }
+    })()
   }
 
   const paste = async () => {
@@ -98,7 +110,14 @@ export function TerminalView(props: { termId: string }) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-      <CaptureDialog shot={shot} onClose={() => setShot(null)} />
+      <CaptureDialog
+        shot={shot}
+        error={shotError}
+        onClose={() => {
+          setShot(null)
+          setShotError(null)
+        }}
+      />
     </>
   )
 }

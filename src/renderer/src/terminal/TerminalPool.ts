@@ -1,4 +1,5 @@
 import { Terminal, type IBufferCell, type ITheme } from '@xterm/xterm'
+import { composeTerminalRange } from './composeGl'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
@@ -160,6 +161,20 @@ class TerminalPool {
     const term = this.entries.get(termId)?.term
     if (!term || end <= start) return null
     return ansiSlice(term, start, end)
+  }
+
+  /** 按缓冲格子用 WebGL 贴出这一段的 PNG。行号含首不含尾。 */
+  composeRange(termId: string, start: number, end: number, cellWidth: number, cellHeight: number): string | null {
+    const term = this.entries.get(termId)?.term
+    if (!term || end <= start || cellWidth < 1 || cellHeight < 1) return null
+    const theme = term.options.theme ?? this.palette
+    return composeTerminalRange(term, start, end, {
+      cellWidth,
+      cellHeight,
+      fontFamily: term.options.fontFamily || 'Consolas, "Cascadia Mono", "Microsoft YaHei", monospace',
+      fontSize: term.options.fontSize ?? 14,
+      theme
+    })
   }
 
   pageInfo(termId: string): { viewportY: number; length: number; rows: number } | null {

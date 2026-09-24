@@ -10,8 +10,8 @@ import {
 } from '@/components/ui/dialog'
 import type { CaptureDone } from '../terminal/captureView'
 
-/** 截图完成后的确认。可以打开文件所在目录，或把图片复制到剪贴板。 */
-export function CaptureDialog(props: { shot: CaptureDone | null; onClose: () => void }) {
+/** 截图完成后的确认。失败时直接说明原因。可以打开文件所在目录，或把图片复制到剪贴板。 */
+export function CaptureDialog(props: { shot: CaptureDone | null; error?: string | null; onClose: () => void }) {
   const file = props.shot?.paths.at(-1) ?? ''
   const [preview, setPreview] = useState('')
   const [copied, setCopied] = useState(false)
@@ -57,6 +57,22 @@ export function CaptureDialog(props: { shot: CaptureDone | null; onClose: () => 
 
   const count = props.shot?.paths.length ?? 0
   const name = file.split(/[/\\]/).pop() ?? file
+
+  if (props.error) {
+    return (
+      <Dialog open onOpenChange={(open) => !open && props.onClose()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>截图没有完成</DialogTitle>
+            <DialogDescription>{props.error}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={props.onClose}>知道了</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
 
   return (
     <Dialog open={props.shot !== null} onOpenChange={(open) => !open && props.onClose()}>

@@ -315,13 +315,13 @@ export function SettingsDialog() {
                   <Row
                     title={
                       <span className="inline-flex items-center gap-2">
-                        离开屏幕渲染
+                        合成算法
                         <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
                           实验性算法
                         </span>
                       </span>
                     }
-                    detail="在界面后面另画一块终端再截，不滚动正在看的画面。画不出来会停下来并提示关掉。关闭后仍逐屏拍摄，拨动立刻生效。"
+                    detail="打开后，当前画面、滚动缓冲、选中的行，以及助手发起的截图，都按缓冲拼成图片，不滚动正在看的画面。关闭后改为逐屏拍摄。拨动立刻生效。"
                   >
                     <Switch
                       checked={appearance.experimentalScreenshot}

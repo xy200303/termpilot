@@ -263,7 +263,7 @@ export type TerminalThemeId = (typeof TERMINAL_THEMES)[number]
 export interface Appearance {
   app: AppTheme
   terminal: TerminalThemeId
-  /** 离开屏幕另画一块终端。默认关闭，沿用逐屏拍摄。 */
+  /** 打开后所有截图都按缓冲拼图。默认关闭，沿用逐屏拍摄。 */
   experimentalScreenshot: boolean
 }
 

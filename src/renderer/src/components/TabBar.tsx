@@ -23,13 +23,25 @@ export function TabBar() {
   const closeTab = useAppStore((s) => s.closeTab)
   const setNotice = useAppStore((s) => s.setNotice)
   const [shot, setShot] = useState<CaptureDone | null>(null)
+  const [shotError, setShotError] = useState<string | null>(null)
 
   const shoot = (mode: 'viewport' | 'scrollback') => {
     if (!activeTabId) return
-    void captureTerminalView({ termId: activeTabId, mode }).then(
-      (done) => setShot(done),
-      (error) => setNotice(error instanceof Error ? error.message : String(error))
-    )
+    const termId = activeTabId
+    setShotError(null)
+    setNotice('正在截图…')
+    void (async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      try {
+        const done = await captureTerminalView({ termId, mode })
+        setNotice(null)
+        setShot(done)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setNotice(message)
+        setShotError(message)
+      }
+    })()
   }
 
   return (
@@ -74,14 +86,21 @@ export function TabBar() {
       <Button
         variant="ghost"
         size="icon-sm"
-        title="滚动终端并逐屏截图"
+        title="截取滚动缓冲"
         disabled={!activeTabId}
         onClick={() => shoot('scrollback')}
       >
         <GalleryVertical />
       </Button>
     </div>
-    <CaptureDialog shot={shot} onClose={() => setShot(null)} />
+    <CaptureDialog
+      shot={shot}
+      error={shotError}
+      onClose={() => {
+        setShot(null)
+        setShotError(null)
+      }}
+    />
     </>
   )
 }
