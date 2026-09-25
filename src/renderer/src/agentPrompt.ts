@@ -1,12 +1,19 @@
 import type { SessionConfig, Tab } from '../../shared/types'
 
-function openTerm(session: SessionConfig, tabs: Tab[]): Tab | undefined {
-  return tabs.find((tab) => tab.sessionId === session.id)
+/** 标签上显示的名字：连接名加上这扇窗口自己的短标题。 */
+export function windowLabel(title: string, connectionName?: string | null): string {
+  if (!connectionName) return title
+  return `${connectionName} · ${title}`
 }
 
-/** 右键一条会话，只带这条会话的信息。 */
-export function sessionAgentPrompt(session: SessionConfig, tabs: Tab[]): string {
-  const lines = ['请用 TermPilot 连接这个会话。', '', `会话：${session.name}`]
+/** 右键一条连接。调用只认编号，名称和备注用来认出它。 */
+export function connectionAgentPrompt(session: SessionConfig): string {
+  const lines = [
+    '请用 TermPilot 打开这条连接。connection_open 的 connection 只填下面的编号。',
+    '',
+    `编号：${session.publicId}`,
+    `名称：${session.name}`
+  ]
   if (session.mode === 'reverse') {
     lines.push('类型：反向监听')
     if (session.listenPort) lines.push(`本机端口：${session.listenPort}`)
@@ -14,21 +21,35 @@ export function sessionAgentPrompt(session: SessionConfig, tabs: Tab[]): string 
     if (session.host) lines.push(`主机：${session.host}`)
     if (session.username) lines.push(`用户：${session.username}`)
     if (session.port) lines.push(`端口：${session.port}`)
+    if (session.jumpHost) lines.push('经跳板')
   }
-  const term = openTerm(session, tabs)
-  if (term) lines.push(`termId：${term.id}`)
+  if (session.remark?.trim()) lines.push(`备注：${session.remark.trim()}`)
+  lines.push('名称和备注只帮助你认出这条连接，不能拿去当参数。备注若是空的，弄清它是干什么的之后用 connection_update 写上一句。')
   return lines.join('\n')
 }
 
-/** 右键一台服务器，只带这台机器上的连接。 */
-export function hostAgentPrompt(host: string, sessions: SessionConfig[]): string {
-  const names = sessions.map((session) => session.name).filter(Boolean)
-  return ['请用 TermPilot 连接这台服务器。', '', `主机：${host}`, `会话：${names.join('、')}`].join('\n')
+/** 右键一扇已经打开的终端。 */
+export function termAgentPrompt(tab: Tab, session: SessionConfig | null): string {
+  const lines = [
+    '请用 TermPilot 接着使用这扇已经打开的终端，不要新开。term_exec 等工具的 termId 只填下面的编号。',
+    '',
+    `终端：${tab.id}`,
+    `标题：${tab.title}`
+  ]
+  if (tab.remark?.trim()) lines.push(`备注：${tab.remark.trim()}`)
+  if (session) {
+    lines.push(`所属连接：${session.publicId}`, `连接名称：${session.name}`)
+    if (session.remark?.trim()) lines.push(`连接备注：${session.remark.trim()}`)
+  }
+  lines.push('标题和备注只帮助你认出这扇终端。备注若是空的，弄清它在做什么之后用 term_update 写上一句。')
+  return lines.join('\n')
 }
 
-/** 右键一个已经打开的终端。 */
-export function tabAgentPrompt(tab: Tab, session: SessionConfig | null): string {
-  const lines = ['请用 TermPilot 接着使用这个终端。', '', `终端：${tab.title}`, `termId：${tab.id}`]
-  if (session) lines.push(`会话：${session.name}`)
-  return lines.join('\n')
+export async function copyAgentPrompt(text: string, setNotice: (notice: string | null) => void): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+    setNotice('已复制 Agent 提示词')
+  } catch (error) {
+    setNotice(error instanceof Error ? error.message : String(error))
+  }
 }

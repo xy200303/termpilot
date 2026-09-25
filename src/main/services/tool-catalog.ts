@@ -26,8 +26,11 @@ const sessionFields: ZodRawShape = {
   remark: z.string().optional().describe('备注')
 }
 
+const connId = z.string().describe('连接编号，conn- 开头。不要填名称或备注，也不要填 term- 开头的终端编号')
+const termId = z.string().describe('终端编号，term- 开头')
+
 const lineFields: ZodRawShape = {
-  termId: z.string().describe('终端 id'),
+  termId,
   startLine: z.number().int().min(0).optional().describe('起始行，包含。0 是最旧的一行'),
   endLine: z.number().int().min(0).optional().describe('结束行，包含')
 }
@@ -35,45 +38,45 @@ const lineFields: ZodRawShape = {
 /** MCP 注册和命令行 tools / schema / call 共用这一份。 */
 export const TOOLS: readonly ToolDef[] = [
   {
-    name: 'session_list',
-    description: '列出已保存的连接。不含密码和私钥口令。',
+    name: 'connection_list',
+    description: '列出已保存的连接。id 是 conn- 编号，用来调用。name 和 remark 只帮助认出这条连接是干什么的，不能拿去当参数。不含密码。',
     readOnly: true
   },
   {
-    name: 'session_connect',
-    description: '按 id 或名称连接一条正向 SSH，并在界面打开终端。返回 termId。',
-    input: { session: z.string().describe('会话 id 或名称') }
+    name: 'connection_open',
+    description: '按 conn- 编号打开一条正向 SSH，并新开一扇终端。返回的 termId 只属于这扇终端。',
+    input: { connection: connId }
   },
   {
-    name: 'session_disconnect',
-    description: '断开某个会话下所有终端，并关掉它的文件连接。',
-    input: { session: z.string().describe('会话 id 或名称') }
+    name: 'connection_close',
+    description: '关掉某条连接下的全部终端，并断开它的文件通道。',
+    input: { connection: connId }
   },
   {
-    name: 'session_create',
-    description: '新建并保存一条 SSH 连接。密码和私钥口令加密存在本机。创建后会出现在侧边栏，再用 session_connect 打开。',
+    name: 'connection_create',
+    description: '新建并保存一条 SSH 连接。密码和私钥口令加密存在本机。返回 conn- 编号。弄清它是干什么的之后，用 connection_update 写上 remark。',
     input: { name: z.string().describe('显示名称，不能和已有连接重名'), ...sessionFields }
   },
   {
-    name: 'session_update',
-    description: '修改已保存的 SSH 连接。只填要改的字段。secret 留空则保留原密码。已经打开的终端不会自动重连。',
-    input: { session: z.string().describe('会话 id 或名称'), name: z.string().optional().describe('新的显示名称'), ...sessionFields }
+    name: 'connection_update',
+    description: '修改已保存的连接。connection 填 conn- 编号。写备注填 remark。名称和备注都不参与查找。已经打开的终端不会自动重连。',
+    input: { connection: connId, name: z.string().optional().describe('新的显示名称'), ...sessionFields }
   },
   {
-    name: 'session_delete',
-    description: '删除一条已保存的 SSH 连接，并断开它打开的终端。开启危险确认时会先询问。',
-    input: { session: z.string().describe('会话 id 或名称') }
+    name: 'connection_delete',
+    description: '删除一条已保存的连接，并关掉它打开的终端。开启危险确认时会先询问。',
+    input: { connection: connId }
   },
   {
     name: 'term_list',
-    description: '列出当前打开的终端。',
+    description: '列出打开过、还没关掉的终端。重启之后编号、备注和上次输出还在，用 term_read 能看到之前留下的记录。termId 是 term- 编号。connection 是它所属连接的 conn- 编号，本机终端为空。title 和 remark 只帮助认出这扇终端，调用时只填 termId。',
     readOnly: true
   },
   {
     name: 'term_exec',
     description: '在 shell 提示符下执行一条命令，等到输出安静后返回文本。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。',
     input: {
-      termId: z.string().describe('终端 id'),
+      termId,
       command: z.string().describe('要执行的命令。末尾没有换行时会自动补上'),
       timeoutMs: z.number().int().min(500).max(120_000).optional().describe('等待毫秒，默认 20000')
     }
@@ -83,7 +86,7 @@ export const TOOLS: readonly ToolDef[] = [
     description:
       '向当前终端发送按键或文字，用于上下左右选择、输入内容、回车确认和 TUI。keys 按顺序先发，然后输入 text，submit 为 true 时最后回车。发完返回当前画面。密码和验证码不要代填。',
     input: {
-      termId: z.string().describe('终端 id'),
+      termId,
       keys: z.array(z.enum(TERM_KEYS)).max(40).optional().describe('按键名，按顺序发送'),
       text: z.string().max(4096).optional().describe('紧接在 keys 后面输入的文字'),
       submit: z.boolean().optional().describe('输入后再补一次回车'),
@@ -95,18 +98,23 @@ export const TOOLS: readonly ToolDef[] = [
     description: '读取终端最近输出，已去掉 ANSI 控制符。',
     readOnly: true,
     input: {
-      termId: z.string().describe('终端 id'),
+      termId,
       maxChars: z.number().int().min(200).max(50_000).optional().describe('最多返回多少字符，默认 8000')
     }
   },
   {
     name: 'term_close',
     description: '断开并关闭一个终端标签。',
-    input: { termId: z.string().describe('终端 id') }
+    input: { termId }
   },
   {
-    name: 'local_term_open',
-    description: '打开一个本机终端标签，返回 termId。之后用 term_exec 执行命令。'
+    name: 'term_update',
+    description: '给一扇已经打开的终端写备注，方便以后认出它在做什么。编号不变。',
+    input: { termId, remark: z.string().describe('这扇终端正在做什么。空字符串表示清掉') }
+  },
+  {
+    name: 'term_open_local',
+    description: '打开一扇本机终端，返回 termId。没有连接。之后用 term_exec 执行命令，并用 term_update 写上备注。'
   },
   {
     name: 'term_lines',
@@ -135,20 +143,20 @@ export const TOOLS: readonly ToolDef[] = [
     description: '列出正向 SSH 会话的远端目录。',
     readOnly: true,
     input: {
-      session: z.string().describe('会话 id 或名称'),
+      connection: connId,
       path: z.string().optional().describe('远端目录，默认家目录')
     }
   },
   {
     name: 'sftp_mkdir',
     description: '在正向 SSH 上新建远端目录。path 是完整远端路径。',
-    input: { session: z.string().describe('会话 id 或名称'), path: z.string().describe('完整远端路径') }
+    input: { connection: connId, path: z.string().describe('完整远端路径') }
   },
   {
     name: 'sftp_upload',
     description: '把本机绝对路径的文件上传到远端路径。',
     input: {
-      session: z.string().describe('会话 id 或名称'),
+      connection: connId,
       localPath: z.string().describe('本机绝对路径'),
       remotePath: z.string().describe('远端路径')
     }
@@ -157,7 +165,7 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'sftp_download',
     description: '把远端文件下载到本机绝对路径。',
     input: {
-      session: z.string().describe('会话 id 或名称'),
+      connection: connId,
       remotePath: z.string().describe('远端路径'),
       localPath: z.string().describe('本机绝对路径')
     }
@@ -166,7 +174,7 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'sftp_rename',
     description: '重命名或移动远端文件。from 和 to 都是远端路径。',
     input: {
-      session: z.string().describe('会话 id 或名称'),
+      connection: connId,
       from: z.string().describe('原远端路径'),
       to: z.string().describe('新远端路径')
     }
@@ -175,7 +183,7 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'sftp_remove',
     description: '删除远端文件或目录。目录会连同里面的内容一起删除。',
     input: {
-      session: z.string().describe('会话 id 或名称'),
+      connection: connId,
       path: z.string().describe('远端路径'),
       kind: z.enum(['file', 'dir', 'link']).describe('file、dir 或 link')
     }

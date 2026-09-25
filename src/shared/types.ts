@@ -14,6 +14,8 @@ export type ConnectMode = 'forward' | 'reverse'
 /** 会话配置（secret 不落盘在本结构里，单独加密存储） */
 export interface SessionConfig {
   id: string
+  /** 助手用来查找的编号，conn- 开头。改名不换。 */
+  publicId: string
   name: string
   /** 分组名（侧边栏文件夹），空字符串表示未分组 */
   group: string
@@ -75,7 +77,10 @@ export interface Tab {
   /** ssh 标签对应会话 id；本地终端为 null */
   sessionId: string | null
   kind: TabKind
+  /** 这扇窗口自己的短标题，例如「窗口 1」。标签上再拼连接名。 */
   title: string
+  /** 助手写的备注，帮助以后认出这扇窗口在做什么。 */
+  remark?: string
 }
 
 /** 创建终端的请求（renderer → main） */
@@ -85,8 +90,26 @@ export interface TermCreateOptions {
   kind: TabKind
   /** kind = ssh 时必填 */
   sessionId?: string
+  /** 窗口短标题，例如「窗口 1」 */
+  title?: string
   cols: number
   rows: number
+}
+
+/** 重启后要恢复的终端。编号、备注和上次输出都留着。 */
+export interface SavedTerm {
+  id: string
+  sessionId: string | null
+  kind: 'ssh' | 'local'
+  title: string
+  remark: string
+}
+
+/** 终端标题或备注变了（main → renderer） */
+export interface TermMetaEvent {
+  termId: string
+  title: string
+  remark: string
 }
 
 /** 终端状态推送（main → renderer） */

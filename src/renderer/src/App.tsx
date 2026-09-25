@@ -18,10 +18,12 @@ import { terminalPool } from './terminal/TerminalPool'
 
 export default function App() {
   const loadSessions = useAppStore((s) => s.loadSessions)
+  const loadWindows = useAppStore((s) => s.loadWindows)
   const loadAppearance = useAppStore((s) => s.loadAppearance)
   const syncSystemTheme = useAppStore((s) => s.syncSystemTheme)
   const loadMcp = useAppStore((s) => s.loadMcp)
   const onTermStatus = useAppStore((s) => s.onTermStatus)
+  const onTermMeta = useAppStore((s) => s.onTermMeta)
   const onReverseState = useAppStore((s) => s.onReverseState)
   const onReverseIncoming = useAppStore((s) => s.onReverseIncoming)
   const onMcpState = useAppStore((s) => s.onMcpState)
@@ -60,13 +62,14 @@ export default function App() {
   )
 
   useEffect(() => {
-    loadSessions()
+    void loadSessions().then(() => loadWindows())
     loadAppearance()
     loadMcp()
     const themeQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const onTheme = () => syncSystemTheme()
     themeQuery.addEventListener('change', onTheme)
     const offStatus = window.api.term.onStatus(onTermStatus)
+    const offMeta = window.api.term.onMeta(onTermMeta)
     const offListen = window.api.reverse.onState(onReverseState)
     const offIncoming = window.api.reverse.onIncoming(onReverseIncoming)
     const offMcpState = window.api.mcp.onState(onMcpState)
@@ -76,6 +79,7 @@ export default function App() {
     return () => {
       themeQuery.removeEventListener('change', onTheme)
       offStatus()
+      offMeta()
       offListen()
       offIncoming()
       offMcpState()
@@ -85,10 +89,12 @@ export default function App() {
     }
   }, [
     loadSessions,
+    loadWindows,
     loadAppearance,
     syncSystemTheme,
     loadMcp,
     onTermStatus,
+    onTermMeta,
     onReverseState,
     onReverseIncoming,
     onMcpState,

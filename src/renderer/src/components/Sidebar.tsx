@@ -1,4 +1,4 @@
-import type { ComponentProps, CSSProperties, ReactNode } from 'react'
+import { useState, type ComponentProps, CSSProperties, ReactNode } from 'react'
 import { ChevronRight, Folder, Monitor, PanelLeft, Plus, Radio, Search, Server, Settings, TerminalSquare } from 'lucide-react'
 import {
   SidebarContent,
@@ -19,7 +19,9 @@ import {
 } from '@/components/ui/context-menu'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useAppStore } from '../stores/useAppStore'
-import { hostAgentPrompt, sessionAgentPrompt, tabAgentPrompt } from '../agentPrompt'
+import { connectionAgentPrompt, copyAgentPrompt, termAgentPrompt, windowLabel } from '../agentPrompt'
+import { hostKeyOf } from '../../../shared/host-key'
+import { RenameInput } from './RenameInput'
 
 const REPO_URL = 'https://github.com/xy200303/termpilot'
 
@@ -135,6 +137,7 @@ export function AppSidebar() {
 
 function ConnectTree() {
   const sessions = useAppStore((s) => s.sessions)
+  const hostNotes = useAppStore((s) => s.hostNotes)
   const search = useAppStore((s) => s.search)
   const setSearch = useAppStore((s) => s.setSearch)
   const kw = search.trim().toLowerCase()
@@ -143,7 +146,8 @@ function ConnectTree() {
         (s) =>
           s.name.toLowerCase().includes(kw) ||
           s.host.toLowerCase().includes(kw) ||
-          (s.remark ?? '').toLowerCase().includes(kw)
+          (s.remark ?? '').toLowerCase().includes(kw) ||
+          (hostNotes[hostKeyOf(s.host)] ?? '').toLowerCase().includes(kw)
       )
     : sessions
 
@@ -223,6 +227,8 @@ function LocalRoot() {
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const closeTab = useAppStore((s) => s.closeTab)
   const setNotice = useAppStore((s) => s.setNotice)
+  const renameTab = useAppStore((s) => s.renameTab)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
   const locals = tabs.filter((tab) => tab.kind === 'local')
 
   return (
@@ -231,28 +237,40 @@ function LocalRoot() {
         <SectionHead icon={<TerminalSquare />} title="本机终端" actionTitle="新建本机终端" onAdd={openLocalTab} />
         <CollapsibleContent>
           <SidebarGroupContent className="grid gap-0.5">
-            {locals.map((tab) => (
-              <ContextMenu key={tab.id}>
-                <ContextMenuTrigger asChild>
-                  <TreeRow
-                    depth={1}
-                    label={tab.title}
-                    active={tab.id === activeTabId}
-                    live={termState[tab.id]?.status === 'connected'}
-                    onClick={() => setActiveTab(tab.id)}
-                  />
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem
-                    onClick={() => void copyPrompt(tabAgentPrompt(tab, null), setNotice)}
-                  >
-                    复制为 Agent 提示词
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            ))}
+            {locals.map((tab) =>
+              renamingId === tab.id ? (
+                <RenameInput
+                  key={tab.id}
+                  initial={tab.title}
+                  className="mx-2 h-7 text-xs"
+                  onCommit={(value) => {
+                    setRenamingId(null)
+                    renameTab(tab.id, value)
+                  }}
+                  onCancel={() => setRenamingId(null)}
+                />
+              ) : (
+                <ContextMenu key={tab.id}>
+                  <ContextMenuTrigger asChild>
+                    <TreeRow
+                      depth={1}
+                      label={windowLabel(tab.title)}
+                      active={tab.id === activeTabId}
+                      live={termState[tab.id]?.status === 'connected'}
+                      onClick={() => setActiveTab(tab.id)}
+                    />
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={() => void copyAgentPrompt(termAgentPrompt(tab, null), setNotice)}>
+                      复制为 Agent 提示词
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => setRenamingId(tab.id)}>重命名</ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              )
+            )}
           </SidebarGroupContent>
         </CollapsibleContent>
       </SidebarGroup>
@@ -264,7 +282,7 @@ function machinesOf(sessions: SessionConfig[]): { key: string; host: string; ses
   const map = new Map<string, { host: string; sessions: SessionConfig[] }>()
   for (const session of sessions) {
     const host = session.host.trim()
-    const key = host.toLowerCase().replace(/^\[|\]$/g, '') || 'unknown'
+    const key = hostKeyOf(host)
     const bucket = map.get(key)
     if (bucket) bucket.sessions.push(session)
     else map.set(key, { host: host || '未填写主机', sessions: [session] })
@@ -278,58 +296,55 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
   const key = `host:${props.hostKey}`
   const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
   const toggleGroup = useAppStore((s) => s.toggleGroup)
-  const setEditing = useAppStore((s) => s.setEditing)
-  const duplicateSessions = useAppStore((s) => s.duplicateSessions)
   const deleteSession = useAppStore((s) => s.deleteSession)
-  const setNotice = useAppStore((s) => s.setNotice)
+  const note = useAppStore((s) => s.hostNotes[props.hostKey] ?? '')
+  const setHostNote = useAppStore((s) => s.setHostNote)
+  const [editingNote, setEditingNote] = useState(false)
 
   return (
     <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div className="group/host flex items-center" style={{ paddingLeft: props.depth * CONNECT_INDENT }}>
-            <CollapsibleTrigger className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground">
-              <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />
-              <Server className="size-3.5 shrink-0" />
-              <span className="truncate">{props.host}</span>
-            </CollapsibleTrigger>
-            <button
-              type="button"
-              title="在这台机器上新建连接"
-              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              onClick={() =>
-                setEditing({
-                  action: 'create',
-                  mode: 'forward',
-                  host: props.hostKey === 'unknown' ? undefined : props.host,
-                  port: props.sessions[0]?.port
-                })
-              }
-            >
-              <Plus className="size-3.5" />
-            </button>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem
-            onClick={() => void copyPrompt(hostAgentPrompt(props.host, props.sessions), setNotice)}
-          >
-            复制为 Agent 提示词
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onClick={() => void duplicateSessions(props.sessions.map((session) => session.id))}>
-            复制
-          </ContextMenuItem>
-          <ContextMenuItem
-            variant="destructive"
-            onClick={() => {
-              for (const session of props.sessions) void deleteSession(session.id)
+      <div className="group/host flex items-center" style={{ paddingLeft: props.depth * CONNECT_INDENT }}>
+        {editingNote ? (
+          <RenameInput
+            initial={note}
+            placeholder="这台机器是干什么的"
+            className="h-7 min-w-0 flex-1 text-xs"
+            onCommit={(value) => {
+              setEditingNote(false)
+              const next = value.trim()
+              if (next !== note) void setHostNote(props.hostKey, next)
             }}
-          >
-            删除
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+            onCancel={() => setEditingNote(false)}
+          />
+        ) : (
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <CollapsibleTrigger
+                title={note || undefined}
+                className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              >
+                <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />
+                <Server className="size-3.5 shrink-0" />
+                <span className="truncate">{note || props.host}</span>
+                {note ? (
+                  <span className="max-w-28 shrink-0 truncate text-[11px] text-muted-foreground">{props.host}</span>
+                ) : null}
+              </CollapsibleTrigger>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onClick={() => setEditingNote(true)}>备注</ContextMenuItem>
+              <ContextMenuItem
+                variant="destructive"
+                onClick={() => {
+                  for (const session of props.sessions) void deleteSession(session.id)
+                }}
+              >
+                删除
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        )}
+      </div>
       <CollapsibleContent className="grid gap-0.5">
         {props.sessions.map((session) => (
           <SessionNode key={session.id} session={session} depth={props.depth + 1} />
@@ -356,20 +371,25 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   const toggleListen = useAppStore((s) => s.toggleListen)
   const selectSession = useAppStore((s) => s.selectSession)
   const closeTab = useAppStore((s) => s.closeTab)
+  const renameTab = useAppStore((s) => s.renameTab)
   const setNotice = useAppStore((s) => s.setNotice)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
   const key = `session:${session.id}`
   const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
   const toggleGroup = useAppStore((s) => s.toggleGroup)
 
-  const nested = tabs.filter((tab) => tab.sessionId === session.id && tab.kind === 'reverse')
+  const nested = tabs.filter((tab) => tab.sessionId === session.id && tab.kind !== 'local')
   const live = isReverse ? Boolean(listener?.listening) : status === 'connected'
-  const meta = isReverse
+  const account = isReverse
     ? session.listenPort
       ? `:${session.listenPort}`
       : ''
     : session.port === 22
       ? session.username
       : `${session.username}:${session.port}`
+  const remark = session.remark?.trim() ?? ''
+  const jump = !isReverse && session.jumpHost ? '经跳板' : ''
+  const meta = [account, jump].filter(Boolean).join(' ')
   const active =
     tabs.some((tab) => tab.id === activeTabId && tab.sessionId === session.id && tab.kind === 'ssh') ||
     (selectedId === session.id && nested.every((tab) => tab.id !== activeTabId))
@@ -382,6 +402,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
             depth={props.depth}
             label={session.name}
             meta={meta}
+            title={remark || undefined}
             active={active}
             live={live}
             open={open}
@@ -393,21 +414,19 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           />
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem
-            onClick={() => void copyPrompt(sessionAgentPrompt(session, tabs), setNotice)}
-          >
+          <ContextMenuItem onClick={() => void copyAgentPrompt(connectionAgentPrompt(session), setNotice)}>
             复制为 Agent 提示词
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => (isReverse ? void toggleListen(session) : openSessionTab(session))}>
-            {isReverse ? (listener?.listening ? '停止监听' : '开始监听') : '连接'}
+            {isReverse ? (listener?.listening ? '停止监听' : '开始监听') : '打开'}
           </ContextMenuItem>
           <ContextMenuItem
             onClick={() =>
               isReverse ? void duplicateSessions([session.id]) : openSessionTab(session, true)
             }
           >
-            复制
+            {isReverse ? '复制这条连接' : '新开一扇终端'}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => setEditing({ action: 'edit', session })}>编辑</ContextMenuItem>
           <ContextMenuSeparator />
@@ -417,39 +436,42 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
         </ContextMenuContent>
       </ContextMenu>
       {open &&
-        nested.map((tab) => (
-          <ContextMenu key={tab.id}>
-            <ContextMenuTrigger asChild>
-              <TreeRow
-                depth={props.depth + 1}
-                label={tab.title}
-                active={tab.id === activeTabId}
-                live={termState[tab.id]?.status === 'connected' || tab.kind === 'reverse'}
-                onClick={() => setActiveTab(tab.id)}
-              />
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem
-                onClick={() => void copyPrompt(tabAgentPrompt(tab, session), setNotice)}
-              >
-                复制为 Agent 提示词
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-              <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        ))}
+        nested.map((tab) =>
+          renamingId === tab.id ? (
+            <RenameInput
+              key={tab.id}
+              initial={tab.title}
+              className="mx-2 h-7 text-xs"
+              onCommit={(value) => {
+                setRenamingId(null)
+                renameTab(tab.id, value)
+              }}
+              onCancel={() => setRenamingId(null)}
+            />
+          ) : (
+            <ContextMenu key={tab.id}>
+              <ContextMenuTrigger asChild>
+                <TreeRow
+                  depth={props.depth + 1}
+                  label={windowLabel(tab.title, session.name)}
+                  active={tab.id === activeTabId}
+                  live={termState[tab.id]?.status === 'connected' || tab.kind === 'reverse'}
+                  onClick={() => setActiveTab(tab.id)}
+                />
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => void copyAgentPrompt(termAgentPrompt(tab, session), setNotice)}>
+                  复制为 Agent 提示词
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => setRenamingId(tab.id)}>重命名</ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          )
+        )}
     </div>
   )
-}
-
-async function copyPrompt(text: string, setNotice: (notice: string | null) => void): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text)
-    setNotice('已复制 Agent 提示词')
-  } catch (error) {
-    setNotice(error instanceof Error ? error.message : String(error))
-  }
 }
 
 /** 连接树每级只缩进 8px，和文件树一致。没有箭头的行不再留空位。 */
@@ -526,7 +548,7 @@ function TreeRow({
           )}
         />
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {meta && <span className="max-w-16 shrink-0 truncate text-[11px] text-muted-foreground">{meta}</span>}
+        {meta && <span className="max-w-28 shrink-0 truncate text-[11px] text-muted-foreground">{meta}</span>}
       </button>
     </div>
   )

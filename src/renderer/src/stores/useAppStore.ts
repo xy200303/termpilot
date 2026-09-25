@@ -15,6 +15,7 @@ import {
   type Tab,
   type TermStatusEvent
 } from '../../../shared/types'
+import { newTermId } from '../../../shared/ids'
 import { dropBuffer, editorKey } from '../editor/editorBuffers'
 import { terminalPool } from '../terminal/TerminalPool'
 import { applyAppearance, readCachedAppearance, resolveAppTheme, type ResolvedAppTheme } from '../theme/applyAppearance'
@@ -36,6 +37,8 @@ interface TermState {
 
 interface AppState {
   sessions: SessionConfig[]
+  /** 主机地址归一化后的备注，同一台机器上的连接共用 */
+  hostNotes: Record<string, string>
   sessionStatus: Record<string, SessionStatus>
   /** 每个终端（标签）的连接状态 */
   termState: Record<string, TermState>
@@ -72,6 +75,8 @@ interface AppState {
   notice: string | null
 
   loadSessions: () => Promise<void>
+  loadWindows: () => Promise<void>
+  setHostNote: (hostKey: string, remark: string) => Promise<void>
   loadAppearance: () => Promise<void>
   setAppearance: (patch: Partial<Appearance>) => Promise<void>
   syncSystemTheme: () => void
@@ -90,10 +95,12 @@ interface AppState {
   openSessionTab: (session: SessionConfig, fresh?: boolean) => void
   openLocalTab: () => void
   closeTab: (tabId: string) => void
+  renameTab: (tabId: string, title: string) => void
   setActiveTab: (tabId: string) => void
   toggleListen: (session: SessionConfig) => Promise<void>
   /** 主进程终端状态事件入口（App 中订阅一次） */
   onTermStatus: (e: TermStatusEvent) => void
+  onTermMeta: (e: { termId: string; title: string; remark: string }) => void
   onReverseState: (e: ReverseListenState) => void
   onReverseIncoming: (e: ReverseIncoming) => void
 
@@ -112,12 +119,13 @@ interface AppState {
   ) => void
 }
 
-let tabSeq = 0
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
+let restoredWindows = false
 const bootAppearance = readCachedAppearance()
 
 export const useAppStore = create<AppState>((set, get) => ({
   sessions: [],
+  hostNotes: {},
   sessionStatus: {},
   termState: {},
   tabs: [],
@@ -139,8 +147,39 @@ export const useAppStore = create<AppState>((set, get) => ({
   notice: null,
 
   loadSessions: async () => {
-    const sessions = await window.api.sessions.list()
-    set({ sessions })
+    const [sessions, hostNotes] = await Promise.all([window.api.sessions.list(), window.api.hosts.list()])
+    set({ sessions, hostNotes })
+  },
+
+  loadWindows: async () => {
+    if (restoredWindows || get().tabs.length > 0) return
+    restoredWindows = true
+    const saved = await window.api.term.saved()
+    if (saved.length === 0) return
+    const tabs: Tab[] = saved.map((term) => ({
+      id: term.id,
+      sessionId: term.sessionId,
+      kind: term.kind,
+      title: term.title,
+      remark: term.remark
+    }))
+    const current = tabs[tabs.length - 1]
+    set({ tabs, activeTabId: current.id, selectedSessionId: current.sessionId ?? get().selectedSessionId })
+    for (const term of saved) {
+      window.api.term.create({
+        termId: term.id,
+        kind: term.kind,
+        sessionId: term.sessionId ?? undefined,
+        title: term.title,
+        cols: 80,
+        rows: 24
+      })
+    }
+  },
+
+  setHostNote: async (hostKey, remark) => {
+    const hostNotes = await window.api.hosts.setNote(hostKey, remark)
+    set({ hostNotes })
   },
 
   loadAppearance: async () => {
@@ -260,31 +299,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     const count = get().tabs.filter((t) => t.sessionId === session.id && t.kind === 'ssh').length
     const tab: Tab = {
-      id: `tab-${++tabSeq}`,
+      id: newTermId(),
       sessionId: session.id,
       kind: 'ssh',
-      title: count === 0 ? session.name : `${session.name} ${count + 1}`
+      title: `窗口 ${count + 1}`
     }
     set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
-    // 通知主进程建立 SSH 连接（初始 80x24，挂载后 fit 会同步真实尺寸）
     window.api.term.create({
       termId: tab.id,
       kind: 'ssh',
       sessionId: session.id,
+      title: tab.title,
       cols: 80,
       rows: 24
     })
   },
 
   openLocalTab: () => {
+    const count = get().tabs.filter((t) => t.kind === 'local').length
     const tab: Tab = {
-      id: `tab-${++tabSeq}`,
+      id: newTermId(),
       sessionId: null,
       kind: 'local',
-      title: `本地终端 ${tabSeq}`
+      title: `窗口 ${count + 1}`
     }
     set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
-    window.api.term.create({ termId: tab.id, kind: 'local', cols: 80, rows: 24 })
+    window.api.term.create({ termId: tab.id, kind: 'local', title: tab.title, cols: 80, rows: 24 })
+  },
+
+  renameTab: (tabId, title) => {
+    const name = title.replace(/\s+/g, ' ').trim().slice(0, 80)
+    if (!name) return
+    set({ tabs: get().tabs.map((tab) => (tab.id === tabId ? { ...tab, title: name } : tab)) })
+    window.api.term.label(tabId, name)
   },
 
   closeTab: (tabId) => {
@@ -333,7 +380,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const termState = { ...get().termState, [e.termId]: { status: e.status, error: e.error } }
     const patch: Partial<AppState> = { termState }
     // 正向 SSH 才用终端状态点亮会话；反向监听的状态由 listeners 单独维护
-    if (e.sessionId && e.termId.startsWith('rev-') === false && get().tabs.some((t) => t.id === e.termId && t.kind === 'ssh')) {
+    if (e.sessionId && get().tabs.some((t) => t.id === e.termId && t.kind === 'ssh')) {
       const st: SessionStatus = e.status === 'error' ? 'disconnected' : (e.status as SessionStatus)
       patch.sessionStatus = { ...get().sessionStatus, [e.sessionId]: st }
     }
@@ -342,6 +389,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (e.status === 'error' && e.error) {
       terminalPool.write(e.termId, `\r\n\x1b[1;31m✗ ${e.error}\x1b[0m\r\n`)
     }
+  },
+
+  onTermMeta: (e) => {
+    set({
+      tabs: get().tabs.map((tab) => (tab.id === e.termId ? { ...tab, title: e.title || tab.title, remark: e.remark } : tab))
+    })
   },
 
   onReverseState: (e) => set({ listeners: { ...get().listeners, [e.sessionId]: e } }),
@@ -355,11 +408,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
     const session = get().sessions.find((s) => s.id === e.sessionId)
+    const n = get().tabs.filter((tab) => tab.sessionId === e.sessionId && tab.kind === 'reverse').length + 1
     const tab: Tab = {
       id: e.termId,
       sessionId: e.sessionId,
       kind: 'reverse',
-      title: `${session?.name ?? '反弹'} · ${e.peer}`
+      title: `窗口 ${n}`,
+      remark: e.peer
     }
     set({
       tabs: [...get().tabs, tab],

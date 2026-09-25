@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { newTermId } from '../../shared/ids'
 import net from 'node:net'
 import type { WebContents } from 'electron'
 import { IPC } from '../../shared/ipc-channels'
@@ -102,7 +102,7 @@ export class ReverseListenerService {
   }
 
   private accept(sessionId: string, socket: net.Socket): void {
-    const termId = `rev-${randomUUID()}`
+    const termId = newTermId()
     const conn: PendingConn = { sessionId, socket, buffer: [], bound: false }
     this.conns.set(termId, conn)
 

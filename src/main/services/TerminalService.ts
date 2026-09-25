@@ -6,7 +6,7 @@ import { Client } from 'ssh2'
 import type { ClientChannel } from 'ssh2'
 import type { IPty } from 'node-pty'
 import { IPC } from '../../shared/ipc-channels'
-import type { TermCreateOptions, TermDataEvent, TermStatusEvent, SessionConfig } from '../../shared/types'
+import type { TermCreateOptions, TermDataEvent, TermMetaEvent, TermStatusEvent, SessionConfig } from '../../shared/types'
 import { dialSsh, endJump } from '../ssh-config'
 import type { StorageService } from './StorageService'
 import type { SshHold, SshPool } from './SshPool'
@@ -37,6 +37,8 @@ interface TermEntry {
   release?: () => void
   stream?: ClientChannel
   ptyProc?: IPty
+  title: string
+  remark: string
 }
 
 /**
@@ -49,16 +51,24 @@ export class TerminalService {
   private lastStatus = new Map<string, TermStatusEvent>()
   private statusListeners = new Set<(event: TermStatusEvent) => void>()
   private bindWaiters = new Map<string, () => void>()
+  /** 界面已经订上输出。之前的内容先补一次，避免重启后的记录被新输出盖掉。 */
+  private viewReady = new Set<string>()
+  private flushTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  /** 正在退出。此时断开不要把窗口从库里删掉。 */
+  private parking = false
 
   constructor(
     private storage: StorageService,
     private getSender: () => WebContents | null,
     private sshPool: SshPool
-  ) {}
+  ) {
+    this.hydrate()
+  }
 
   async create(opts: TermCreateOptions): Promise<void> {
-    // 同 id 重复创建（React StrictMode 双调用 / 重挂载）直接忽略
-    if (this.terms.has(opts.termId)) return
+    const existing = this.terms.get(opts.termId)
+    if (existing?.stream || existing?.ptyProc) return
+    if (existing && this.lastStatus.get(opts.termId)?.status === 'connecting') return
 
     if (opts.kind === 'local') {
       this.createLocal(opts)
@@ -85,32 +95,64 @@ export class TerminalService {
     }
   }
 
+  /** 人关掉或助手关掉。编号不再恢复。 */
   close(termId: string): void {
     const t = this.terms.get(termId)
-    if (!t) return
+    this.releaseLive(t)
     this.terms.delete(termId)
     this.output.delete(termId)
     this.lastStatus.delete(termId)
-    try {
-      t.stream?.close()
-      if (t.release) t.release()
-      else {
-        t.client?.end()
-        endJump(t.jump)
-      }
-      t.ptyProc?.kill()
-    } catch {
-      /* 清理阶段的异常忽略 */
-    }
+    this.viewReady.delete(termId)
+    const timer = this.flushTimers.get(termId)
+    if (timer) clearTimeout(timer)
+    this.flushTimers.delete(termId)
+    this.storage.forgetOpenTerm(termId)
   }
 
-  listTerms(): { id: string; sessionId: string | null; kind: TermEntry['kind']; status: string }[] {
+  /** 界面订上之后，把已经记下的输出补到画面上。 */
+  bindView(termId: string): void {
+    const text = this.output.get(termId) ?? ''
+    const first = !this.viewReady.has(termId)
+    this.viewReady.add(termId)
+    if (first && text) this.push(termId, Buffer.from(text, 'utf8'))
+  }
+
+  saved(): { id: string; sessionId: string | null; kind: 'ssh' | 'local'; title: string; remark: string }[] {
+    return this.storage.listOpenTerms().map((term) => ({
+      id: term.id,
+      sessionId: term.sessionId,
+      kind: term.kind,
+      title: term.title,
+      remark: term.remark
+    }))
+  }
+
+  listTerms(): {
+    id: string
+    sessionId: string | null
+    kind: TermEntry['kind']
+    status: string
+    title: string
+    remark: string
+  }[] {
     return [...this.terms.values()].map((t) => ({
       id: t.id,
       sessionId: t.sessionId,
       kind: t.kind,
-      status: this.lastStatus.get(t.id)?.status ?? 'unknown'
+      status: this.lastStatus.get(t.id)?.status ?? 'unknown',
+      title: t.title,
+      remark: t.remark
     }))
+  }
+
+  /** 窗口短标题或助手备注。编号不变。 */
+  setLabel(termId: string, patch: { title?: string; remark?: string }): void {
+    const term = this.terms.get(termId)
+    if (!term) return
+    if (patch.title !== undefined) term.title = patch.title.trim().slice(0, 80) || term.title
+    if (patch.remark !== undefined) term.remark = patch.remark.trim().slice(0, 200)
+    this.persist(term)
+    this.sendMeta(term)
   }
 
   /** 界面把 xterm 订上之后再放行 SSH，避免登录横幅丢在订阅之前 */
@@ -185,8 +227,18 @@ export class TerminalService {
     return cur.startsWith(before) ? cur.slice(before.length) : cur
   }
 
+  /** 退出时记下输出并断开。窗口编号、备注和记录留着，下次打开还在。 */
   disposeAll(): void {
-    for (const id of [...this.terms.keys()]) this.close(id)
+    this.parking = true
+    for (const id of [...this.flushTimers.keys()]) {
+      const timer = this.flushTimers.get(id)
+      if (timer) clearTimeout(timer)
+      this.flush(id)
+    }
+    this.flushTimers.clear()
+    for (const term of this.terms.values()) this.releaseLive(term)
+    this.terms.clear()
+    this.viewReady.clear()
   }
 
   // ---------------------------------------------------------------- ssh
@@ -198,8 +250,18 @@ export class TerminalService {
       return
     }
 
-    const entry: TermEntry = { id: opts.termId, sessionId: session.id, kind: 'ssh' }
-    this.terms.set(opts.termId, entry)
+    const prior = this.terms.get(opts.termId)
+    const entry: TermEntry = prior ?? {
+      id: opts.termId,
+      sessionId: session.id,
+      kind: 'ssh',
+      title: opts.title?.trim() || '窗口',
+      remark: ''
+    }
+    if (!prior) {
+      this.terms.set(opts.termId, entry)
+      this.persist(entry)
+    }
     this.sendStatus(opts.termId, session.id, 'connecting')
 
     const secret = this.storage.getSecret(session.id)
@@ -219,7 +281,6 @@ export class TerminalService {
         return
       }
       this.sendStatus(opts.termId, session.id, 'error', error instanceof Error ? error.message : String(error))
-      this.close(opts.termId)
     }
   }
 
@@ -229,18 +290,17 @@ export class TerminalService {
     entry.client = hold.client
     entry.release = hold.release
     hold.client.on('error', (err) => {
+      this.releaseLive(entry)
       this.sendStatus(opts.termId, sessionId, 'error', err.message)
-      this.close(opts.termId)
     })
     hold.client.on('close', () => {
+      this.releaseLive(entry)
       this.sendStatus(opts.termId, sessionId, 'disconnected')
-      this.close(opts.termId)
     })
     hold.client.shell({ term: 'xterm-256color', cols: opts.cols, rows: opts.rows }, (err, stream) => {
       if (!this.terms.has(opts.termId)) return
       if (err || !stream) {
         this.sendStatus(opts.termId, sessionId, 'error', `打开 shell 失败: ${err?.message ?? '未知原因'}`)
-        this.close(opts.termId)
         return
       }
       entry.stream = stream
@@ -248,8 +308,8 @@ export class TerminalService {
       stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
       stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
       stream.on('close', () => {
+        this.releaseLive(entry)
         this.sendStatus(opts.termId, sessionId, 'disconnected')
-        this.close(opts.termId)
       })
     })
   }
@@ -266,12 +326,12 @@ export class TerminalService {
     entry.client = client
     client
       .on('error', (err) => {
+        this.releaseLive(entry)
         this.sendStatus(opts.termId, session.id, 'error', err.message)
-        this.close(opts.termId)
       })
       .on('close', () => {
+        this.releaseLive(entry)
         this.sendStatus(opts.termId, session.id, 'disconnected')
-        this.close(opts.termId)
       })
     try {
       entry.jump = dialSsh(session, secret, jumpSecret, client, {
@@ -283,14 +343,14 @@ export class TerminalService {
           stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
           stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
           stream.on('close', () => {
+            this.releaseLive(entry)
             this.sendStatus(opts.termId, session.id, 'disconnected')
-            this.close(opts.termId)
           })
         }
       })
     } catch (e) {
+      this.releaseLive(entry)
       this.sendStatus(opts.termId, session.id, 'error', e instanceof Error ? e.message : String(e))
-      this.close(opts.termId)
     }
   }
 
@@ -309,8 +369,18 @@ export class TerminalService {
     const shell =
       process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
 
-    const entry: TermEntry = { id: opts.termId, sessionId: null, kind: 'local' }
-    this.terms.set(opts.termId, entry)
+    const prior = this.terms.get(opts.termId)
+    const entry: TermEntry = prior ?? {
+      id: opts.termId,
+      sessionId: null,
+      kind: 'local',
+      title: opts.title?.trim() || '窗口',
+      remark: ''
+    }
+    if (!prior) {
+      this.terms.set(opts.termId, entry)
+      this.persist(entry)
+    }
 
     try {
       const proc = pty.spawn(shell, [], {
@@ -324,21 +394,105 @@ export class TerminalService {
       this.sendStatus(opts.termId, null, 'connected')
       proc.onData((d) => this.sendData(opts.termId, Buffer.from(d, 'utf-8')))
       proc.onExit(() => {
+        if (this.parking) return
         this.sendStatus(opts.termId, null, 'disconnected')
         this.close(opts.termId)
       })
     } catch (e) {
       this.sendStatus(opts.termId, null, 'error', e instanceof Error ? e.message : String(e))
-      this.close(opts.termId)
     }
   }
 
   // ------------------------------------------------------------- events
 
+  private sendMeta(term: TermEntry): void {
+    const wc = this.getSender()
+    if (!wc || wc.isDestroyed()) return
+    const payload: TermMetaEvent = { termId: term.id, title: term.title, remark: term.remark }
+    wc.send(IPC.termMeta, payload)
+  }
+
   private sendData(termId: string, data: Buffer): void {
     const prev = this.output.get(termId) ?? ''
     const next = prev + data.toString('utf8')
     this.output.set(termId, next.length > 100_000 ? next.slice(-100_000) : next)
+    this.scheduleFlush(termId)
+    if (this.viewReady.has(termId)) this.push(termId, data)
+  }
+
+  private hydrate(): void {
+    for (const saved of this.storage.listOpenTerms()) {
+      if (saved.kind === 'ssh' && !this.storage.list().some((session) => session.id === saved.sessionId)) {
+        this.storage.forgetOpenTerm(saved.id)
+        continue
+      }
+      this.terms.set(saved.id, {
+        id: saved.id,
+        sessionId: saved.sessionId,
+        kind: saved.kind,
+        title: saved.title,
+        remark: saved.remark
+      })
+      if (saved.scrollback) this.output.set(saved.id, saved.scrollback)
+      this.lastStatus.set(saved.id, {
+        termId: saved.id,
+        sessionId: saved.sessionId,
+        status: 'disconnected'
+      })
+    }
+  }
+
+  private persist(term: TermEntry): void {
+    this.storage.saveOpenTerm({
+      id: term.id,
+      sessionId: term.sessionId,
+      kind: term.kind,
+      title: term.title,
+      remark: term.remark
+    })
+  }
+
+  private scheduleFlush(termId: string): void {
+    if (this.flushTimers.has(termId)) return
+    this.flushTimers.set(
+      termId,
+      setTimeout(() => {
+        this.flushTimers.delete(termId)
+        this.flush(termId)
+      }, 800)
+    )
+  }
+
+  private flush(termId: string): void {
+    const text = this.output.get(termId)
+    if (text === undefined) return
+    this.storage.saveTermScrollback(termId, text)
+  }
+
+  private releaseLive(term: TermEntry | undefined): void {
+    if (!term) return
+    const stream = term.stream
+    const release = term.release
+    const client = term.client
+    const jump = term.jump
+    const ptyProc = term.ptyProc
+    term.stream = undefined
+    term.release = undefined
+    term.client = undefined
+    term.jump = undefined
+    term.ptyProc = undefined
+    try {
+      stream?.close()
+      if (release) release()
+      else client?.end()
+      endJump(jump)
+      ptyProc?.kill()
+    } catch {
+      /* 断开阶段的异常忽略 */
+    }
+  }
+
+  private push(termId: string, data: Buffer): void {
     const wc = this.getSender()
     if (!wc || wc.isDestroyed()) return
     const payload: TermDataEvent = { termId, data }

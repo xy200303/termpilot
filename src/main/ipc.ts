@@ -50,8 +50,18 @@ export function registerIpc(
 
   ipcMain.handle(IPC.sessionDuplicate, (_e, id: string) => storage.duplicate(id))
 
+  ipcMain.handle(IPC.hostNoteList, () => storage.listHostNotes())
+
+  ipcMain.handle(IPC.hostNoteSet, (_e, hostKey: string, remark: string) => storage.setHostNote(hostKey, remark))
+
   // -------------------------------------------------------------- 终端
+  ipcMain.handle(IPC.termSaved, () => terminal.saved())
+
   ipcMain.handle(IPC.termCreate, (_e, opts: TermCreateOptions) => terminal.create(opts))
+
+  ipcMain.on(IPC.termBindView, (_e, termId: string) => {
+    if (typeof termId === 'string') terminal.bindView(termId)
+  })
 
   ipcMain.on(IPC.termInput, (_e, termId: string, data: string) => {
     if (reverse.input(termId, data)) return
@@ -61,6 +71,11 @@ export function registerIpc(
   ipcMain.on(IPC.termResize, (_e, termId: string, cols: number, rows: number) =>
     terminal.resize(termId, cols, rows)
   )
+
+  ipcMain.on(IPC.termLabel, (_e, termId: string, title: string) => {
+    if (typeof termId !== 'string' || typeof title !== 'string') return
+    terminal.setLabel(termId, { title })
+  })
 
   ipcMain.on(IPC.termClose, (_e, termId: string) => {
     if (reverse.close(termId)) return

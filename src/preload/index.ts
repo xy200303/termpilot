@@ -18,12 +18,14 @@ import type {
   McpSettingsInput,
   SessionConfig,
   SessionInput,
+  SavedTerm,
   TermCreateOptions,
   TermDataEvent,
   TermLinesReply,
   TermLinesRun,
   TermModeReply,
   TermModeRun,
+  TermMetaEvent,
   TermStatusEvent,
   UpdateCheck
 } from '../shared/types'
@@ -48,12 +50,27 @@ const api = {
       }
     }
   },
+  hosts: {
+    list: () => ipcRenderer.invoke(IPC.hostNoteList) as Promise<Record<string, string>>,
+    setNote: (hostKey: string, remark: string) =>
+      ipcRenderer.invoke(IPC.hostNoteSet, hostKey, remark) as Promise<Record<string, string>>
+  },
   term: {
+    saved: () => ipcRenderer.invoke(IPC.termSaved) as Promise<SavedTerm[]>,
+    bindView: (termId: string) => ipcRenderer.send(IPC.termBindView, termId),
     create: (opts: TermCreateOptions) => ipcRenderer.invoke(IPC.termCreate, opts),
     input: (termId: string, data: string) => ipcRenderer.send(IPC.termInput, termId, data),
     resize: (termId: string, cols: number, rows: number) =>
       ipcRenderer.send(IPC.termResize, termId, cols, rows),
     close: (termId: string) => ipcRenderer.send(IPC.termClose, termId),
+    label: (termId: string, title: string) => ipcRenderer.send(IPC.termLabel, termId, title),
+    onMeta: (cb: (e: TermMetaEvent) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, event: TermMetaEvent) => cb(event)
+      ipcRenderer.on(IPC.termMeta, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.termMeta, listener)
+      }
+    },
     /** 订阅终端输出，返回取消订阅函数 */
     onData: (cb: (termId: string, data: Uint8Array) => void) => {
       const listener = (_e: Electron.IpcRendererEvent, p: TermDataEvent) => cb(p.termId, p.data)

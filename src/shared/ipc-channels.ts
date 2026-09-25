@@ -7,11 +7,19 @@ export const IPC = {
   sessionDuplicate: 'session:duplicate',
   /** main → renderer，Agent 改了会话列表 */
   sessionChanged: 'session:changed',
+  hostNoteList: 'host:note-list',
+  hostNoteSet: 'host:note-set',
 
+  termSaved: 'term:saved',
+  termBindView: 'term:bind-view',
   termCreate: 'term:create',
   termInput: 'term:input',
   termResize: 'term:resize',
   termClose: 'term:close',
+  /** renderer → main，窗口短标题变了 */
+  termLabel: 'term:label',
+  /** main → renderer，助手改了终端备注 */
+  termMeta: 'term:meta',
   /** main → renderer 事件 */
   termData: 'term:data',
   termStatus: 'term:status',

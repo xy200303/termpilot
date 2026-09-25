@@ -79,6 +79,7 @@ class TerminalPool {
     const disposeData = window.api.term.onData((id, data) => {
       if (id === termId) term.write(data)
     })
+    window.api.term.bindView(termId)
 
     const entry: PoolEntry = { term, fit, host, disposeData }
     this.entries.set(termId, entry)

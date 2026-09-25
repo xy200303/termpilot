@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
+import { isConnId, isTermId, newTermId } from '../../shared/ids'
 import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { WebContents } from 'electron'
@@ -263,22 +264,28 @@ export class McpService {
 
   private async invoke(tool: string, raw: Record<string, unknown>): Promise<string> {
     switch (tool) {
-      case 'session_list':
-        return JSON.stringify(this.storage.list(), null, 2)
-      case 'session_connect':
-        return this.connectSession(need(raw, 'session'))
-      case 'session_disconnect':
-        return this.disconnectSession(need(raw, 'session'))
-      case 'session_create':
+      case 'connection_list':
+        return JSON.stringify(this.storage.list().map((session) => this.connectionView(session)), null, 2)
+      case 'connection_open':
+        return this.connectSession(need(raw, 'connection'))
+      case 'connection_close':
+        return this.disconnectSession(need(raw, 'connection'))
+      case 'connection_create':
         return this.createSession({ name: need(raw, 'name'), ...sessionPatch(raw) })
-      case 'session_update':
-        return this.updateSession(need(raw, 'session'), { name: textArg(raw, 'name'), ...sessionPatch(raw) })
-      case 'session_delete':
-        return this.deleteSession(need(raw, 'session'))
+      case 'connection_update':
+        return this.updateSession(need(raw, 'connection'), { name: textArg(raw, 'name'), ...sessionPatch(raw) })
+      case 'connection_delete':
+        return this.deleteSession(need(raw, 'connection'))
       case 'term_list':
-        return JSON.stringify(this.terminal.listTerms(), null, 2)
+        return JSON.stringify(this.listOpenTerms(), null, 2)
+      case 'term_update': {
+        const termId = this.requireTerm(need(raw, 'termId'))
+        const remark = textArg(raw, 'remark')
+        this.terminal.setLabel(termId, { remark })
+        return `已写上备注`
+      }
       case 'term_exec': {
-        const termId = need(raw, 'termId')
+        const termId = this.requireTerm(need(raw, 'termId'))
         let command = need(raw, 'command')
         if (!command.endsWith('\n')) command += '\n'
         await this.guard(command)
@@ -288,55 +295,56 @@ export class McpService {
       case 'term_write':
         return this.writeTerm(raw)
       case 'term_read':
-        return clip(stripAnsi(this.terminal.readTail(need(raw, 'termId'), intArg(raw, 'maxChars') ?? 8000)))
+        return clip(stripAnsi(this.terminal.readTail(this.requireTerm(need(raw, 'termId')), intArg(raw, 'maxChars') ?? 8000)))
       case 'term_close': {
-        const termId = need(raw, 'termId')
+        const termId = this.requireTerm(need(raw, 'termId'))
         this.terminal.close(termId)
         this.send(IPC.mcpCloseTab, termId)
         return '已关闭'
       }
-      case 'local_term_open':
+      case 'term_open_local':
         return this.openLocal()
       case 'term_lines':
-        return this.lines(need(raw, 'termId'), intArg(raw, 'startLine'), intArg(raw, 'endLine'))
+        return this.lines(this.requireTerm(need(raw, 'termId')), intArg(raw, 'startLine'), intArg(raw, 'endLine'))
       case 'term_screenshot': {
         const shot = lineShot(raw)
+        const termId = this.requireTerm(shot.termId)
         return shot.ranged
-          ? this.capture(shot.termId, 'scrollback', shot.startLine, shot.endLine, true)
-          : this.capture(shot.termId, 'viewport')
+          ? this.capture(termId, 'scrollback', shot.startLine, shot.endLine, true)
+          : this.capture(termId, 'viewport')
       }
       case 'term_screenshot_scrollback': {
         const shot = lineShot(raw)
-        return this.capture(shot.termId, 'scrollback', shot.startLine, shot.endLine, shot.ranged)
+        return this.capture(this.requireTerm(shot.termId), 'scrollback', shot.startLine, shot.endLine, shot.ranged)
       }
       case 'sftp_list': {
-        const found = this.requireForward(need(raw, 'session'))
+        const found = this.requireForward(need(raw, 'connection'))
         const listed = await this.sftp.list(found.id, textArg(raw, 'path') || '.')
         return JSON.stringify(listed, null, 2)
       }
       case 'sftp_mkdir': {
         const path = need(raw, 'path')
-        const found = this.requireForward(need(raw, 'session'))
+        const found = this.requireForward(need(raw, 'connection'))
         await this.guardPath(path)
         await this.sftp.mkdirPath(found.id, path)
         return `已创建 ${path}`
       }
       case 'sftp_upload': {
         const remotePath = need(raw, 'remotePath')
-        const found = this.requireForward(need(raw, 'session'))
+        const found = this.requireForward(need(raw, 'connection'))
         await this.guardPath(remotePath)
         await this.sftp.put(found.id, need(raw, 'localPath'), remotePath)
         return `已上传到 ${remotePath}`
       }
       case 'sftp_download': {
         const localPath = need(raw, 'localPath')
-        const found = this.requireForward(need(raw, 'session'))
+        const found = this.requireForward(need(raw, 'connection'))
         await this.sftp.get(found.id, need(raw, 'remotePath'), localPath)
         return `已下载到 ${localPath}`
       }
       case 'sftp_rename': {
         const to = need(raw, 'to')
-        const found = this.requireForward(need(raw, 'session'))
+        const found = this.requireForward(need(raw, 'connection'))
         await this.guardPath(to)
         await this.sftp.rename(found.id, need(raw, 'from'), to)
         return `已改名为 ${to}`
@@ -345,7 +353,7 @@ export class McpService {
         const path = need(raw, 'path')
         const kind = need(raw, 'kind')
         if (kind !== 'file' && kind !== 'dir' && kind !== 'link') throw new Error('kind 只能是 file、dir 或 link')
-        const found = this.requireForward(need(raw, 'session'))
+        const found = this.requireForward(need(raw, 'connection'))
         await this.guard(`rm ${path}`)
         await this.sftp.remove(found.id, path, kind)
         return `已删除 ${path}`
@@ -356,13 +364,12 @@ export class McpService {
   }
 
   private async writeTerm(raw: Record<string, unknown>): Promise<string> {
-    const termId = need(raw, 'termId')
+    const termId = this.requireTerm(need(raw, 'termId'))
     const keys = keyArg(raw)
     const text = textArg(raw, 'text')
     const data = textArg(raw, 'data')
     const submit = boolArg(raw, 'submit')
     if (!keys?.length && !text && !data && !submit) throw new Error('要提供 keys、text、submit 或 data')
-    if (!this.terminal.listTerms().some((term) => term.id === termId)) throw new Error('终端不存在或已断开')
     const applicationCursor = keys?.some((key) => MOVES.has(key)) ? await this.cursorMode(termId) : false
     const payload = encodeTermInput({ keys, text, data, submit, applicationCursor })
     if (!payload) throw new Error('没有可发送的内容')
@@ -423,9 +430,11 @@ export class McpService {
   private async connectSession(key: string): Promise<string> {
     const session = this.findSession(key)
     if (session.mode === 'reverse') throw new Error('反向监听要在界面上点开始监听')
-    const termId = `mcp-${randomUUID()}`
+    const n = this.terminal.listTerms().filter((term) => term.sessionId === session.id).length + 1
+    const title = `窗口 ${n}`
+    const termId = newTermId()
     const bound = this.terminal.expectBind(termId, 8000)
-    this.send(IPC.mcpOpenTab, { termId, sessionId: session.id, kind: 'ssh', title: session.name })
+    this.send(IPC.mcpOpenTab, { termId, sessionId: session.id, kind: 'ssh', title })
     try {
       await bound
     } catch (error) {
@@ -433,7 +442,7 @@ export class McpService {
       throw error
     }
     const connected = this.terminal.waitStatus(termId, 20_000)
-    await this.terminal.create({ termId, kind: 'ssh', sessionId: session.id, cols: 120, rows: 32 })
+    await this.terminal.create({ termId, kind: 'ssh', sessionId: session.id, cols: 120, rows: 32, title })
     try {
       await connected
     } catch (error) {
@@ -441,21 +450,26 @@ export class McpService {
       this.send(IPC.mcpCloseTab, termId)
       throw error
     }
-    return `已连接 ${session.name} (${session.username}@${session.host}:${session.port})\ntermId: ${termId}`
+    return [
+      `已打开连接 ${session.publicId}（${session.name}）。`,
+      `终端：${termId}`,
+      `标题：${title}`,
+      '操作这扇终端用 termId。连接用 conn- 编号。弄清这扇终端在做什么之后，用 term_update 写上备注。'
+    ].join('\n')
   }
 
   private createSession(input: SessionPatch & { name: string }): string {
     const saved = this.storage.create(this.normalize(null, input, true))
     this.publishSessions()
-    return JSON.stringify(saved, null, 2)
+    return JSON.stringify(this.connectionView(saved), null, 2)
   }
 
   private updateSession(key: string, patch: SessionPatch): string {
     const current = this.findSession(key)
     const saved = this.storage.update(current.id, this.normalize(current, patch, false))
-    if (!saved) throw new Error('会话已不存在')
+    if (!saved) throw new Error('连接已不存在')
     this.publishSessions()
-    return JSON.stringify(saved, null, 2)
+    return JSON.stringify(this.connectionView(saved), null, 2)
   }
 
   private async deleteSession(key: string): Promise<string> {
@@ -521,9 +535,11 @@ export class McpService {
   }
 
   private async openLocal(): Promise<string> {
-    const termId = `mcp-${randomUUID()}`
+    const n = this.terminal.listTerms().filter((term) => term.kind === 'local').length + 1
+    const title = `窗口 ${n}`
+    const termId = newTermId()
     const bound = this.terminal.expectBind(termId, 8000)
-    this.send(IPC.mcpOpenTab, { termId, sessionId: null, kind: 'local', title: '本地终端' })
+    this.send(IPC.mcpOpenTab, { termId, sessionId: null, kind: 'local', title })
     try {
       await bound
     } catch (error) {
@@ -531,7 +547,7 @@ export class McpService {
       throw error
     }
     const connected = this.terminal.waitStatus(termId, 15_000)
-    await this.terminal.create({ termId, kind: 'local', cols: 120, rows: 32 })
+    await this.terminal.create({ termId, kind: 'local', cols: 120, rows: 32, title })
     try {
       await connected
     } catch (error) {
@@ -539,7 +555,7 @@ export class McpService {
       this.send(IPC.mcpCloseTab, termId)
       throw error
     }
-    return `已打开本地终端\ntermId: ${termId}`
+    return [`已打开本机终端 ${termId}。`, `标题：${title}`, '它没有连接。弄清它在做什么之后，用 term_update 写上备注。'].join('\n')
   }
 
   private requireForward(key: string) {
@@ -555,14 +571,51 @@ export class McpService {
     if (!ok) throw new Error('已取消：危险路径未确认')
   }
 
-  private findSession(key: string) {
+  private connectionView(session: SessionConfig) {
+    return {
+      id: session.publicId,
+      name: session.name,
+      remark: session.remark ?? '',
+      mode: session.mode,
+      host: session.host,
+      port: session.port,
+      username: session.username,
+      listenPort: session.listenPort ?? null,
+      jump: Boolean(session.jumpHost)
+    }
+  }
+
+  private listOpenTerms() {
     const sessions = this.storage.list()
-    const exact = sessions.find((s) => s.id === key || s.name === key)
-    if (exact) return exact
-    const matches = sessions.filter((s) => s.name.toLowerCase().includes(key.trim().toLowerCase()))
-    if (matches.length === 1) return matches[0]!
-    if (matches.length === 0) throw new Error(`找不到会话: ${key}`)
-    throw new Error(`名称不唯一: ${matches.map((s) => s.name).join('、')}`)
+    return this.terminal.listTerms().map((term) => {
+      const session = sessions.find((item) => item.id === term.sessionId)
+      return {
+        termId: term.id,
+        connection: session?.publicId ?? null,
+        connectionName: session?.name ?? '',
+        title: term.title,
+        remark: term.remark,
+        kind: term.kind,
+        status: term.status
+      }
+    })
+  }
+
+  private requireTerm(termId: string): string {
+    const id = termId.trim()
+    if (isConnId(id)) throw new Error(`「${id}」是连接编号。终端请填 term- 开头的编号。`)
+    if (!isTermId(id)) throw new Error(`「${id}」不是终端编号。请先 term_list，再用 term- 开头的编号。`)
+    if (!this.terminal.listTerms().some((term) => term.id === id)) throw new Error('终端不存在或已断开')
+    return id
+  }
+
+  private findSession(key: string) {
+    const id = key.trim()
+    if (isTermId(id)) throw new Error(`「${id}」是终端编号。连接请填 conn- 开头的编号。`)
+    if (!isConnId(id)) throw new Error(`「${id}」不是连接编号。请先 connection_list，再用 conn- 开头的编号。名称和备注不能用来查找。`)
+    const found = this.storage.list().find((session) => session.publicId === id)
+    if (!found) throw new Error(`找不到连接: ${id}`)
+    return found
   }
 
   private async guard(command: string): Promise<void> {

@@ -2,10 +2,19 @@ import type { CSSProperties } from 'react'
 import { useState } from 'react'
 import { Camera, GalleryVertical, TerminalSquare, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 import { cn } from '@/lib/utils'
+import { copyAgentPrompt, termAgentPrompt, windowLabel } from '../agentPrompt'
 import { useAppStore } from '../stores/useAppStore'
 import { captureTerminalView, type CaptureDone } from '../terminal/captureView'
 import { CaptureDialog } from './CaptureDialog'
+import { RenameInput } from './RenameInput'
 
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
 
@@ -18,12 +27,15 @@ export function DragStrip() {
 /** 终端标签。窗口级标签，不用 Tabs 组件，避免切走时卸载终端。 */
 export function TabBar() {
   const tabs = useAppStore((s) => s.tabs)
+  const sessions = useAppStore((s) => s.sessions)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const closeTab = useAppStore((s) => s.closeTab)
+  const renameTab = useAppStore((s) => s.renameTab)
   const setNotice = useAppStore((s) => s.setNotice)
   const [shot, setShot] = useState<CaptureDone | null>(null)
   const [shotError, setShotError] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
 
   const shoot = (mode: 'viewport' | 'scrollback') => {
     if (!activeTabId) return
@@ -50,27 +62,59 @@ export function TabBar() {
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {tabs.map((t) => {
           const active = t.id === activeTabId
-          return (
-            <Button
-              key={t.id}
-              variant={active ? 'secondary' : 'ghost'}
-              size="sm"
-              className="max-w-48"
-              onClick={() => setActiveTab(t.id)}
-            >
-              <TerminalSquare />
-              <span className="truncate">{t.title}</span>
-              <span
-                role="button"
-                className="rounded-sm opacity-60 hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  closeTab(t.id)
+          if (renamingId === t.id) {
+            return (
+              <RenameInput
+                key={t.id}
+                initial={t.title}
+                className="h-7 w-40 text-xs"
+                onCommit={(value) => {
+                  setRenamingId(null)
+                  renameTab(t.id, value)
                 }}
-              >
-                <X />
-              </span>
-            </Button>
+                onCancel={() => setRenamingId(null)}
+              />
+            )
+          }
+          const session = sessions.find((item) => item.id === t.sessionId) ?? null
+          return (
+            <ContextMenu key={t.id}>
+              <ContextMenuTrigger asChild>
+                <Button
+                  variant={active ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="max-w-48"
+                  onClick={() => setActiveTab(t.id)}
+                  onDoubleClick={(event) => {
+                    event.preventDefault()
+                    setRenamingId(t.id)
+                  }}
+                >
+                  <TerminalSquare />
+                  <span className="truncate">{windowLabel(t.title, session?.name)}</span>
+                  <span
+                    role="button"
+                    className="rounded-sm opacity-60 hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeTab(t.id)
+                    }}
+                  >
+                    <X />
+                  </span>
+                </Button>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem
+                  onClick={() => void copyAgentPrompt(termAgentPrompt(t, session), setNotice)}
+                >
+                  复制为 Agent 提示词
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => setRenamingId(t.id)}>重命名</ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={() => closeTab(t.id)}>关闭</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           )
         })}
       </div>

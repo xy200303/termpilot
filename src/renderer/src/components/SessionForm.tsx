@@ -185,6 +185,7 @@ export function SessionForm() {
     try {
       await saveSession(creating ? null : session!.id, {
         ...next,
+        remark: next.remark?.trim() ?? '',
         group: '',
         mode,
         secret: next.secret ? next.secret : undefined,
@@ -256,6 +257,13 @@ export function SessionForm() {
               )}
               <Field label="名称">
                 <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
+              </Field>
+              <Field label="备注">
+                <Input
+                  value={form.remark ?? ''}
+                  placeholder="这条连接是干什么的，仅自己看"
+                  onChange={(e) => set('remark', e.target.value)}
+                />
               </Field>
               <div className={lockedHost ? '' : 'grid grid-cols-[1fr_6rem] gap-2'}>
                 {!lockedHost && (
@@ -440,10 +448,10 @@ export function SessionForm() {
                 onChange={(e) => set('listenPort', Number(e.target.value) || 0)}
               />
             </Field>
-            <Field label="公网备注">
+            <Field label="备注">
               <Input
                 value={form.remark}
-                placeholder="例如 1.tcp.cpolar.cn:12345，仅自己看"
+                placeholder="这条连接是干什么的，或公网地址，仅自己看"
                 onChange={(e) => set('remark', e.target.value)}
               />
             </Field>

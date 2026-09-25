@@ -16,6 +16,8 @@ import {
   type SessionInput,
   parseAppearance
 } from '../../shared/types'
+import { hostKeyOf } from '../../shared/host-key'
+import { newConnId } from '../../shared/ids'
 import { sanitizeSshOptions } from '../../shared/ssh-options'
 
 /**
@@ -75,6 +77,26 @@ export class StorageService {
     this.ensureColumn('sessions', 'jump_username', 'TEXT')
     this.ensureColumn('sessions', 'jump_secret_encrypted', 'TEXT')
     this.ensureColumn('sessions', 'ssh_options', 'TEXT')
+    this.ensureColumn('sessions', 'public_id', 'TEXT')
+    this.backfillPublicIds()
+    this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sessions_public_id ON sessions(public_id)')
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS open_terms (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        remark TEXT NOT NULL DEFAULT '',
+        scrollback TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL
+      )
+    `)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS host_notes (
+        host_key TEXT PRIMARY KEY,
+        remark TEXT NOT NULL
+      )
+    `)
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mcp_audit (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,6 +107,31 @@ export class StorageService {
       )
     `)
     this.importLegacyJson(join(dir, 'sessions.json'))
+  }
+
+  private backfillPublicIds(): void {
+    const rows = this.db.prepare('SELECT id, public_id FROM sessions').all()
+    const used = new Set<string>()
+    for (const row of rows) {
+      const existing = optionalText(row.public_id)
+      if (existing) used.add(existing)
+    }
+    const assign = this.db.prepare('UPDATE sessions SET public_id = ? WHERE id = ?')
+    for (const row of rows) {
+      if (optionalText(row.public_id)) continue
+      let publicId = `conn-${text(row.id).replace(/-/g, '').slice(0, 8)}`
+      while (!/^conn-[0-9a-f]{8}$/i.test(publicId) || used.has(publicId)) publicId = newConnId()
+      used.add(publicId)
+      assign.run(publicId, text(row.id))
+    }
+  }
+
+  private allocatePublicId(): string {
+    for (;;) {
+      const publicId = newConnId()
+      const taken = this.db.prepare('SELECT 1 FROM sessions WHERE public_id = ?').get(publicId)
+      if (!taken) return publicId
+    }
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {
@@ -112,19 +159,44 @@ export class StorageService {
     return rows.map((row) => this.toPublic(row))
   }
 
+  /** 按主机记一句话，同一台机器上的连接共用。空备注会删掉。 */
+  listHostNotes(): Record<string, string> {
+    const rows = this.db.prepare('SELECT host_key, remark FROM host_notes').all()
+    const notes: Record<string, string> = {}
+    for (const row of rows) {
+      const key = optionalText(row.host_key)
+      const remark = optionalText(row.remark)
+      if (key && remark) notes[key] = remark
+    }
+    return notes
+  }
+
+  setHostNote(hostKey: string, remark: string): Record<string, string> {
+    const key = hostKeyOf(hostKey)
+    const note = remark.trim().slice(0, 80)
+    if (!note) this.db.prepare('DELETE FROM host_notes WHERE host_key = ?').run(key)
+    else if (this.db.prepare('SELECT host_key FROM host_notes WHERE host_key = ?').get(key)) {
+      this.db.prepare('UPDATE host_notes SET remark = ? WHERE host_key = ?').run(note, key)
+    } else {
+      this.db.prepare('INSERT INTO host_notes (host_key, remark) VALUES (?, ?)').run(key, note)
+    }
+    return this.listHostNotes()
+  }
+
   create(input: SessionInput): SessionConfig {
     const now = Date.now()
     const id = randomUUID()
     this.db
       .prepare(
         `INSERT INTO sessions (
-          id, name, group_name, mode, host, port, username, auth_type,
+          id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
           jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
+        this.allocatePublicId(),
         input.name,
         input.group,
         input.mode,
@@ -201,8 +273,64 @@ export class StorageService {
   }
 
   delete(id: string): boolean {
+    this.db.prepare('DELETE FROM open_terms WHERE session_id = ?').run(id)
     const result = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
     return result.changes > 0
+  }
+
+  listOpenTerms(): {
+    id: string
+    sessionId: string | null
+    kind: 'ssh' | 'local'
+    title: string
+    remark: string
+    scrollback: string
+  }[] {
+    const rows = this.db.prepare('SELECT * FROM open_terms ORDER BY sort_order ASC, rowid ASC').all()
+    return rows.flatMap((row) => {
+      const kind = row.kind === 'local' ? 'local' : row.kind === 'ssh' ? 'ssh' : null
+      if (!kind) return []
+      return [
+        {
+          id: text(row.id),
+          sessionId: optionalText(row.session_id) ?? null,
+          kind,
+          title: text(row.title) || '窗口',
+          remark: text(row.remark),
+          scrollback: text(row.scrollback)
+        }
+      ]
+    })
+  }
+
+  saveOpenTerm(term: {
+    id: string
+    sessionId: string | null
+    kind: 'ssh' | 'local'
+    title: string
+    remark: string
+  }): void {
+    const orderRow = this.db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS n FROM open_terms').get()
+    const next = integer(orderRow && 'n' in orderRow ? orderRow.n : 0, 0) + 1
+    this.db
+      .prepare(
+        `INSERT INTO open_terms (id, session_id, kind, title, remark, scrollback, sort_order)
+         VALUES (?, ?, ?, ?, ?, '', ?)
+         ON CONFLICT(id) DO UPDATE SET
+           session_id = excluded.session_id,
+           kind = excluded.kind,
+           title = excluded.title,
+           remark = excluded.remark`
+      )
+      .run(term.id, term.sessionId, term.kind, term.title, term.remark, next)
+  }
+
+  saveTermScrollback(id: string, scrollback: string): void {
+    this.db.prepare('UPDATE open_terms SET scrollback = ? WHERE id = ?').run(scrollback.slice(-32_000), id)
+  }
+
+  forgetOpenTerm(id: string): void {
+    this.db.prepare('DELETE FROM open_terms WHERE id = ?').run(id)
   }
 
   /** 复制一条连接，凭据密文原样带上，不把密码交回界面 */
@@ -214,13 +342,14 @@ export class StorageService {
     this.db
       .prepare(
         `INSERT INTO sessions (
-          id, name, group_name, mode, host, port, username, auth_type,
+          id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
           jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         newId,
+        this.allocatePublicId(),
         this.copyName(text(row.name)),
         text(row.group_name),
         row.mode === 'reverse' ? 'reverse' : 'forward',
@@ -365,6 +494,7 @@ export class StorageService {
     const mode: ConnectMode = row.mode === 'reverse' ? 'reverse' : 'forward'
     return {
       id: text(row.id),
+      publicId: text(row.public_id),
       name: text(row.name),
       group: text(row.group_name),
       mode,
