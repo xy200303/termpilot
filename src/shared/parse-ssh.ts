@@ -1,3 +1,5 @@
+import { sanitizeSshOptions, type SshConnectOptions } from './ssh-options'
+
 export interface ParsedJump {
   host: string
   port: number
@@ -13,8 +15,12 @@ export interface ParsedSsh {
   keyPath?: string
   /** 只在命令里明文带了密码时才有，例如 ssh://user:pass@host */
   secret?: string
-  /** ssh -J / ProxyJump。只取第一跳。 */
+  /** 命令里写了认证偏好时才有。没写就沿用表单里原来的。 */
+  authType?: 'password' | 'key'
+  /** ssh -J / ProxyJump 的第一跳。后面的跳在 options.extraJumps。 */
   jump?: ParsedJump
+  /** 超时、算法、压缩、ProxyCommand 这类连接选项。 */
+  options?: SshConnectOptions
   name: string
 }
 
@@ -22,8 +28,13 @@ const ARG_FLAGS = new Set(['b', 'c', 'D', 'E', 'e', 'F', 'I', 'i', 'J', 'L', 'l'
 
 /**
  * 把一条 SSH 命令拆成连接字段。
- * 认 ssh、ssh.exe、ssh://、user@host，以及 -p / -l / -i / -J / -o。
+ * 认 ssh、ssh.exe、ssh://、user@host，以及 -p / -l / -i / -J / -o / -4 / -6 / -C。
  * -J 的用户名保留冒号后的整段。那不是跳板密码，目标机密码要另外填。
+ * -o 认 Port、User、HostName、IdentityFile、ProxyJump、ProxyCommand、
+ * ConnectTimeout、ServerAliveInterval、ServerAliveCountMax、Compression、
+ * AddressFamily、BindAddress、StrictHostKeyChecking、UserKnownHostsFile、
+ * Ciphers、MACs、KexAlgorithms、HostKeyAlgorithms、PreferredAuthentications、
+ * PubkeyAuthentication、PasswordAuthentication。不认识的选项跳过。
  */
 export function parseSshCommand(input: string): ParsedSsh | null {
   const tokens = tokenize(input.trim())
@@ -49,13 +60,35 @@ export function parseSshCommand(input: string): ParsedSsh | null {
   let userFlag = ''
   let keyPath: string | undefined
   let hostFlag = ''
-  let jump: ParsedJump | undefined
+  let jumps: ParsedJump[] | undefined
+  let preferKey: boolean | undefined
+  const options: SshConnectOptions = {}
+  const keyPaths: string[] = []
   const positionals: string[] = []
 
   while (index < tokens.length) {
     const token = tokens[index]!
     if (!token.startsWith('-') || token === '-') {
       positionals.push(token)
+      index += 1
+      continue
+    }
+    if (token === '--') {
+      positionals.push(...tokens.slice(index + 1))
+      break
+    }
+    if (token === '-4') {
+      options.family = 4
+      index += 1
+      continue
+    }
+    if (token === '-6') {
+      options.family = 6
+      index += 1
+      continue
+    }
+    if (token === '-C') {
+      options.compress = true
       index += 1
       continue
     }
@@ -80,27 +113,38 @@ export function parseSshCommand(input: string): ParsedSsh | null {
     } else if (flag === 'l') {
       userFlag = value
     } else if (flag === 'i') {
-      keyPath = value
+      keyPaths.push(value)
+      keyPath = keyPaths[0]
     } else if (flag === 'J') {
-      const parsedJump = parseJump(value)
-      if (!parsedJump) return null
-      jump = parsedJump
+      const parsed = parseJumps(value)
+      if (!parsed) return null
+      jumps = parsed
     } else if (flag === 'o') {
       const option = readOption(value)
       if (!option) continue
-      if (option.key === 'port') {
-        const n = Number(option.value)
-        if (!Number.isInteger(n) || n < 1 || n > 65535) return null
-        port = n
-      } else if (option.key === 'user') {
-        userFlag = option.value
-      } else if (option.key === 'identityfile') {
-        keyPath = option.value
-      } else if (option.key === 'hostname') {
-        hostFlag = option.value
-      } else if (option.key === 'proxyjump') {
-        jump = parseJump(option.value) ?? jump
-      }
+      const applied = applyOption(option, {
+        setPort: (n) => {
+          port = n
+        },
+        setUser: (user) => {
+          userFlag = user
+        },
+        setHost: (host) => {
+          hostFlag = host
+        },
+        addKey: (file) => {
+          keyPaths.push(file)
+          keyPath = keyPaths[0]
+        },
+        setJumps: (next) => {
+          jumps = next
+        },
+        options,
+        setPreferKey: (next) => {
+          preferKey = next
+        }
+      })
+      if (applied === 'bad-port') return null
     }
   }
 
@@ -114,32 +158,68 @@ export function parseSshCommand(input: string): ParsedSsh | null {
   const username = dest?.user || userFlag
   const resolvedPort = dest?.port ?? port ?? 22
   const resolvedSecret = dest?.password || secret
+  const jump = jumps?.[0]
+  if (jump && !jump.username) jump.username = username
+  if (jumps && jumps.length > 1) {
+    options.extraJumps = jumps.slice(1).map((hop) => ({
+      host: hop.host,
+      port: hop.port,
+      username: hop.username || username
+    }))
+  }
+  if (keyPaths.length > 1) options.keyPaths = keyPaths.slice(1)
+  const dial = sanitizeSshOptions(options)
 
   return {
     host,
     port: resolvedPort,
     username,
     keyPath,
+    authType: preferKey === undefined ? (keyPath ? 'key' : undefined) : preferKey ? 'key' : 'password',
     secret: resolvedSecret || undefined,
     jump,
+    options: dial,
     name: username ? `${username}@${host}` : host
   }
 }
 
-/** 只取第一跳。-J 里 @ 之前整段都是用户名，冒号不是密码分隔符。 */
+/** none 表示不走跳板。每一跳的 @ 之前整段都是用户名。 */
+function parseJumps(value: string): ParsedJump[] | undefined {
+  if (value.trim().toLowerCase() === 'none') return []
+  const hops = splitHops(value)
+    .map(parseJump)
+    .filter((hop): hop is ParsedJump => hop !== undefined)
+  return hops.length > 0 ? hops : undefined
+}
+
 function parseJump(value: string): ParsedJump | undefined {
-  const first = value.split(',')[0]?.trim()
-  if (!first) return undefined
-  const dest = parseDestination(first)
+  const dest = parseDestination(value.trim())
   if (!dest?.host) return undefined
-  const at = first.lastIndexOf('@')
-  const username = at >= 0 ? decode(first.slice(0, at)) : dest.user
-  if (!username) return undefined
+  const at = value.lastIndexOf('@')
+  const username = at >= 0 ? decode(value.slice(0, at)) : (dest.user ?? '')
   return {
     host: dest.host,
     port: dest.port ?? 22,
     username
   }
+}
+
+function splitHops(value: string): string[] {
+  const parts: string[] = []
+  let current = ''
+  let bracket = 0
+  for (const ch of value) {
+    if (ch === '[') bracket += 1
+    else if (ch === ']') bracket = Math.max(0, bracket - 1)
+    if (ch === ',' && bracket === 0) {
+      if (current.trim()) parts.push(current.trim())
+      current = ''
+      continue
+    }
+    current += ch
+  }
+  if (current.trim()) parts.push(current.trim())
+  return parts
 }
 
 function isSshBin(token: string): boolean {
@@ -165,10 +245,117 @@ function takeSshpass(tokens: string[], start: number): { secret?: string; next: 
   return { secret, next: index }
 }
 
+interface OptionBag {
+  setPort: (port: number) => void
+  setUser: (user: string) => void
+  setHost: (host: string) => void
+  addKey: (file: string) => void
+  setJumps: (jumps: ParsedJump[] | undefined) => void
+  setPreferKey: (preferKey: boolean) => void
+  options: SshConnectOptions
+}
+
+function applyOption(option: { key: string; value: string }, bag: OptionBag): 'ok' | 'bad-port' {
+  const { key, value } = option
+  if (key === 'port') {
+    const n = Number(value)
+    if (!Number.isInteger(n) || n < 1 || n > 65535) return 'bad-port'
+    bag.setPort(n)
+  } else if (key === 'user') {
+    bag.setUser(value)
+  } else if (key === 'hostname') {
+    bag.setHost(value)
+  } else if (key === 'identityfile') {
+    bag.addKey(value)
+  } else if (key === 'proxyjump') {
+    const parsed = parseJumps(value)
+    if (parsed) bag.setJumps(parsed.length > 0 ? parsed : undefined)
+  } else if (key === 'proxycommand') {
+    if (value.toLowerCase() === 'none') delete bag.options.proxyCommand
+    else bag.options.proxyCommand = value
+  } else if (key === 'connecttimeout') {
+    bag.options.readyTimeoutMs = seconds(value)
+  } else if (key === 'serveraliveinterval') {
+    bag.options.keepaliveIntervalMs = seconds(value)
+  } else if (key === 'serveralivecountmax') {
+    const n = Number(value)
+    if (Number.isInteger(n) && n >= 0 && n <= 100) bag.options.keepaliveCountMax = n
+  } else if (key === 'compression') {
+    if (isYes(value)) bag.options.compress = true
+    else if (isNo(value)) delete bag.options.compress
+  } else if (key === 'addressfamily') {
+    const family = value.toLowerCase()
+    if (family === 'inet') bag.options.family = 4
+    else if (family === 'inet6') bag.options.family = 6
+    else if (family === 'any') delete bag.options.family
+  } else if (key === 'bindaddress') {
+    bag.options.localAddress = value
+  } else if (key === 'stricthostkeychecking') {
+    const mode = value.toLowerCase()
+    if (mode === 'no' || mode === 'off') bag.options.strictHostKeyChecking = 'no'
+    else if (mode === 'accept-new') bag.options.strictHostKeyChecking = 'accept-new'
+    else if (mode === 'yes' || mode === 'ask') bag.options.strictHostKeyChecking = 'yes'
+  } else if (key === 'userknownhostsfile' || key === 'globalknownhostsfile') {
+    if (value === '/dev/null' || value.toUpperCase() === 'NUL') bag.options.strictHostKeyChecking = 'no'
+  } else if (key === 'ciphers') {
+    setAlgo(bag, 'cipher', value)
+  } else if (key === 'macs') {
+    setAlgo(bag, 'hmac', value)
+  } else if (key === 'kexalgorithms') {
+    setAlgo(bag, 'kex', value)
+  } else if (key === 'hostkeyalgorithms') {
+    setAlgo(bag, 'serverHostKey', value)
+  } else if (key === 'preferredauthentications') {
+    const first = value
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .find((item) => item === 'publickey' || item === 'password' || item === 'keyboard-interactive')
+    if (first === 'publickey') bag.setPreferKey(true)
+    else if (first) bag.setPreferKey(false)
+  } else if (key === 'pubkeyauthentication') {
+    if (isNo(value)) bag.setPreferKey(false)
+    else if (isYes(value)) bag.setPreferKey(true)
+  } else if (key === 'passwordauthentication') {
+    if (isNo(value)) bag.setPreferKey(true)
+    else if (isYes(value)) bag.setPreferKey(false)
+  }
+  return 'ok'
+}
+
+function setAlgo(bag: OptionBag, field: 'cipher' | 'kex' | 'serverHostKey' | 'hmac', value: string): void {
+  const list = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (list.length === 0) return
+  bag.options.algorithms = { ...bag.options.algorithms, [field]: list }
+}
+
+function seconds(value: string): number | undefined {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return Math.min(Math.trunc(n) * 1000, 300_000)
+}
+
+function isYes(value: string): boolean {
+  const text = value.toLowerCase()
+  return text === 'yes' || text === 'true' || text === 'on'
+}
+
+function isNo(value: string): boolean {
+  const text = value.toLowerCase()
+  return text === 'no' || text === 'false' || text === 'off'
+}
+
 function readOption(value: string): { key: string; value: string } | null {
   const eq = value.indexOf('=')
-  if (eq <= 0) return null
-  return { key: value.slice(0, eq).trim().toLowerCase(), value: value.slice(eq + 1).trim() }
+  const spaced = value.search(/\s/)
+  const cut = eq >= 0 && (spaced < 0 || eq < spaced) ? eq : spaced
+  if (cut <= 0) return null
+  const key = value.slice(0, cut).trim().toLowerCase()
+  const rest = value.slice(cut + 1).trim()
+  if (!key) return null
+  return { key, value: rest }
 }
 
 function parseDestination(token: string): { user?: string; password?: string; host: string; port?: number } | null {

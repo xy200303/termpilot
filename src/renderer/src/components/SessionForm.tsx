@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { useAppStore } from '../stores/useAppStore'
 import { parseSshCommand } from '../../../shared/parse-ssh'
+import { describeSshOptions, sshOptionsForSession } from '../../../shared/ssh-options'
 import type { AuthType, ConnectMode, SessionInput } from '../../../shared/types'
 
 const empty = (mode: ConnectMode): SessionInput => ({
@@ -73,7 +74,8 @@ export function SessionForm() {
         jumpHost: s.jumpHost ?? '',
         jumpPort: s.jumpPort ?? 22,
         jumpUsername: s.jumpUsername ?? '',
-        jumpSecret: ''
+        jumpSecret: '',
+        sshOptions: s.sshOptions
       })
     } else {
       setForm({
@@ -102,13 +104,14 @@ export function SessionForm() {
       port: parsed.port,
       username: parsed.username || current.username,
       name: current.name.trim() ? current.name : parsed.name,
-      authType: parsed.keyPath ? 'key' : current.authType,
+      authType: parsed.authType ?? current.authType,
       keyPath: parsed.keyPath ?? current.keyPath,
       secret: parsed.secret ?? current.secret,
       jumpHost: parsed.jump?.host ?? '',
       jumpPort: parsed.jump?.port ?? 22,
       jumpUsername: parsed.jump?.username ?? '',
-      jumpSecret: parsed.jump?.secret ?? ''
+      jumpSecret: parsed.jump?.secret ?? '',
+      sshOptions: parsed.options ?? null
     }))
   }
 
@@ -126,13 +129,14 @@ export function SessionForm() {
         port: parsed.port,
         username: parsed.username || form.username,
         name: form.name.trim() ? form.name : parsed.name,
-        authType: parsed.keyPath ? 'key' : form.authType,
+        authType: parsed.authType ?? form.authType,
         keyPath: parsed.keyPath ?? form.keyPath,
         secret: parsed.secret ?? form.secret,
         jumpHost: parsed.jump?.host ?? '',
         jumpPort: parsed.jump?.port ?? 22,
         jumpUsername: parsed.jump?.username ?? '',
-        jumpSecret: parsed.jump?.secret ?? ''
+        jumpSecret: parsed.jump?.secret ?? '',
+        sshOptions: parsed.options ?? null
       }
       setForm(next)
     }
@@ -168,12 +172,15 @@ export function SessionForm() {
         jumpHost: next.jumpHost?.trim() ?? '',
         jumpPort: next.jumpPort ?? 22,
         jumpUsername: next.jumpUsername?.trim() ?? '',
-        jumpSecret: next.jumpHost?.trim() ? (next.jumpSecret ? next.jumpSecret : undefined) : ''
+        jumpSecret: next.jumpHost?.trim() ? (next.jumpSecret ? next.jumpSecret : undefined) : '',
+        sshOptions: sshOptionsForSession(next.jumpHost, next.sshOptions) ?? null
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
+
+  const optionNote = describeSshOptions(sshOptionsForSession(form.jumpHost, form.sshOptions))
 
   return (
     <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
@@ -287,6 +294,7 @@ export function SessionForm() {
                 <p className="text-xs text-muted-foreground">
                   跳板，对应 ssh -J。用户名保留冒号后的整段。不经过跳板就留空。目标机密码填在上面。
                 </p>
+                {optionNote ? <p className="text-xs text-muted-foreground">{optionNote}</p> : null}
                 <div className="grid grid-cols-[1fr_6rem] gap-2">
                   <Field label="跳板主机">
                     <Input

@@ -7,7 +7,7 @@ import type { ClientChannel } from 'ssh2'
 import type { IPty } from 'node-pty'
 import { IPC } from '../../shared/ipc-channels'
 import type { TermCreateOptions, TermDataEvent, TermStatusEvent } from '../../shared/types'
-import { dialSsh } from '../ssh-config'
+import { dialSsh, endJump } from '../ssh-config'
 import type { StorageService } from './StorageService'
 
 /**
@@ -90,7 +90,7 @@ export class TerminalService {
     try {
       t.stream?.close()
       t.client?.end()
-      t.jump?.end()
+      endJump(t.jump)
       t.ptyProc?.kill()
     } catch {
       /* 清理阶段的异常忽略 */

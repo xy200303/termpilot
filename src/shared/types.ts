@@ -1,3 +1,5 @@
+import type { SshConnectOptions } from './ssh-options'
+
 /** 认证方式（仅正向 SSH） */
 export type AuthType = 'password' | 'key'
 
@@ -34,6 +36,8 @@ export interface SessionConfig {
   jumpPort?: number
   jumpUsername?: string
   hasJumpSecret: boolean
+  /** 命令里带的超时、算法、多跳、ProxyCommand。 */
+  sshOptions?: SshConnectOptions
   createdAt: number
   updatedAt: number
 }
@@ -58,6 +62,8 @@ export interface SessionInput {
   jumpUsername?: string
   /** 跳板口令。undefined 表示不修改，空字符串表示清掉。 */
   jumpSecret?: string
+  /** 连接选项。undefined 表示不修改，null 表示清掉。 */
+  sshOptions?: SshConnectOptions | null
 }
 
 export type SessionStatus = 'disconnected' | 'connecting' | 'connected'

@@ -16,6 +16,7 @@ import {
   type SessionInput,
   parseAppearance
 } from '../../shared/types'
+import { sanitizeSshOptions } from '../../shared/ssh-options'
 
 /**
  * 会话存储：userData/termpilot.db（Node 内置 SQLite，WAL）+ safeStorage。
@@ -73,6 +74,7 @@ export class StorageService {
     this.ensureColumn('sessions', 'jump_port', 'INTEGER')
     this.ensureColumn('sessions', 'jump_username', 'TEXT')
     this.ensureColumn('sessions', 'jump_secret_encrypted', 'TEXT')
+    this.ensureColumn('sessions', 'ssh_options', 'TEXT')
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mcp_audit (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,8 +120,8 @@ export class StorageService {
         `INSERT INTO sessions (
           id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
-          jump_host, jump_port, jump_username, jump_secret_encrypted
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -139,7 +141,8 @@ export class StorageService {
         input.jumpHost?.trim() || null,
         input.jumpHost?.trim() ? (input.jumpPort ?? 22) : null,
         input.jumpHost?.trim() ? input.jumpUsername?.trim() || null : null,
-        input.jumpHost?.trim() ? (this.encryptSecret(input.jumpSecret) ?? null) : null
+        input.jumpHost?.trim() ? (this.encryptSecret(input.jumpSecret) ?? null) : null,
+        encodeOptions(input.sshOptions)
       )
     return this.require(id)
   }
@@ -147,7 +150,7 @@ export class StorageService {
   update(id: string, patch: SessionInput): SessionConfig | null {
     const existing = this.db
       .prepare(
-        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted FROM sessions WHERE id = ?'
+        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options FROM sessions WHERE id = ?'
       )
       .get(id)
     if (!existing) return null
@@ -163,13 +166,15 @@ export class StorageService {
         : (existing.jump_secret_encrypted ?? null)
     const jumpPort = patch.jumpPort ?? optionalInteger(existing.jump_port) ?? 22
     const jumpUsername = (patch.jumpUsername !== undefined ? patch.jumpUsername : text(existing.jump_username)).trim()
+    const sshOptions = patch.sshOptions === undefined ? (existing.ssh_options ?? null) : encodeOptions(patch.sshOptions)
     this.db
       .prepare(
         `UPDATE sessions SET
           name = ?, group_name = ?, mode = ?, host = ?, port = ?, username = ?,
           auth_type = ?, key_path = ?, listen_port = ?, remark = ?,
           secret_encrypted = ?, updated_at = ?,
-          jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?
+          jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?,
+          ssh_options = ?
         WHERE id = ?`
       )
       .run(
@@ -189,6 +194,7 @@ export class StorageService {
         jumpHost ? jumpPort : null,
         jumpHost ? jumpUsername || null : null,
         jumpSecret,
+        sshOptions,
         id
       )
     return this.require(id)
@@ -210,8 +216,8 @@ export class StorageService {
         `INSERT INTO sessions (
           id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
-          jump_host, jump_port, jump_username, jump_secret_encrypted
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         newId,
@@ -231,7 +237,8 @@ export class StorageService {
         optionalText(row.jump_host) ?? null,
         optionalInteger(row.jump_port) ?? null,
         optionalText(row.jump_username) ?? null,
-        typeof row.jump_secret_encrypted === 'string' ? row.jump_secret_encrypted : null
+        typeof row.jump_secret_encrypted === 'string' ? row.jump_secret_encrypted : null,
+        typeof row.ssh_options === 'string' ? row.ssh_options : null
       )
     return this.require(newId)
   }
@@ -373,6 +380,7 @@ export class StorageService {
       jumpPort: optionalInteger(row.jump_port),
       jumpUsername: optionalText(row.jump_username),
       hasJumpSecret: typeof row.jump_secret_encrypted === 'string' && row.jump_secret_encrypted.length > 0,
+      sshOptions: decodeOptions(row.ssh_options),
       createdAt: integer(row.created_at, 0),
       updatedAt: integer(row.updated_at, 0)
     }
@@ -501,4 +509,19 @@ function optionalInteger(value: SQLOutputValue): number | undefined {
 
 function flag(value: SQLOutputValue): boolean {
   return value === 1 || value === 1n
+}
+
+function encodeOptions(value: SessionInput['sshOptions']): string | null {
+  if (!value) return null
+  const clean = sanitizeSshOptions(value)
+  return clean ? JSON.stringify(clean) : null
+}
+
+function decodeOptions(value: SQLOutputValue): SessionConfig['sshOptions'] {
+  if (typeof value !== 'string' || value.length === 0) return undefined
+  try {
+    return sanitizeSshOptions(JSON.parse(value))
+  } catch {
+    return undefined
+  }
 }
