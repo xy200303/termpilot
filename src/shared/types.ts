@@ -29,6 +29,11 @@ export interface SessionConfig {
   remark?: string
   /** 是否已保存加密凭据（密码 / 私钥口令） */
   hasSecret: boolean
+  /** ssh -J 跳板。空表示直接连接。 */
+  jumpHost?: string
+  jumpPort?: number
+  jumpUsername?: string
+  hasJumpSecret: boolean
   createdAt: number
   updatedAt: number
 }
@@ -47,6 +52,12 @@ export interface SessionInput {
   remark?: string
   /** 明文密码或私钥口令；undefined 表示不修改 */
   secret?: string
+  /** 跳板。空字符串表示不经过跳板。 */
+  jumpHost?: string
+  jumpPort?: number
+  jumpUsername?: string
+  /** 跳板口令。undefined 表示不修改，空字符串表示清掉。 */
+  jumpSecret?: string
 }
 
 export type SessionStatus = 'disconnected' | 'connecting' | 'connected'

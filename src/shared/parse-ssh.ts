@@ -1,3 +1,11 @@
+export interface ParsedJump {
+  host: string
+  port: number
+  username: string
+  /** ssh -J user:pass@host 里冒号后面的口令 */
+  secret?: string
+}
+
 export interface ParsedSsh {
   host: string
   port: number
@@ -5,6 +13,8 @@ export interface ParsedSsh {
   keyPath?: string
   /** 只在命令里明文带了密码时才有，例如 ssh://user:pass@host */
   secret?: string
+  /** ssh -J / ProxyJump。只取第一跳。 */
+  jump?: ParsedJump
   name: string
 }
 
@@ -12,7 +22,8 @@ const ARG_FLAGS = new Set(['b', 'c', 'D', 'E', 'e', 'F', 'I', 'i', 'J', 'L', 'l'
 
 /**
  * 把一条 SSH 命令拆成连接字段。
- * 认 ssh、ssh.exe、ssh://、user@host，以及 -p / -l / -i / -o。
+ * 认 ssh、ssh.exe、ssh://、user@host，以及 -p / -l / -i / -J / -o。
+ * -J user:pass@jump:port 里的 pass 是跳板口令，不是目标机密码。
  */
 export function parseSshCommand(input: string): ParsedSsh | null {
   const tokens = tokenize(input.trim())
@@ -38,6 +49,7 @@ export function parseSshCommand(input: string): ParsedSsh | null {
   let userFlag = ''
   let keyPath: string | undefined
   let hostFlag = ''
+  let jump: ParsedJump | undefined
   const positionals: string[] = []
 
   while (index < tokens.length) {
@@ -69,6 +81,10 @@ export function parseSshCommand(input: string): ParsedSsh | null {
       userFlag = value
     } else if (flag === 'i') {
       keyPath = value
+    } else if (flag === 'J') {
+      const parsedJump = parseJump(value)
+      if (!parsedJump) return null
+      jump = parsedJump
     } else if (flag === 'o') {
       const option = readOption(value)
       if (!option) continue
@@ -82,6 +98,8 @@ export function parseSshCommand(input: string): ParsedSsh | null {
         keyPath = option.value
       } else if (option.key === 'hostname') {
         hostFlag = option.value
+      } else if (option.key === 'proxyjump') {
+        jump = parseJump(option.value) ?? jump
       }
     }
   }
@@ -103,7 +121,22 @@ export function parseSshCommand(input: string): ParsedSsh | null {
     username,
     keyPath,
     secret: resolvedSecret || undefined,
+    jump,
     name: username ? `${username}@${host}` : host
+  }
+}
+
+/** 只取第一跳。user:pass@host:port 里的 pass 留给跳板登录。 */
+function parseJump(value: string): ParsedJump | undefined {
+  const first = value.split(',')[0]?.trim()
+  if (!first) return undefined
+  const dest = parseDestination(first)
+  if (!dest?.host || !dest.user) return undefined
+  return {
+    host: dest.host,
+    port: dest.port ?? 22,
+    username: dest.user,
+    secret: dest.password || undefined
   }
 }
 

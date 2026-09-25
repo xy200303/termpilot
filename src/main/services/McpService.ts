@@ -38,6 +38,10 @@ type SessionPatch = {
   authType?: AuthType
   keyPath?: string
   secret?: string
+  jumpHost?: string
+  jumpPort?: number
+  jumpUsername?: string
+  jumpSecret?: string
   listenPort?: number
   group?: string
   remark?: string
@@ -479,13 +483,21 @@ export class McpService {
       keyPath: (patch.keyPath ?? current?.keyPath ?? '').trim() || undefined,
       listenPort: patch.listenPort ?? current?.listenPort,
       remark: patch.remark ?? current?.remark,
-      secret: patch.secret ? patch.secret : undefined
+      secret: patch.secret ? patch.secret : undefined,
+      jumpHost: patch.jumpHost !== undefined ? patch.jumpHost.trim() : (current?.jumpHost ?? ''),
+      jumpPort: patch.jumpPort ?? current?.jumpPort ?? 22,
+      jumpUsername: patch.jumpUsername !== undefined ? patch.jumpUsername.trim() : (current?.jumpUsername ?? ''),
+      jumpSecret: patch.jumpSecret
     }
     if (!input.name) throw new Error('名称不能为空')
     if (input.mode === 'forward') {
       if (!input.host || !input.username) throw new Error('主机和用户名不能为空')
       if (input.authType === 'key' && !input.keyPath) throw new Error('私钥认证需要填写 keyPath')
       if (creating && input.authType === 'password' && !input.secret) throw new Error('密码认证需要填写 secret')
+      if (input.jumpHost) {
+        if (!input.jumpUsername) throw new Error('跳板需要用户名')
+        if (creating && !input.jumpSecret) throw new Error('跳板需要填写密码')
+      }
     } else if (!input.listenPort) {
       throw new Error('反向监听需要 listenPort')
     }

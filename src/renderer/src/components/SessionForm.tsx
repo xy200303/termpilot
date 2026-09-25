@@ -32,7 +32,11 @@ const empty = (mode: ConnectMode): SessionInput => ({
   keyPath: '',
   listenPort: 4444,
   remark: '',
-  secret: ''
+  secret: '',
+  jumpHost: '',
+  jumpPort: 22,
+  jumpUsername: '',
+  jumpSecret: ''
 })
 
 /** 新建 / 编辑连接。表单控件全部来自 shadcn。 */
@@ -65,7 +69,11 @@ export function SessionForm() {
         keyPath: s.keyPath ?? '',
         listenPort: s.listenPort ?? 4444,
         remark: s.remark ?? '',
-        secret: ''
+        secret: '',
+        jumpHost: s.jumpHost ?? '',
+        jumpPort: s.jumpPort ?? 22,
+        jumpUsername: s.jumpUsername ?? '',
+        jumpSecret: ''
       })
     } else {
       setForm({
@@ -96,7 +104,11 @@ export function SessionForm() {
       name: current.name.trim() ? current.name : parsed.name,
       authType: parsed.keyPath ? 'key' : current.authType,
       keyPath: parsed.keyPath ?? current.keyPath,
-      secret: parsed.secret ?? current.secret
+      secret: parsed.secret ?? current.secret,
+      jumpHost: parsed.jump?.host ?? '',
+      jumpPort: parsed.jump?.port ?? 22,
+      jumpUsername: parsed.jump?.username ?? '',
+      jumpSecret: parsed.jump?.secret ?? ''
     }))
   }
 
@@ -116,7 +128,11 @@ export function SessionForm() {
         name: form.name.trim() ? form.name : parsed.name,
         authType: parsed.keyPath ? 'key' : form.authType,
         keyPath: parsed.keyPath ?? form.keyPath,
-        secret: parsed.secret ?? form.secret
+        secret: parsed.secret ?? form.secret,
+        jumpHost: parsed.jump?.host ?? '',
+        jumpPort: parsed.jump?.port ?? 22,
+        jumpUsername: parsed.jump?.username ?? '',
+        jumpSecret: parsed.jump?.secret ?? ''
       }
       setForm(next)
     }
@@ -133,6 +149,16 @@ export function SessionForm() {
         setError('密码认证需要填写密码')
         return
       }
+      if (next.jumpHost?.trim()) {
+        if (!next.jumpUsername?.trim()) {
+          setError('跳板需要用户名')
+          return
+        }
+        if (creating && !next.jumpSecret) {
+          setError('跳板需要填写密码')
+          return
+        }
+      }
     } else if (!next.listenPort || next.listenPort < 1 || next.listenPort > 65535) {
       setError('监听端口需要在 1–65535')
       return
@@ -142,7 +168,11 @@ export function SessionForm() {
         ...next,
         group: '',
         mode,
-        secret: next.secret ? next.secret : undefined
+        secret: next.secret ? next.secret : undefined,
+        jumpHost: next.jumpHost?.trim() ?? '',
+        jumpPort: next.jumpPort ?? 22,
+        jumpUsername: next.jumpUsername?.trim() ?? '',
+        jumpSecret: next.jumpHost?.trim() ? (next.jumpSecret ? next.jumpSecret : undefined) : ''
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -151,7 +181,7 @@ export function SessionForm() {
 
   return (
     <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
             {lockedHost ? `在 ${lockedHost} 上新建连接` : creating ? '新建' : '编辑'}
@@ -171,7 +201,7 @@ export function SessionForm() {
             <Field label="粘贴命令">
               <Input
                 value={command}
-                placeholder="ssh user@host -p 22 -i ~/.ssh/id_ed25519"
+                placeholder="ssh -J user@jump:22 user@host -p 22"
                 onChange={(e) => setCommand(e.target.value)}
                 onPaste={(e) => {
                   const text = e.clipboardData.getData('text')
@@ -257,6 +287,36 @@ export function SessionForm() {
                   onChange={(e) => set('secret', e.target.value)}
                 />
               </Field>
+              <div className="grid gap-2 rounded-md border px-3 py-2">
+                <p className="text-xs text-muted-foreground">跳板，对应 ssh -J。不经过跳板就留空。</p>
+                <div className="grid grid-cols-[1fr_6rem] gap-2">
+                  <Field label="跳板主机">
+                    <Input
+                      value={form.jumpHost ?? ''}
+                      placeholder="IP 或域名"
+                      onChange={(e) => set('jumpHost', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="端口">
+                    <Input
+                      type="number"
+                      value={form.jumpPort ?? 22}
+                      onChange={(e) => set('jumpPort', Number(e.target.value) || 22)}
+                    />
+                  </Field>
+                </div>
+                <Field label="跳板用户名">
+                  <Input value={form.jumpUsername ?? ''} onChange={(e) => set('jumpUsername', e.target.value)} />
+                </Field>
+                <Field label="跳板密码">
+                  <Input
+                    type="password"
+                    value={form.jumpSecret ?? ''}
+                    placeholder={creating ? '命令里的 user:pass 会填在这里' : session?.hasJumpSecret ? '留空则不修改' : ''}
+                    onChange={(e) => set('jumpSecret', e.target.value)}
+                  />
+                </Field>
+              </div>
             </>
           ) : (
             <>

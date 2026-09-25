@@ -69,6 +69,10 @@ export class StorageService {
       )
     `)
     this.ensureColumn('appearance', 'experimental_screenshot', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('sessions', 'jump_host', 'TEXT')
+    this.ensureColumn('sessions', 'jump_port', 'INTEGER')
+    this.ensureColumn('sessions', 'jump_username', 'TEXT')
+    this.ensureColumn('sessions', 'jump_secret_encrypted', 'TEXT')
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mcp_audit (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,8 +117,9 @@ export class StorageService {
       .prepare(
         `INSERT INTO sessions (
           id, name, group_name, mode, host, port, username, auth_type,
-          key_path, listen_port, remark, secret_encrypted, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
+          jump_host, jump_port, jump_username, jump_secret_encrypted
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -130,24 +135,41 @@ export class StorageService {
         input.remark ?? null,
         this.encryptSecret(input.secret) ?? null,
         now,
-        now
+        now,
+        input.jumpHost?.trim() || null,
+        input.jumpHost?.trim() ? (input.jumpPort ?? 22) : null,
+        input.jumpHost?.trim() ? input.jumpUsername?.trim() || null : null,
+        input.jumpHost?.trim() ? (this.encryptSecret(input.jumpSecret) ?? null) : null
       )
     return this.require(id)
   }
 
   update(id: string, patch: SessionInput): SessionConfig | null {
-    const existing = this.db.prepare('SELECT id, secret_encrypted FROM sessions WHERE id = ?').get(id)
+    const existing = this.db
+      .prepare(
+        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted FROM sessions WHERE id = ?'
+      )
+      .get(id)
     if (!existing) return null
     const secret =
       patch.secret !== undefined
         ? (this.encryptSecret(patch.secret) ?? null)
         : (existing.secret_encrypted ?? null)
+    const jumpHost = (patch.jumpHost !== undefined ? patch.jumpHost : text(existing.jump_host)).trim()
+    const jumpSecret = !jumpHost
+      ? null
+      : patch.jumpSecret !== undefined
+        ? (this.encryptSecret(patch.jumpSecret) ?? null)
+        : (existing.jump_secret_encrypted ?? null)
+    const jumpPort = patch.jumpPort ?? optionalInteger(existing.jump_port) ?? 22
+    const jumpUsername = (patch.jumpUsername !== undefined ? patch.jumpUsername : text(existing.jump_username)).trim()
     this.db
       .prepare(
         `UPDATE sessions SET
           name = ?, group_name = ?, mode = ?, host = ?, port = ?, username = ?,
           auth_type = ?, key_path = ?, listen_port = ?, remark = ?,
-          secret_encrypted = ?, updated_at = ?
+          secret_encrypted = ?, updated_at = ?,
+          jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?
         WHERE id = ?`
       )
       .run(
@@ -163,6 +185,10 @@ export class StorageService {
         patch.remark ?? null,
         secret,
         Date.now(),
+        jumpHost || null,
+        jumpHost ? jumpPort : null,
+        jumpHost ? jumpUsername || null : null,
+        jumpSecret,
         id
       )
     return this.require(id)
@@ -183,8 +209,9 @@ export class StorageService {
       .prepare(
         `INSERT INTO sessions (
           id, name, group_name, mode, host, port, username, auth_type,
-          key_path, listen_port, remark, secret_encrypted, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
+          jump_host, jump_port, jump_username, jump_secret_encrypted
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         newId,
@@ -200,7 +227,11 @@ export class StorageService {
         optionalText(row.remark) ?? null,
         typeof row.secret_encrypted === 'string' ? row.secret_encrypted : null,
         now,
-        now
+        now,
+        optionalText(row.jump_host) ?? null,
+        optionalInteger(row.jump_port) ?? null,
+        optionalText(row.jump_username) ?? null,
+        typeof row.jump_secret_encrypted === 'string' ? row.jump_secret_encrypted : null
       )
     return this.require(newId)
   }
@@ -297,8 +328,17 @@ export class StorageService {
 
   /** 取解密后的凭据，仅供主进程建立 SSH 连接时使用，绝不通过 IPC 返回 */
   getSecret(id: string): string | null {
-    const row = this.db.prepare('SELECT secret_encrypted FROM sessions WHERE id = ?').get(id)
-    const encrypted = row?.secret_encrypted
+    return this.readSecret(id, 'secret_encrypted')
+  }
+
+  /** 跳板口令。和目标机密码分开存，同样不返回给界面。 */
+  getJumpSecret(id: string): string | null {
+    return this.readSecret(id, 'jump_secret_encrypted')
+  }
+
+  private readSecret(id: string, column: 'secret_encrypted' | 'jump_secret_encrypted'): string | null {
+    const row = this.db.prepare(`SELECT ${column} AS secret FROM sessions WHERE id = ?`).get(id)
+    const encrypted = row?.secret
     if (typeof encrypted !== 'string' || encrypted.length === 0) return null
     try {
       return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
@@ -329,6 +369,10 @@ export class StorageService {
       listenPort: optionalInteger(row.listen_port),
       remark: optionalText(row.remark),
       hasSecret: typeof row.secret_encrypted === 'string' && row.secret_encrypted.length > 0,
+      jumpHost: optionalText(row.jump_host),
+      jumpPort: optionalInteger(row.jump_port),
+      jumpUsername: optionalText(row.jump_username),
+      hasJumpSecret: typeof row.jump_secret_encrypted === 'string' && row.jump_secret_encrypted.length > 0,
       createdAt: integer(row.created_at, 0),
       updatedAt: integer(row.updated_at, 0)
     }

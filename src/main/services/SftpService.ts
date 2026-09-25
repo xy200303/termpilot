@@ -4,7 +4,7 @@ import { dialog, type WebContents } from 'electron'
 import { Client, type OpenMode, type SFTPWrapper } from 'ssh2'
 import { IPC } from '../../shared/ipc-channels'
 import type { RemoteFile, SftpInstallEvent } from '../../shared/types'
-import { buildConnectConfig } from '../ssh-config'
+import { dialSsh } from '../ssh-config'
 import type { StorageService } from './StorageService'
 
 interface LiveConn {
@@ -196,11 +196,12 @@ export class SftpService {
       return Promise.reject(new Error('只能浏览正向 SSH 的文件'))
     }
     const secret = this.storage.getSecret(sessionId)
+    const jumpSecret = this.storage.getJumpSecret(sessionId)
     return new Promise((resolve, reject) => {
       const client = new Client()
       client.once('ready', () => resolve(client))
       client.once('error', reject)
-      client.connect(buildConnectConfig(session, secret))
+      dialSsh(session, secret, jumpSecret, client)
     })
   }
 

@@ -7,7 +7,7 @@ import type { ClientChannel } from 'ssh2'
 import type { IPty } from 'node-pty'
 import { IPC } from '../../shared/ipc-channels'
 import type { TermCreateOptions, TermDataEvent, TermStatusEvent } from '../../shared/types'
-import { buildConnectConfig } from '../ssh-config'
+import { dialSsh } from '../ssh-config'
 import type { StorageService } from './StorageService'
 
 /**
@@ -30,6 +30,8 @@ interface TermEntry {
   sessionId: string | null
   kind: 'ssh' | 'local'
   client?: Client
+  /** 经过跳板时，目标连接挂在这上面。关掉终端要一起断开。 */
+  jump?: Client
   stream?: ClientChannel
   ptyProc?: IPty
 }
@@ -88,6 +90,7 @@ export class TerminalService {
     try {
       t.stream?.close()
       t.client?.end()
+      t.jump?.end()
       t.ptyProc?.kill()
     } catch {
       /* 清理阶段的异常忽略 */
@@ -226,7 +229,7 @@ export class TerminalService {
       })
 
     try {
-      client.connect(buildConnectConfig(session, this.storage.getSecret(session.id)))
+      entry.jump = dialSsh(session, this.storage.getSecret(session.id), this.storage.getJumpSecret(session.id), client)
     } catch (e) {
       this.sendStatus(
         opts.termId,
