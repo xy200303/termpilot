@@ -2,7 +2,7 @@ export interface ParsedJump {
   host: string
   port: number
   username: string
-  /** ssh -J user:pass@host 里冒号后面的口令 */
+  /** 跳板自己的口令。-J 里的冒号属于用户名，不会填到这里。 */
   secret?: string
 }
 
@@ -23,7 +23,7 @@ const ARG_FLAGS = new Set(['b', 'c', 'D', 'E', 'e', 'F', 'I', 'i', 'J', 'L', 'l'
 /**
  * 把一条 SSH 命令拆成连接字段。
  * 认 ssh、ssh.exe、ssh://、user@host，以及 -p / -l / -i / -J / -o。
- * -J user:pass@jump:port 里的 pass 是跳板口令，不是目标机密码。
+ * -J 的用户名保留冒号后的整段。那不是跳板密码，目标机密码要另外填。
  */
 export function parseSshCommand(input: string): ParsedSsh | null {
   const tokens = tokenize(input.trim())
@@ -126,17 +126,19 @@ export function parseSshCommand(input: string): ParsedSsh | null {
   }
 }
 
-/** 只取第一跳。user:pass@host:port 里的 pass 留给跳板登录。 */
+/** 只取第一跳。-J 里 @ 之前整段都是用户名，冒号不是密码分隔符。 */
 function parseJump(value: string): ParsedJump | undefined {
   const first = value.split(',')[0]?.trim()
   if (!first) return undefined
   const dest = parseDestination(first)
-  if (!dest?.host || !dest.user) return undefined
+  if (!dest?.host) return undefined
+  const at = first.lastIndexOf('@')
+  const username = at >= 0 ? decode(first.slice(0, at)) : dest.user
+  if (!username) return undefined
   return {
     host: dest.host,
     port: dest.port ?? 22,
-    username: dest.user,
-    secret: dest.password || undefined
+    username
   }
 }
 

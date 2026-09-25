@@ -154,10 +154,6 @@ export function SessionForm() {
           setError('跳板需要用户名')
           return
         }
-        if (creating && !next.jumpSecret) {
-          setError('跳板需要填写密码')
-          return
-        }
       }
     } else if (!next.listenPort || next.listenPort < 1 || next.listenPort > 65535) {
       setError('监听端口需要在 1–65535')
@@ -288,7 +284,9 @@ export function SessionForm() {
                 />
               </Field>
               <div className="grid gap-2 rounded-md border px-3 py-2">
-                <p className="text-xs text-muted-foreground">跳板，对应 ssh -J。不经过跳板就留空。</p>
+                <p className="text-xs text-muted-foreground">
+                  跳板，对应 ssh -J。用户名保留冒号后的整段。不经过跳板就留空。目标机密码填在上面。
+                </p>
                 <div className="grid grid-cols-[1fr_6rem] gap-2">
                   <Field label="跳板主机">
                     <Input
@@ -312,7 +310,7 @@ export function SessionForm() {
                   <Input
                     type="password"
                     value={form.jumpSecret ?? ''}
-                    placeholder={creating ? '命令里的 user:pass 会填在这里' : session?.hasJumpSecret ? '留空则不修改' : ''}
+                    placeholder={creating ? '跳板另有口令才填' : session?.hasJumpSecret ? '留空则不修改' : ''}
                     onChange={(e) => set('jumpSecret', e.target.value)}
                   />
                 </Field>

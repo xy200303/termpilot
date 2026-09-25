@@ -496,7 +496,6 @@ export class McpService {
       if (creating && input.authType === 'password' && !input.secret) throw new Error('密码认证需要填写 secret')
       if (input.jumpHost) {
         if (!input.jumpUsername) throw new Error('跳板需要用户名')
-        if (creating && !input.jumpSecret) throw new Error('跳板需要填写密码')
       }
     } else if (!input.listenPort) {
       throw new Error('反向监听需要 listenPort')

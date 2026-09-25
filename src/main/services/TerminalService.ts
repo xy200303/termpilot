@@ -200,6 +200,7 @@ export class TerminalService {
 
     client
       .on('ready', () => {
+        if (entry.stream) return
         client.shell(
           { term: 'xterm-256color', cols: opts.cols, rows: opts.rows },
           (err, stream) => {
@@ -229,7 +230,26 @@ export class TerminalService {
       })
 
     try {
-      entry.jump = dialSsh(session, this.storage.getSecret(session.id), this.storage.getJumpSecret(session.id), client)
+      entry.jump = dialSsh(
+        session,
+        this.storage.getSecret(session.id),
+        this.storage.getJumpSecret(session.id),
+        client,
+        {
+          cols: opts.cols,
+          rows: opts.rows,
+          onJumpShell: (stream) => {
+            entry.stream = stream
+            this.sendStatus(opts.termId, session.id, 'connected')
+            stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
+            stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
+            stream.on('close', () => {
+              this.sendStatus(opts.termId, session.id, 'disconnected')
+              this.close(opts.termId)
+            })
+          }
+        }
+      )
     } catch (e) {
       this.sendStatus(
         opts.termId,
