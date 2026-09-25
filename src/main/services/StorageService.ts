@@ -18,7 +18,18 @@ import {
 } from '../../shared/types'
 import { hostKeyOf } from '../../shared/host-key'
 import { newConnId } from '../../shared/ids'
-import { sanitizeSshOptions } from '../../shared/ssh-options'
+import { sanitizeSshOptions, type SshConnectOptions } from '../../shared/ssh-options'
+import {
+  homeRelative,
+  listConfigAliases,
+  localUsername,
+  readConcreteHosts,
+  removeSshHost,
+  sshConfigPath,
+  suggestAlias,
+  upsertSshHost,
+  type SshHostFields
+} from '../ssh-config-file'
 
 /**
  * 会话存储：userData/termpilot.db（Node 内置 SQLite，WAL）+ safeStorage。
@@ -28,6 +39,8 @@ import { sanitizeSshOptions } from '../../shared/ssh-options'
 export class StorageService {
   private db: DatabaseSync
   private closed = false
+  /** 从配置文件导入时先关掉写回，避免刚读进来又改文件。 */
+  private sshWrite = true
   private launchApp = ''
   private launchArgs: string[] = []
 
@@ -78,6 +91,7 @@ export class StorageService {
     this.ensureColumn('sessions', 'jump_secret_encrypted', 'TEXT')
     this.ensureColumn('sessions', 'ssh_options', 'TEXT')
     this.ensureColumn('sessions', 'public_id', 'TEXT')
+    this.ensureColumn('sessions', 'config_host', 'TEXT')
     this.backfillPublicIds()
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sessions_public_id ON sessions(public_id)')
     this.db.exec(`
@@ -106,7 +120,11 @@ export class StorageService {
         detail TEXT NOT NULL DEFAULT ''
       )
     `)
+    this.db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS sessions_config_host ON sessions(config_host) WHERE config_host IS NOT NULL'
+    )
     this.importLegacyJson(join(dir, 'sessions.json'))
+    this.importSshConfig()
   }
 
   private backfillPublicIds(): void {
@@ -216,7 +234,9 @@ export class StorageService {
         input.jumpHost?.trim() ? (this.encryptSecret(input.jumpSecret) ?? null) : null,
         encodeOptions(input.sshOptions)
       )
-    return this.require(id)
+    const saved = this.require(id)
+    this.publishSsh(id)
+    return saved
   }
 
   update(id: string, patch: SessionInput): SessionConfig | null {
@@ -269,12 +289,22 @@ export class StorageService {
         sshOptions,
         id
       )
-    return this.require(id)
+    const saved = this.require(id)
+    this.publishSsh(id)
+    return saved
   }
 
   delete(id: string): boolean {
+    const alias = this.configAlias(id)
     this.db.prepare('DELETE FROM open_terms WHERE session_id = ?').run(id)
     const result = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+    if (result.changes > 0 && alias) {
+      try {
+        removeSshHost(alias)
+      } catch (error) {
+        console.error('[TermPilot] 从 SSH 配置移除主机失败', error)
+      }
+    }
     return result.changes > 0
   }
 
@@ -369,7 +399,9 @@ export class StorageService {
         typeof row.jump_secret_encrypted === 'string' ? row.jump_secret_encrypted : null,
         typeof row.ssh_options === 'string' ? row.ssh_options : null
       )
-    return this.require(newId)
+    const saved = this.require(newId)
+    this.publishSsh(newId)
+    return saved
   }
 
   getMcpSettings(): McpSettings {
@@ -516,6 +548,149 @@ export class StorageService {
     }
   }
 
+  /** 启动时把 ~/.ssh/config 里的具体主机读进来。已关联的连接只更新 OpenSSH 字段。 */
+  private importSshConfig(): void {
+    const file = sshConfigPath()
+    if (!existsSync(file)) return
+    let hosts: { alias: string; fields: SshHostFields }[]
+    try {
+      hosts = readConcreteHosts(readFileSync(file, 'utf8'))
+    } catch (error) {
+      console.error('[TermPilot] 读取 SSH 配置失败', error)
+      return
+    }
+    this.sshWrite = false
+    try {
+      for (const host of hosts) {
+        if (!host.fields.hostName.trim()) continue
+        const row = this.db.prepare('SELECT id FROM sessions WHERE config_host = ?').get(host.alias)
+        if (row && typeof row.id === 'string') {
+          this.applyConfig(row.id, host.fields)
+          continue
+        }
+        const same = this
+          .list()
+          .filter(
+            (session) =>
+              session.mode === 'forward' &&
+              !this.configAlias(session.id) &&
+              session.host === host.fields.hostName &&
+              session.port === host.fields.port &&
+              session.username === (host.fields.username || localUsername())
+          )
+        if (same.length === 1) {
+          this.db.prepare('UPDATE sessions SET config_host = ? WHERE id = ?').run(host.alias, same[0]!.id)
+          this.applyConfig(same[0]!.id, host.fields)
+        } else {
+          this.insertConfig(host.alias, host.fields)
+        }
+      }
+    } catch (error) {
+      console.error('[TermPilot] 导入 SSH 配置失败', error)
+    } finally {
+      this.sshWrite = true
+    }
+  }
+
+  private insertConfig(alias: string, fields: SshHostFields): void {
+    const [keyPath, ...rest] = fields.identityFiles
+    const [jump, ...extra] = fields.jumps
+    const session = this.create({
+      name: this.uniqueName(alias),
+      group: '',
+      mode: 'forward',
+      host: fields.hostName,
+      port: fields.port,
+      username: fields.username || localUsername(),
+      authType: keyPath ? 'key' : 'password',
+      keyPath,
+      remark: '',
+      jumpHost: jump?.host ?? '',
+      jumpPort: jump?.port,
+      jumpUsername: jump?.username,
+      sshOptions: configOptions(rest, extra, fields.proxyCommand)
+    })
+    this.db.prepare('UPDATE sessions SET config_host = ? WHERE id = ?').run(alias, session.id)
+  }
+
+  private applyConfig(id: string, fields: SshHostFields): void {
+    const row = this.db.prepare('SELECT ssh_options, jump_host, jump_secret_encrypted FROM sessions WHERE id = ?').get(id)
+    if (!row) return
+    const [keyPath, ...rest] = fields.identityFiles
+    const [jump, ...extra] = fields.jumps
+    const previousJump = optionalText(row.jump_host) ?? ''
+    const jumpHost = jump?.host ?? ''
+    const keepSecret = jumpHost !== '' && jumpHost === previousJump
+    this.db
+      .prepare(
+        `UPDATE sessions SET
+          host = ?, port = ?, username = ?, auth_type = ?, key_path = ?,
+          jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?,
+          ssh_options = ?, updated_at = ?
+        WHERE id = ?`
+      )
+      .run(
+        fields.hostName,
+        fields.port,
+        fields.username || localUsername(),
+        keyPath ? 'key' : 'password',
+        keyPath ?? null,
+        jumpHost || null,
+        jumpHost ? (jump?.port ?? 22) : null,
+        jumpHost ? jump?.username || null : null,
+        keepSecret ? (row.jump_secret_encrypted ?? null) : null,
+        encodeOptions(configOptions(rest, extra, fields.proxyCommand, decodeOptions(row.ssh_options))),
+        Date.now(),
+        id
+      )
+  }
+
+  private publishSsh(id: string): void {
+    if (!this.sshWrite) return
+    try {
+      const session = this.require(id)
+      if (session.mode !== 'forward' || !session.host.trim()) {
+        this.dropSshAlias(id)
+        return
+      }
+      upsertSshHost(this.ensureAlias(session), fieldsFromSession(session))
+    } catch (error) {
+      console.error('[TermPilot] 写回 SSH 配置失败', error)
+    }
+  }
+
+  private ensureAlias(session: SessionConfig): string {
+    const current = this.configAlias(session.id)
+    if (current) return current
+    const taken = listConfigAliases()
+    for (const row of this.db.prepare('SELECT config_host FROM sessions WHERE config_host IS NOT NULL').all()) {
+      if (typeof row.config_host === 'string') taken.add(row.config_host)
+    }
+    const alias = suggestAlias(session.name, session.publicId, taken)
+    this.db.prepare('UPDATE sessions SET config_host = ? WHERE id = ?').run(alias, session.id)
+    return alias
+  }
+
+  private dropSshAlias(id: string): void {
+    const alias = this.configAlias(id)
+    if (!alias) return
+    this.db.prepare('UPDATE sessions SET config_host = NULL WHERE id = ?').run(id)
+    removeSshHost(alias)
+  }
+
+  private configAlias(id: string): string | null {
+    const row = this.db.prepare('SELECT config_host FROM sessions WHERE id = ?').get(id)
+    return row && typeof row.config_host === 'string' && row.config_host ? row.config_host : null
+  }
+
+  private uniqueName(base: string): string {
+    const taken = new Set(this.list().map((session) => session.name))
+    if (!taken.has(base)) return base
+    let n = 2
+    while (taken.has(`${base} ${n}`)) n += 1
+    return `${base} ${n}`
+  }
+
   private importLegacyJson(file: string): void {
     if (!existsSync(file)) return
     let parsed: unknown
@@ -639,6 +814,47 @@ function optionalInteger(value: SQLOutputValue): number | undefined {
 
 function flag(value: SQLOutputValue): boolean {
   return value === 1 || value === 1n
+}
+
+function fieldsFromSession(session: SessionConfig): SshHostFields {
+  const files =
+    session.authType === 'key' && session.keyPath
+      ? [session.keyPath, ...(session.sshOptions?.keyPaths ?? [])].map(homeRelative)
+      : []
+  const jumps = session.jumpHost?.trim()
+    ? [
+        {
+          host: session.jumpHost.trim(),
+          port: session.jumpPort ?? 22,
+          username: session.jumpUsername?.trim() ?? ''
+        },
+        ...(session.sshOptions?.extraJumps ?? [])
+      ]
+    : []
+  return {
+    hostName: session.host.trim(),
+    port: session.port,
+    username: session.username.trim(),
+    identityFiles: files,
+    jumps,
+    proxyCommand: session.sshOptions?.proxyCommand
+  }
+}
+
+function configOptions(
+  keyPaths: string[],
+  extraJumps: SshHostFields['jumps'],
+  proxyCommand: string | undefined,
+  previous?: SshConnectOptions
+): SshConnectOptions | undefined {
+  const options: SshConnectOptions = { ...(previous ?? {}) }
+  if (keyPaths.length > 0) options.keyPaths = keyPaths
+  else delete options.keyPaths
+  if (extraJumps.length > 0) options.extraJumps = extraJumps
+  else delete options.extraJumps
+  if (proxyCommand) options.proxyCommand = proxyCommand
+  else delete options.proxyCommand
+  return sanitizeSshOptions(options)
 }
 
 function encodeOptions(value: SessionInput['sshOptions']): string | null {
