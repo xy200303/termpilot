@@ -1,6 +1,7 @@
 #!/bin/sh
 # 在已经连上的 SSH 里补上 SFTP。不新开端口。
-# 已经有子系统就退出；只有程序确实不存在时才装软件包。
+# 外部 sftp-server 即使文件存在，也可能以 127 退出。那时改用 internal-sftp。
+# 只有程序确实不存在时才装软件包。
 set -e
 echo "先看这台机器有没有 SFTP。Ubuntu 的 SSH 一般自带，有就不安装"
 echo "用户 $(id -un) uid=$(id -u)"
@@ -52,15 +53,57 @@ if ! command -v sshd >/dev/null 2>&1; then
   echo "没有 sshd，无法改子系统"
   exit 1
 fi
+enable_subsystem() {
+  use=$1
+  cfg=/etc/ssh/sshd_config
+  if [ ! -w "$cfg" ]; then
+    echo "无法写入 $cfg"
+    exit 1
+  fi
+  comment_sftp() {
+    f=$1
+    if [ ! -f "$f" ] || [ ! -w "$f" ]; then
+      return 0
+    fi
+    sed -i.termpilot.bak -E 's/^([[:space:]]*)[Ss]ubsystem[[:space:]]+[sS][fF][tT][pP][[:space:]].*/# termpilot: &/' "$f"
+  }
+  comment_sftp "$cfg"
+  if [ -d /etc/ssh/sshd_config.d ]; then
+    for f in /etc/ssh/sshd_config.d/*.conf; do
+      [ -f "$f" ] || continue
+      comment_sftp "$f"
+    done
+  fi
+  printf '\nSubsystem sftp %s\n' "$use" >> "$cfg"
+  if ! sshd -t >/dev/null 2>&1; then
+    echo "sshd 配置无效，正在还原"
+    for f in /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf; do
+      [ -f "$f.termpilot.bak" ] || continue
+      mv "$f.termpilot.bak" "$f"
+    done
+    exit 1
+  fi
+  rm -f /etc/ssh/sshd_config.termpilot.bak /etc/ssh/sshd_config.d/*.conf.termpilot.bak
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl reload sshd >/dev/null 2>&1 || systemctl reload ssh >/dev/null 2>&1 || true
+  fi
+  if [ -f /var/run/sshd.pid ]; then
+    kill -HUP "$(cat /var/run/sshd.pid)" >/dev/null 2>&1 || true
+  fi
+  echo "已重载 sshd，SFTP 子系统改为 $use"
+}
 target=$(sshd -T 2>/dev/null | awk 'tolower($1)=="subsystem" && tolower($2)=="sftp" { print $3; exit }')
 echo "当前 SFTP 子系统: ${target:-未配置}"
 if [ "$target" = "internal-sftp" ]; then
-  echo "sshd 自带 SFTP，不安装软件包"
-  exit 0
+  echo "已经在用 sshd 自带的 internal-sftp，再安装软件包也打不开文件通道"
+  exit 1
 fi
+# 能执行不等于子系统能跑起来。缺动态库、解释器或 chroot 时，外部程序会以 127 退出。
 if [ -n "$target" ] && [ -x "$target" ]; then
   echo "子系统程序已经存在: $target"
-  echo "不安装软件包"
+  echo "文件通道仍然打不开，改为 sshd 内置的 internal-sftp，不安装软件包"
+  use=internal-sftp
+  enable_subsystem "$use"
   exit 0
 fi
 if [ -n "$target" ]; then
@@ -109,10 +152,6 @@ if [ -z "$found" ]; then
     echo "找不到包管理器，无法安装 SFTP" >&2
     exit 1
   fi
-  if [ -n "$target" ] && [ -x "$target" ]; then
-    echo "安装后子系统程序已就位: $target"
-    exit 0
-  fi
   found=""
   for p in /usr/libexec/openssh/sftp-server /usr/lib/openssh/sftp-server /usr/lib/ssh/sftp-server; do
     if [ -x "$p" ]; then
@@ -123,44 +162,8 @@ if [ -z "$found" ]; then
 fi
 use=internal-sftp
 if [ -n "$found" ]; then
-  use=$found
-  echo "改用已有程序: $found"
-else
-  echo "改用 sshd 内置 internal-sftp"
+  echo "找到程序: $found"
 fi
-cfg=/etc/ssh/sshd_config
-if [ ! -w "$cfg" ]; then
-  echo "无法写入 $cfg"
-  exit 1
-fi
-comment_sftp() {
-  f=$1
-  if [ ! -f "$f" ] || [ ! -w "$f" ]; then
-    return 0
-  fi
-  sed -i.termpilot.bak -E 's/^([[:space:]]*)[Ss]ubsystem[[:space:]]+[sS][fF][tT][pP][[:space:]].*/# termpilot: &/' "$f"
-}
-comment_sftp "$cfg"
-if [ -d /etc/ssh/sshd_config.d ]; then
-  for f in /etc/ssh/sshd_config.d/*.conf; do
-    [ -f "$f" ] || continue
-    comment_sftp "$f"
-  done
-fi
-printf '\nSubsystem sftp %s\n' "$use" >> "$cfg"
-if ! sshd -t >/dev/null 2>&1; then
-  echo "sshd 配置无效，正在还原"
-  for f in /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf; do
-    [ -f "$f.termpilot.bak" ] || continue
-    mv "$f.termpilot.bak" "$f"
-  done
-  exit 1
-fi
-rm -f /etc/ssh/sshd_config.termpilot.bak /etc/ssh/sshd_config.d/*.conf.termpilot.bak
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl reload sshd >/dev/null 2>&1 || systemctl reload ssh >/dev/null 2>&1 || true
-fi
-if [ -f /var/run/sshd.pid ]; then
-  kill -HUP "$(cat /var/run/sshd.pid)" >/dev/null 2>&1 || true
-fi
-echo "已重载 sshd，SFTP 子系统改为 $use"
+echo "改用 sshd 内置 internal-sftp，不依赖外部 sftp-server"
+enable_subsystem "$use"
+exit 0

@@ -136,7 +136,7 @@ export class SftpService {
       if (!isMissingSftp(error)) throw error
       await this.installOnce(sessionId)
       try {
-        return await this.open(sessionId)
+        return await this.openFresh(sessionId)
       } catch (again) {
         const message = again instanceof Error ? again.message : String(again)
         this.emit(sessionId, 'error', `文件通道仍然打不开：${message}`)
@@ -199,6 +199,35 @@ export class SftpService {
       return Promise.reject(new Error('只能浏览正向 SSH 的文件'))
     }
     return this.sshPool.acquire(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
+  }
+
+  /** 安装脚本改的是 sshd 配置。必须新开一条连接，旧会话不会读到新子系统。 */
+  private openFresh(sessionId: string): Promise<SFTPWrapper> {
+    this.conns.delete(sessionId)
+    const session = this.storage.list().find((item) => item.id === sessionId)
+    if (!session || (session.mode ?? 'forward') !== 'forward') {
+      return Promise.reject(new Error('只能浏览正向 SSH 的文件'))
+    }
+    const pending = this.sshPool
+      .acquireIsolated(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
+      .then(
+        (hold) =>
+          new Promise<LiveConn>((resolve, reject) => {
+            hold.client.sftp((err, sftp) => {
+              if (err || !sftp) {
+                hold.release()
+                reject(err ?? new Error('打不开 SFTP'))
+                return
+              }
+              resolve({ client: hold.client, sftp, release: hold.release })
+            })
+          })
+      )
+    this.conns.set(sessionId, pending)
+    return pending.then((conn) => conn.sftp).catch((error: unknown) => {
+      this.conns.delete(sessionId)
+      throw error
+    })
   }
 
   private connect(sessionId: string): Promise<LiveConn> {
