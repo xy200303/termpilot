@@ -408,6 +408,7 @@ export function FileTree() {
             <Hint text="正在通过当前 SSH 连接准备 SFTP，不会另开端口。" />
           )}
           {error && <p className="px-3 pb-1 text-[11px] text-destructive">{error}</p>}
+          {!(error && entries.length === 0 && root === '.') && (
           <ScrollArea className="min-h-0 flex-1">
             <div role="tree" className="pb-2">
               <ContextMenu>
@@ -462,6 +463,7 @@ export function FileTree() {
               )}
             </div>
           </ScrollArea>
+          )}
         </>
       )}
       <RemarkDialog
