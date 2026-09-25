@@ -51,6 +51,8 @@ export function composeTerminalRange(term: Terminal, start: number, end: number,
   canvas.height = device.cellH * rows
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) throw new Error('字形图没有建成')
+  ctx.imageSmoothingEnabled = false
+  const masks = new Map<string, HTMLCanvasElement>()
 
   const theme = look.theme
   const buffer = term.buffer.active
@@ -85,10 +87,11 @@ export function composeTerminalRange(term: Terminal, start: number, end: number,
       ctx.rect(x, y, w, device.cellH)
       ctx.clip()
       ctx.fillStyle = css(fg)
-      ctx.font = fontOf(term, current, device.dpr, look)
-      ctx.textBaseline = 'ideographic'
       const custom = tryDrawCustomChar(ctx, chars, x, y, device.cellW, device.cellH, look.fontSize, device.dpr)
-      if (!custom) ctx.fillText(chars, x + device.charLeft, y + device.charTop + device.charH)
+      if (!custom) {
+        const mask = glyphMask(masks, chars, current, term, look, device, w, css(fg), fg)
+        ctx.drawImage(mask, x, y)
+      }
       const thick = Math.max(1, Math.floor((look.fontSize * device.dpr) / 15))
       if (current.isUnderline() || current.isOverline() || current.isStrikethrough()) {
         ctx.strokeStyle = css(fg)
@@ -160,10 +163,53 @@ interface DeviceShape {
   char?: { height?: number; left?: number; top?: number }
 }
 
+/** 白字画在透明底上，再把彩色亚像素收成单一覆盖度，避免截图发虚。 */
+function glyphMask(
+  cache: Map<string, HTMLCanvasElement>,
+  chars: string,
+  cell: IBufferCell,
+  term: Terminal,
+  look: ComposeLook,
+  device: DeviceCells,
+  slotW: number,
+  fgCss: string,
+  fg: [number, number, number, number]
+): HTMLCanvasElement {
+  const key = `${cell.isBold() ? 1 : 0}${cell.isItalic() ? 1 : 0}:${slotW}:${fgCss}:${chars}`
+  const hit = cache.get(key)
+  if (hit) return hit
+  const canvas = document.createElement('canvas')
+  canvas.width = slotW
+  canvas.height = device.cellH
+  const ctx = canvas.getContext('2d', { alpha: true })
+  if (!ctx) throw new Error('字形图没有建成')
+  ctx.clearRect(0, 0, slotW, device.cellH)
+  ctx.font = fontOf(term, cell, device.dpr, look)
+  ctx.textBaseline = 'ideographic'
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(chars, device.charLeft, device.charTop + device.charH)
+  const image = ctx.getImageData(0, 0, slotW, device.cellH)
+  const data = image.data
+  const red = Math.round(fg[0] * 255)
+  const green = Math.round(fg[1] * 255)
+  const blue = Math.round(fg[2] * 255)
+  for (let i = 0; i < data.length; i += 4) {
+    const alpha = data[i + 3] ?? 0
+    const cover = alpha === 0 ? 0 : Math.round((Math.max(data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0) * alpha) / 255)
+    data[i] = red
+    data[i + 1] = green
+    data[i + 2] = blue
+    data[i + 3] = cover
+  }
+  ctx.putImageData(image, 0, 0)
+  cache.set(key, canvas)
+  return canvas
+}
+
 function fontOf(term: Terminal, cell: IBufferCell, dpr: number, look: ComposeLook): string {
   const weight = cell.isBold() ? term.options.fontWeightBold ?? 'bold' : term.options.fontWeight ?? 'normal'
   const italic = cell.isItalic() ? 'italic' : ''
-  return `${italic} ${weight} ${look.fontSize * dpr}px ${look.fontFamily}`
+  return `${italic} ${weight} ${Math.max(1, Math.round(look.fontSize * dpr))}px ${look.fontFamily}`
 }
 
 function css(color: [number, number, number, number]): string {

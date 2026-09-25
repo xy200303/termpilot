@@ -302,6 +302,7 @@ async function stitch(shots: PageShot[]): Promise<string[]> {
     canvas.height = group.reduce((sum, slice) => sum + slice.sh, 0)
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('无法拼接截图')
+    ctx.imageSmoothingEnabled = false
     let y = 0
     for (const slice of group) {
       ctx.drawImage(
