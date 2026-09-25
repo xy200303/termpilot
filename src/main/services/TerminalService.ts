@@ -6,9 +6,10 @@ import { Client } from 'ssh2'
 import type { ClientChannel } from 'ssh2'
 import type { IPty } from 'node-pty'
 import { IPC } from '../../shared/ipc-channels'
-import type { TermCreateOptions, TermDataEvent, TermStatusEvent } from '../../shared/types'
+import type { TermCreateOptions, TermDataEvent, TermStatusEvent, SessionConfig } from '../../shared/types'
 import { dialSsh, endJump } from '../ssh-config'
 import type { StorageService } from './StorageService'
+import type { SshHold, SshPool } from './SshPool'
 
 /**
  * node-pty 是原生模块，且需要匹配 Electron ABI（electron-rebuild）。
@@ -32,6 +33,8 @@ interface TermEntry {
   client?: Client
   /** 经过跳板时，目标连接挂在这上面。关掉终端要一起断开。 */
   jump?: Client
+  /** 和文件树共用的那条 SSH 会话。最后一次引用才真正断开。 */
+  release?: () => void
   stream?: ClientChannel
   ptyProc?: IPty
 }
@@ -49,7 +52,8 @@ export class TerminalService {
 
   constructor(
     private storage: StorageService,
-    private getSender: () => WebContents | null
+    private getSender: () => WebContents | null,
+    private sshPool: SshPool
   ) {}
 
   async create(opts: TermCreateOptions): Promise<void> {
@@ -89,8 +93,11 @@ export class TerminalService {
     this.lastStatus.delete(termId)
     try {
       t.stream?.close()
-      t.client?.end()
-      endJump(t.jump)
+      if (t.release) t.release()
+      else {
+        t.client?.end()
+        endJump(t.jump)
+      }
       t.ptyProc?.kill()
     } catch {
       /* 清理阶段的异常忽略 */
@@ -195,31 +202,69 @@ export class TerminalService {
     this.terms.set(opts.termId, entry)
     this.sendStatus(opts.termId, session.id, 'connecting')
 
+    const secret = this.storage.getSecret(session.id)
+    const jumpSecret = this.storage.getJumpSecret(session.id)
+    try {
+      const hold = await this.sshPool.acquire(session, secret, jumpSecret)
+      if (!this.terms.has(opts.termId)) {
+        hold.release()
+        return
+      }
+      this.bindShared(entry, hold, opts)
+      return
+    } catch (error) {
+      if (!this.terms.has(opts.termId)) return
+      if (session.jumpHost?.trim() && isForwardDenied(error)) {
+        this.openJumpShell(entry, opts, session, secret, jumpSecret)
+        return
+      }
+      this.sendStatus(opts.termId, session.id, 'error', error instanceof Error ? error.message : String(error))
+      this.close(opts.termId)
+    }
+  }
+
+  /** 转发已经通了。shell 开在这条会话上，不再向跳板要一次连接。 */
+  private bindShared(entry: TermEntry, hold: SshHold, opts: TermCreateOptions): void {
+    const sessionId = entry.sessionId
+    entry.client = hold.client
+    entry.release = hold.release
+    hold.client.on('error', (err) => {
+      this.sendStatus(opts.termId, sessionId, 'error', err.message)
+      this.close(opts.termId)
+    })
+    hold.client.on('close', () => {
+      this.sendStatus(opts.termId, sessionId, 'disconnected')
+      this.close(opts.termId)
+    })
+    hold.client.shell({ term: 'xterm-256color', cols: opts.cols, rows: opts.rows }, (err, stream) => {
+      if (!this.terms.has(opts.termId)) return
+      if (err || !stream) {
+        this.sendStatus(opts.termId, sessionId, 'error', `打开 shell 失败: ${err?.message ?? '未知原因'}`)
+        this.close(opts.termId)
+        return
+      }
+      entry.stream = stream
+      this.sendStatus(opts.termId, sessionId, 'connected')
+      stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
+      stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
+      stream.on('close', () => {
+        this.sendStatus(opts.termId, sessionId, 'disconnected')
+        this.close(opts.termId)
+      })
+    })
+  }
+
+  /** 跳板不许转发时，只给终端在跳板里再登录一次。这条没有 SSH 会话，文件树用不上。 */
+  private openJumpShell(
+    entry: TermEntry,
+    opts: TermCreateOptions,
+    session: SessionConfig,
+    secret: string | null,
+    jumpSecret: string | null
+  ): void {
     const client = new Client()
     entry.client = client
-
     client
-      .on('ready', () => {
-        if (entry.stream) return
-        client.shell(
-          { term: 'xterm-256color', cols: opts.cols, rows: opts.rows },
-          (err, stream) => {
-            if (err) {
-              this.sendStatus(opts.termId, session.id, 'error', `打开 shell 失败: ${err.message}`)
-              this.close(opts.termId)
-              return
-            }
-            entry.stream = stream
-            this.sendStatus(opts.termId, session.id, 'connected')
-            stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
-            stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
-            stream.on('close', () => {
-              this.sendStatus(opts.termId, session.id, 'disconnected')
-              this.close(opts.termId)
-            })
-          }
-        )
-      })
       .on('error', (err) => {
         this.sendStatus(opts.termId, session.id, 'error', err.message)
         this.close(opts.termId)
@@ -228,35 +273,23 @@ export class TerminalService {
         this.sendStatus(opts.termId, session.id, 'disconnected')
         this.close(opts.termId)
       })
-
     try {
-      entry.jump = dialSsh(
-        session,
-        this.storage.getSecret(session.id),
-        this.storage.getJumpSecret(session.id),
-        client,
-        {
-          cols: opts.cols,
-          rows: opts.rows,
-          onJumpShell: (stream) => {
-            entry.stream = stream
-            this.sendStatus(opts.termId, session.id, 'connected')
-            stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
-            stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
-            stream.on('close', () => {
-              this.sendStatus(opts.termId, session.id, 'disconnected')
-              this.close(opts.termId)
-            })
-          }
+      entry.jump = dialSsh(session, secret, jumpSecret, client, {
+        cols: opts.cols,
+        rows: opts.rows,
+        onJumpShell: (stream) => {
+          entry.stream = stream
+          this.sendStatus(opts.termId, session.id, 'connected')
+          stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
+          stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
+          stream.on('close', () => {
+            this.sendStatus(opts.termId, session.id, 'disconnected')
+            this.close(opts.termId)
+          })
         }
-      )
+      })
     } catch (e) {
-      this.sendStatus(
-        opts.termId,
-        session.id,
-        'error',
-        e instanceof Error ? e.message : String(e)
-      )
+      this.sendStatus(opts.termId, session.id, 'error', e instanceof Error ? e.message : String(e))
       this.close(opts.termId)
     }
   }
@@ -329,4 +362,9 @@ export class TerminalService {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isForwardDenied(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('跳板无法转到目标机')
 }

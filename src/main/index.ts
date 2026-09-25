@@ -19,6 +19,7 @@ import { StorageService } from './services/StorageService'
 import { TerminalService } from './services/TerminalService'
 import { ReverseListenerService } from './services/ReverseListenerService'
 import { SftpService } from './services/SftpService'
+import { SshPool } from './services/SshPool'
 import { McpService } from './services/McpService'
 import { registerIpc } from './ipc'
 import { installCli } from './install-cli'
@@ -134,9 +135,10 @@ function createWindow(storage: StorageService): void {
   // 终端服务依赖窗口的 webContents 做数据推送，窗口创建后再初始化
   const sender = () =>
     mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-  terminal = new TerminalService(storage, sender)
+  const sshPool = new SshPool()
+  terminal = new TerminalService(storage, sender, sshPool)
   reverse = new ReverseListenerService(sender)
-  sftp = new SftpService(storage, sender)
+  sftp = new SftpService(storage, sender, sshPool)
   mcp = new McpService(storage, terminal, sftp, reverse, sender)
   registerIpc(storage, terminal, reverse, sftp, mcp)
   void mcp.apply(storage.getMcpSettings()).catch((error) => {

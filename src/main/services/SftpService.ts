@@ -4,16 +4,18 @@ import { dialog, type WebContents } from 'electron'
 import { Client, type OpenMode, type SFTPWrapper } from 'ssh2'
 import { IPC } from '../../shared/ipc-channels'
 import type { RemoteFile, SftpInstallEvent } from '../../shared/types'
-import { dialSsh } from '../ssh-config'
 import type { StorageService } from './StorageService'
+import type { SshHold, SshPool } from './SshPool'
 
 interface LiveConn {
   client: Client
   sftp: SFTPWrapper
+  release: () => void
 }
 
 /**
- * 每个正向会话一条独立的 SFTP 连接，和终端 shell 分开，关终端不会拆掉文件树。
+ * 文件通道挂在已经连到目标机的那条 SSH 会话上。
+ * 和终端共用时，关掉其中一边不会拆掉另一边；最后一次引用才断开。
  */
 export class SftpService {
   private conns = new Map<string, Promise<LiveConn>>()
@@ -21,7 +23,8 @@ export class SftpService {
 
   constructor(
     private storage: StorageService,
-    private getSender: () => WebContents | null
+    private getSender: () => WebContents | null,
+    private sshPool: SshPool
   ) {}
 
   async list(sessionId: string, dir: string): Promise<{ path: string; entries: RemoteFile[] }> {
@@ -119,7 +122,7 @@ export class SftpService {
   close(sessionId: string): void {
     const pending = this.conns.get(sessionId)
     this.conns.delete(sessionId)
-    void pending?.then((c) => c.client.end()).catch(() => undefined)
+    void pending?.then((c) => c.release()).catch(() => undefined)
   }
 
   disposeAll(): void {
@@ -171,16 +174,16 @@ export class SftpService {
   /** 在当前 SSH 连接上安装 SFTP 子系统，不新开端口。 */
   private async installSftp(sessionId: string): Promise<void> {
     this.emit(sessionId, 'start', '通过当前 SSH 连接安装 SFTP，不另开端口')
-    const client = await this.openClient(sessionId)
+    const hold = await this.openHold(sessionId)
     try {
-      await execScript(client, INSTALL_SFTP, (line) => this.emit(sessionId, 'log', line))
+      await execScript(hold.client, INSTALL_SFTP, (line) => this.emit(sessionId, 'log', line))
       this.emit(sessionId, 'done', '安装命令已结束，正在重新连接')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.emit(sessionId, 'error', message)
       throw error
     } finally {
-      client.end()
+      hold.release()
     }
   }
 
@@ -190,32 +193,32 @@ export class SftpService {
     wc.send(IPC.sftpInstall, { sessionId, phase, text } satisfies SftpInstallEvent)
   }
 
-  private openClient(sessionId: string): Promise<Client> {
+  private openHold(sessionId: string): Promise<SshHold> {
     const session = this.storage.list().find((s) => s.id === sessionId)
     if (!session || (session.mode ?? 'forward') !== 'forward') {
       return Promise.reject(new Error('只能浏览正向 SSH 的文件'))
     }
-    const secret = this.storage.getSecret(sessionId)
-    const jumpSecret = this.storage.getJumpSecret(sessionId)
-    return new Promise((resolve, reject) => {
-      const client = new Client()
-      client.once('ready', () => resolve(client))
-      client.once('error', reject)
-      dialSsh(session, secret, jumpSecret, client)
-    })
+    return this.sshPool.acquire(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
   }
 
   private connect(sessionId: string): Promise<LiveConn> {
-    return this.openClient(sessionId).then(
-      (client) =>
+    return this.openHold(sessionId).then(
+      (hold) =>
         new Promise((resolve, reject) => {
-          client.sftp((err, sftp) => {
-            if (err) {
-              client.end()
-              reject(err)
+          hold.client.sftp((err, sftp) => {
+            if (err || !sftp) {
+              hold.release()
+              reject(err ?? new Error('打不开 SFTP'))
               return
             }
-            resolve({ client, sftp })
+            hold.client.on('close', () => {
+              const pending = this.conns.get(sessionId)
+              void pending?.then((conn) => {
+                if (conn.client === hold.client) this.conns.delete(sessionId)
+              })
+              hold.release()
+            })
+            resolve({ client: hold.client, sftp, release: hold.release })
           })
         })
     )
