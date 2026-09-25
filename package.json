@@ -1,6 +1,6 @@
 {
   "name": "termpilot",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "TermPilot - Agent 可操控的 SSH 终端（XShell 风格 GUI + 内置 MCP Server）",
   "main": "out/main/index.js",
   "license": "MIT",
@@ -81,6 +81,10 @@
       {
         "from": "resources/uninstall-path.ps1",
         "to": "uninstall-path.ps1"
+      },
+      {
+        "from": "resources/install-sftp.sh",
+        "to": "install-sftp.sh"
       }
     ],
     "asarUnpack": [

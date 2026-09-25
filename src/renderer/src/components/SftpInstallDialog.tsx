@@ -46,13 +46,13 @@ export function SftpInstallDialog() {
     <Dialog open={view?.open ?? false} onOpenChange={(open) => setView((current) => current && { ...current, open })}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>安装 SFTP</DialogTitle>
+          <DialogTitle>文件通道</DialogTitle>
           <DialogDescription>
             {status === 'running'
-              ? '正在远程安装，下面是这台机器的输出。'
+              ? '先看这台机器有没有 SFTP。已经有就不会安装。'
               : status === 'ok'
-                ? '安装命令已结束，正在重新连接。'
-                : '安装没有成功，下面是远程报错。'}
+                ? '检查结束，正在重新连接。'
+                : '文件通道没有打开，下面是这台机器的输出。'}
           </DialogDescription>
         </DialogHeader>
         <pre

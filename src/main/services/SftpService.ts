@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs'
-import { basename, dirname, isAbsolute, posix } from 'node:path'
-import { dialog, type WebContents } from 'electron'
+import { existsSync, readFileSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, posix } from 'node:path'
+import { app, dialog, type WebContents } from 'electron'
 import { Client, type OpenMode, type SFTPWrapper } from 'ssh2'
 import { IPC } from '../../shared/ipc-channels'
 import type { RemoteFile, SftpInstallEvent } from '../../shared/types'
@@ -139,7 +139,7 @@ export class SftpService {
         return await this.open(sessionId)
       } catch (again) {
         const message = again instanceof Error ? again.message : String(again)
-        this.emit(sessionId, 'error', `安装后仍无法打开 SFTP：${message}`)
+        this.emit(sessionId, 'error', `文件通道仍然打不开：${message}`)
         throw again
       }
     }
@@ -173,10 +173,10 @@ export class SftpService {
 
   /** 在当前 SSH 连接上安装 SFTP 子系统，不新开端口。 */
   private async installSftp(sessionId: string): Promise<void> {
-    this.emit(sessionId, 'start', '通过当前 SSH 连接安装 SFTP，不另开端口')
+    this.emit(sessionId, 'start', '先看这台机器有没有 SFTP，有就不安装')
     const hold = await this.openHold(sessionId)
     try {
-      await execScript(hold.client, INSTALL_SFTP, (line) => this.emit(sessionId, 'log', line))
+      await execScript(hold.client, installScript(), (line) => this.emit(sessionId, 'log', line))
       this.emit(sessionId, 'done', '安装命令已结束，正在重新连接')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -260,111 +260,12 @@ function execScript(client: Client, script: string, onLog: (line: string) => voi
   })
 }
 
-/** 用现有 SSH 登录安装 SFTP。sshd 会在同一端口上拉起子系统，不需要新端口。 */
-const INSTALL_SFTP = `
-set -e
-echo "开始安装 SFTP，使用当前 SSH 连接，不另开端口"
-echo "用户 $(id -un) uid=$(id -u)"
-run() {
-  if [ "$(id -u)" -eq 0 ]; then
-    "$@"
-  else
-    sudo -n "$@"
-  fi
+/** 安装脚本在 resources 里。开发时读项目目录，打包后读安装目录。 */
+function installScript(): string {
+  const packaged = join(process.resourcesPath, 'install-sftp.sh')
+  const file = app.isPackaged && existsSync(packaged) ? packaged : join(app.getAppPath(), 'resources', 'install-sftp.sh')
+  return readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 }
-export DEBIAN_FRONTEND=noninteractive
-if command -v apt-get >/dev/null 2>&1; then
-  echo "使用 apt-get 安装 openssh-sftp-server"
-  run apt-get update -qq
-  run apt-get install -y -qq openssh-sftp-server
-elif command -v dnf >/dev/null 2>&1; then
-  echo "使用 dnf 安装 openssh-server"
-  run dnf install -y openssh-server
-elif command -v yum >/dev/null 2>&1; then
-  echo "使用 yum 安装 openssh-server"
-  run yum install -y openssh-server
-elif command -v apk >/dev/null 2>&1; then
-  echo "使用 apk 安装 openssh-sftp-server"
-  run apk add --no-cache openssh-sftp-server
-elif command -v zypper >/dev/null 2>&1; then
-  echo "使用 zypper 安装 openssh"
-  run zypper --non-interactive install openssh
-elif command -v pacman >/dev/null 2>&1; then
-  echo "使用 pacman 安装 openssh"
-  run pacman -Sy --noconfirm openssh
-else
-  echo "找不到包管理器，无法安装 SFTP" >&2
-  exit 1
-fi
-if ! command -v sshd >/dev/null 2>&1; then
-  echo "没有 sshd，无法改子系统"
-  exit 1
-fi
-target=$(sshd -T 2>/dev/null | awk 'tolower($1)=="subsystem" && tolower($2)=="sftp" { print $3; exit }')
-echo "当前 SFTP 子系统: \${target:-未配置}"
-if [ "$target" = "internal-sftp" ]; then
-  echo "已经是 sshd 内置 SFTP，但启动仍然失败"
-  exit 1
-fi
-if [ -n "$target" ] && [ -x "$target" ]; then
-  echo "子系统程序存在: $target"
-  exit 0
-fi
-if [ -n "$target" ]; then
-  echo "子系统程序不存在: $target"
-  ls -l "$target" 2>&1 || true
-fi
-found=""
-for p in /usr/libexec/openssh/sftp-server /usr/lib/openssh/sftp-server /usr/lib/ssh/sftp-server; do
-  if [ -x "$p" ]; then
-    found=$p
-    break
-  fi
-done
-use=internal-sftp
-if [ -n "$found" ]; then
-  use=$found
-  echo "改用已有程序: $found"
-else
-  echo "改用 sshd 内置 internal-sftp"
-fi
-cfg=/etc/ssh/sshd_config
-if [ ! -w "$cfg" ]; then
-  echo "无法写入 $cfg"
-  exit 1
-fi
-comment_sftp() {
-  f=$1
-  if [ ! -f "$f" ] || [ ! -w "$f" ]; then
-    return 0
-  fi
-  sed -i.termpilot.bak -E 's/^([[:space:]]*)[Ss]ubsystem[[:space:]]+[sS][fF][tT][pP][[:space:]].*/# termpilot: &/' "$f"
-}
-comment_sftp "$cfg"
-if [ -d /etc/ssh/sshd_config.d ]; then
-  for f in /etc/ssh/sshd_config.d/*.conf; do
-    [ -f "$f" ] || continue
-    comment_sftp "$f"
-  done
-fi
-printf '\\nSubsystem sftp %s\\n' "$use" >> "$cfg"
-if ! sshd -t >/dev/null 2>&1; then
-  echo "sshd 配置无效，正在还原"
-  for f in /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf; do
-    [ -f "$f.termpilot.bak" ] || continue
-    mv "$f.termpilot.bak" "$f"
-  done
-  exit 1
-fi
-rm -f /etc/ssh/sshd_config.termpilot.bak /etc/ssh/sshd_config.d/*.conf.termpilot.bak
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl reload sshd >/dev/null 2>&1 || systemctl reload ssh >/dev/null 2>&1 || true
-fi
-if [ -f /var/run/sshd.pid ]; then
-  kill -HUP "$(cat /var/run/sshd.pid)" >/dev/null 2>&1 || true
-fi
-echo "已重载 sshd，SFTP 子系统改为 $use"
-`
 
 function realpath(sftp: SFTPWrapper, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
