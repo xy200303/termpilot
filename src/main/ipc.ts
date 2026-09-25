@@ -72,9 +72,13 @@ export function registerIpc(
     terminal.resize(termId, cols, rows)
   )
 
-  ipcMain.on(IPC.termLabel, (_e, termId: string, title: string) => {
-    if (typeof termId !== 'string' || typeof title !== 'string') return
-    terminal.setLabel(termId, { title })
+  ipcMain.on(IPC.termLabel, (_e, termId: string, patch: unknown) => {
+    if (typeof termId !== 'string' || !patch || typeof patch !== 'object') return
+    const body = patch as { title?: unknown; remark?: unknown }
+    terminal.setLabel(termId, {
+      ...(typeof body.title === 'string' ? { title: body.title } : {}),
+      ...(typeof body.remark === 'string' ? { remark: body.remark } : {})
+    })
   })
 
   ipcMain.on(IPC.termClose, (_e, termId: string) => {

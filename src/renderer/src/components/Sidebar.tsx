@@ -19,9 +19,9 @@ import {
 } from '@/components/ui/context-menu'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useAppStore } from '../stores/useAppStore'
-import { connectionAgentPrompt, copyAgentPrompt, termAgentPrompt, windowLabel } from '../agentPrompt'
+import { connectionAgentPrompt, copyAgentPrompt, termAgentPrompt } from '../agentPrompt'
 import { hostKeyOf } from '../../../shared/host-key'
-import { RenameInput } from './RenameInput'
+import { openAfterMenu, RemarkDialog } from './RemarkDialog'
 
 const REPO_URL = 'https://github.com/xy200303/termpilot'
 
@@ -41,7 +41,7 @@ function GithubMark() {
 }
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
 const noDrag = { WebkitAppRegion: 'no-drag' } as CSSProperties
-import type { ConnectMode, SessionConfig } from '../../../shared/types'
+import type { ConnectMode, SessionConfig, Tab } from '../../../shared/types'
 import { FileTree } from './FileTree'
 
 /**
@@ -222,13 +222,6 @@ function LocalRoot() {
   const toggleGroup = useAppStore((s) => s.toggleGroup)
   const openLocalTab = useAppStore((s) => s.openLocalTab)
   const tabs = useAppStore((s) => s.tabs)
-  const activeTabId = useAppStore((s) => s.activeTabId)
-  const termState = useAppStore((s) => s.termState)
-  const setActiveTab = useAppStore((s) => s.setActiveTab)
-  const closeTab = useAppStore((s) => s.closeTab)
-  const setNotice = useAppStore((s) => s.setNotice)
-  const renameTab = useAppStore((s) => s.renameTab)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
   const locals = tabs.filter((tab) => tab.kind === 'local')
 
   return (
@@ -237,40 +230,9 @@ function LocalRoot() {
         <SectionHead icon={<TerminalSquare />} title="本机终端" actionTitle="新建本机终端" onAdd={openLocalTab} />
         <CollapsibleContent>
           <SidebarGroupContent className="grid gap-0.5">
-            {locals.map((tab) =>
-              renamingId === tab.id ? (
-                <RenameInput
-                  key={tab.id}
-                  initial={tab.title}
-                  className="mx-2 h-7 text-xs"
-                  onCommit={(value) => {
-                    setRenamingId(null)
-                    renameTab(tab.id, value)
-                  }}
-                  onCancel={() => setRenamingId(null)}
-                />
-              ) : (
-                <ContextMenu key={tab.id}>
-                  <ContextMenuTrigger asChild>
-                    <TreeRow
-                      depth={1}
-                      label={windowLabel(tab.title)}
-                      active={tab.id === activeTabId}
-                      live={termState[tab.id]?.status === 'connected'}
-                      onClick={() => setActiveTab(tab.id)}
-                    />
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    <ContextMenuItem onClick={() => void copyAgentPrompt(termAgentPrompt(tab, null), setNotice)}>
-                      复制为 Agent 提示词
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => setRenamingId(tab.id)}>重命名</ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              )
-            )}
+            {locals.map((tab) => (
+              <TermRow key={tab.id} tab={tab} session={null} depth={1} />
+            ))}
           </SidebarGroupContent>
         </CollapsibleContent>
       </SidebarGroup>
@@ -303,48 +265,47 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
 
   return (
     <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
-      <div className="group/host flex items-center" style={{ paddingLeft: props.depth * CONNECT_INDENT }}>
-        {editingNote ? (
-          <RenameInput
-            initial={note}
-            placeholder="这台机器是干什么的"
-            className="h-7 min-w-0 flex-1 text-xs"
-            onCommit={(value) => {
-              setEditingNote(false)
-              const next = value.trim()
-              if (next !== note) void setHostNote(props.hostKey, next)
-            }}
-            onCancel={() => setEditingNote(false)}
-          />
-        ) : (
-          <ContextMenu>
-            <ContextMenuTrigger asChild>
-              <CollapsibleTrigger
-                title={note || undefined}
-                className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              >
-                <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />
-                <Server className="size-3.5 shrink-0" />
-                <span className="truncate">{note || props.host}</span>
-                {note ? (
-                  <span className="max-w-28 shrink-0 truncate text-[11px] text-muted-foreground">{props.host}</span>
-                ) : null}
-              </CollapsibleTrigger>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem onClick={() => setEditingNote(true)}>备注</ContextMenuItem>
-              <ContextMenuItem
-                variant="destructive"
-                onClick={() => {
-                  for (const session of props.sessions) void deleteSession(session.id)
-                }}
-              >
-                删除
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        )}
+      <div className="group/host flex items-center" style={{ paddingLeft: props.depth * TREE_STEP }}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <CollapsibleTrigger
+              title={note || undefined}
+              className="flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md pr-1 text-[13px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />
+              <Server className="size-3.5 shrink-0" />
+              <span className="truncate">{note || props.host}</span>
+              {note ? (
+                <span className="max-w-28 shrink-0 truncate text-[11px] text-muted-foreground">{props.host}</span>
+              ) : null}
+            </CollapsibleTrigger>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => openAfterMenu(() => setEditingNote(true))}>备注</ContextMenuItem>
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() => {
+                for (const session of props.sessions) void deleteSession(session.id)
+              }}
+            >
+              删除
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       </div>
+      <RemarkDialog
+        open={editingNote}
+        title="备注"
+        description={`给「${props.host}」写一句，方便以后认出它。留空就是清掉。`}
+        initial={note}
+        placeholder="这台机器是干什么的"
+        onOpenChange={setEditingNote}
+        onSave={(value) => {
+          setEditingNote(false)
+          const next = value.trim()
+          if (next !== note) void setHostNote(props.hostKey, next)
+        }}
+      />
       <CollapsibleContent className="grid gap-0.5">
         {props.sessions.map((session) => (
           <SessionNode key={session.id} session={session} depth={props.depth + 1} />
@@ -361,19 +322,16 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   const listener = useAppStore((s) => s.listeners[session.id])
   const tabs = useAppStore((s) => s.tabs)
   const activeTabId = useAppStore((s) => s.activeTabId)
-  const termState = useAppStore((s) => s.termState)
   const selectedId = useAppStore((s) => s.selectedSessionId)
   const openSessionTab = useAppStore((s) => s.openSessionTab)
-  const setActiveTab = useAppStore((s) => s.setActiveTab)
   const setEditing = useAppStore((s) => s.setEditing)
   const deleteSession = useAppStore((s) => s.deleteSession)
   const duplicateSessions = useAppStore((s) => s.duplicateSessions)
   const toggleListen = useAppStore((s) => s.toggleListen)
   const selectSession = useAppStore((s) => s.selectSession)
-  const closeTab = useAppStore((s) => s.closeTab)
-  const renameTab = useAppStore((s) => s.renameTab)
+  const setSessionRemark = useAppStore((s) => s.setSessionRemark)
   const setNotice = useAppStore((s) => s.setNotice)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [editingRemark, setEditingRemark] = useState(false)
   const key = `session:${session.id}`
   const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
   const toggleGroup = useAppStore((s) => s.toggleGroup)
@@ -401,8 +359,8 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           <TreeRow
             depth={props.depth}
             label={session.name}
+            hint={remark}
             meta={meta}
-            title={remark || undefined}
             active={active}
             live={live}
             open={open}
@@ -428,6 +386,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           >
             {isReverse ? '复制这条连接' : '新开一扇终端'}
           </ContextMenuItem>
+          <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>备注</ContextMenuItem>
           <ContextMenuItem onClick={() => setEditing({ action: 'edit', session })}>编辑</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onClick={() => deleteSession(session.id)}>
@@ -435,47 +394,89 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-      {open &&
-        nested.map((tab) =>
-          renamingId === tab.id ? (
-            <RenameInput
-              key={tab.id}
-              initial={tab.title}
-              className="mx-2 h-7 text-xs"
-              onCommit={(value) => {
-                setRenamingId(null)
-                renameTab(tab.id, value)
-              }}
-              onCancel={() => setRenamingId(null)}
-            />
-          ) : (
-            <ContextMenu key={tab.id}>
-              <ContextMenuTrigger asChild>
-                <TreeRow
-                  depth={props.depth + 1}
-                  label={windowLabel(tab.title, session.name)}
-                  active={tab.id === activeTabId}
-                  live={termState[tab.id]?.status === 'connected' || tab.kind === 'reverse'}
-                  onClick={() => setActiveTab(tab.id)}
-                />
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onClick={() => void copyAgentPrompt(termAgentPrompt(tab, session), setNotice)}>
-                  复制为 Agent 提示词
-                </ContextMenuItem>
-                <ContextMenuItem onClick={() => setRenamingId(tab.id)}>重命名</ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
-          )
-        )}
+      <RemarkDialog
+        open={editingRemark}
+        title="备注"
+        description={`给「${session.name}」写一句，方便以后认出它。留空就是清掉。`}
+        initial={remark}
+        placeholder="这条连接是干什么的"
+        onOpenChange={setEditingRemark}
+        onSave={(value) => {
+          setEditingRemark(false)
+          void setSessionRemark(session, value)
+        }}
+      />
+      {open && nested.map((tab) => <TermRow key={tab.id} tab={tab} session={session} depth={props.depth + 1} />)}
     </div>
   )
 }
 
-/** 连接树每级只缩进 8px，和文件树一致。没有箭头的行不再留空位。 */
-const CONNECT_INDENT = 8
+function TermRow(props: { tab: Tab; session: SessionConfig | null; depth: number }) {
+  const tab = props.tab
+  const activeTabId = useAppStore((s) => s.activeTabId)
+  const termState = useAppStore((s) => s.termState)
+  const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const closeTab = useAppStore((s) => s.closeTab)
+  const renameTab = useAppStore((s) => s.renameTab)
+  const setTabRemark = useAppStore((s) => s.setTabRemark)
+  const setNotice = useAppStore((s) => s.setNotice)
+  const [renaming, setRenaming] = useState(false)
+  const [editingRemark, setEditingRemark] = useState(false)
+  const remark = tab.remark?.trim() ?? ''
+
+  return (
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <TreeRow
+            depth={props.depth}
+            label={tab.title}
+            hint={remark}
+            active={tab.id === activeTabId}
+            live={termState[tab.id]?.status === 'connected' || tab.kind === 'reverse'}
+            onClick={() => setActiveTab(tab.id)}
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => void copyAgentPrompt(termAgentPrompt(tab, props.session), setNotice)}>
+            复制为 Agent 提示词
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => openAfterMenu(() => setRenaming(true))}>重命名</ContextMenuItem>
+          <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>备注</ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <RemarkDialog
+        open={renaming}
+        title="重命名"
+        description={`给「${tab.title}」换个名字。`}
+        initial={tab.title}
+        placeholder="窗口名称"
+        onOpenChange={setRenaming}
+        onSave={(value) => {
+          setRenaming(false)
+          renameTab(tab.id, value)
+        }}
+      />
+      <RemarkDialog
+        open={editingRemark}
+        title="备注"
+        description={`给「${tab.title}」写一句，方便以后认出它。留空就是清掉。`}
+        initial={remark}
+        placeholder="这扇窗口在做什么"
+        onOpenChange={setEditingRemark}
+        onSave={(value) => {
+          setEditingRemark(false)
+          setTabRemark(tab.id, value)
+        }}
+      />
+    </>
+  )
+}
+
+/** 每一级往右一截。箭头占位始终留着，没有箭头的子行才不会缩回父级左边。 */
+const TREE_STEP = 16
 
 function SectionHead(props: { icon: ReactNode; title: string; actionTitle: string; onAdd: () => void }) {
   return (
@@ -498,6 +499,7 @@ function SectionHead(props: { icon: ReactNode; title: string; actionTitle: strin
 
 function TreeRow({
   label,
+  hint,
   meta,
   active,
   live,
@@ -510,6 +512,7 @@ function TreeRow({
   ...rest
 }: {
   label: string
+  hint?: string
   meta?: string
   active?: boolean
   live?: boolean
@@ -521,14 +524,16 @@ function TreeRow({
   return (
     <div
       {...rest}
+      title={hint || undefined}
       className={cn(
-        'flex h-7 w-full items-center gap-1 rounded-md pr-2 text-[13px] hover:bg-sidebar-accent',
+        'flex w-full items-center gap-1 rounded-md pr-2 text-[13px] hover:bg-sidebar-accent',
+        hint ? 'min-h-7 py-0.5' : 'h-7',
         active && 'bg-sidebar-accent',
         className
       )}
-      style={{ paddingLeft: depth * CONNECT_INDENT, ...style }}
+      style={{ paddingLeft: depth * TREE_STEP, ...style }}
     >
-      {onToggle && (
+      {onToggle ? (
         <button
           type="button"
           className="flex size-4 shrink-0 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground"
@@ -539,6 +544,8 @@ function TreeRow({
         >
           <ChevronRight className={cn('size-3 transition-transform', open && 'rotate-90')} />
         </button>
+      ) : (
+        <span className="size-4 shrink-0" />
       )}
       <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onClick}>
         <span
@@ -547,8 +554,11 @@ function TreeRow({
             live ? 'border-primary bg-primary' : 'border-muted-foreground/50'
           )}
         />
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {meta && <span className="max-w-28 shrink-0 truncate text-[11px] text-muted-foreground">{meta}</span>}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{label}</span>
+          {hint ? <span className="block truncate text-[11px] leading-4 text-muted-foreground">{hint}</span> : null}
+        </span>
+        {meta && <span className="max-w-24 shrink-0 truncate text-[11px] text-muted-foreground">{meta}</span>}
       </button>
     </div>
   )

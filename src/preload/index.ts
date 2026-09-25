@@ -63,7 +63,8 @@ const api = {
     resize: (termId: string, cols: number, rows: number) =>
       ipcRenderer.send(IPC.termResize, termId, cols, rows),
     close: (termId: string) => ipcRenderer.send(IPC.termClose, termId),
-    label: (termId: string, title: string) => ipcRenderer.send(IPC.termLabel, termId, title),
+    label: (termId: string, patch: { title?: string; remark?: string }) =>
+      ipcRenderer.send(IPC.termLabel, termId, patch),
     onMeta: (cb: (e: TermMetaEvent) => void) => {
       const listener = (_e: Electron.IpcRendererEvent, event: TermMetaEvent) => cb(event)
       ipcRenderer.on(IPC.termMeta, listener)

@@ -7,10 +7,10 @@ import {
   ContextMenuItem,
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
-import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '../stores/useAppStore'
 import { FileIcon } from './FileIcon'
+import { openAfterMenu, RemarkDialog } from './RemarkDialog'
 import type { RemoteFile } from '../../../shared/types'
 
 type DirListing = { entries: RemoteFile[]; error?: string }
@@ -37,11 +37,12 @@ export function FileTree() {
   const [selected, setSelected] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [folderName, setFolderName] = useState<string | null>(null)
+  const [making, setMaking] = useState(false)
+  const [folderError, setFolderError] = useState('')
   const [picking, setPicking] = useState(false)
-  const [draft, setDraft] = useState('')
+  const [pathError, setPathError] = useState('')
   const [renaming, setRenaming] = useState<RemoteFile | null>(null)
-  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState('')
   const openRemoteEditor = useAppStore((s) => s.openRemoteEditor)
 
   const sessionId = forward?.id ?? null
@@ -64,6 +65,7 @@ export function FileTree() {
     try {
       await showRoot(id, path)
       setPicking(false)
+      setPathError('')
     } catch (e) {
       if (fallback && path !== '.') {
         try {
@@ -78,6 +80,7 @@ export function FileTree() {
         }
       }
       setError(sftpMessage(e))
+      setPathError(sftpMessage(e))
     } finally {
       setBusy(false)
     }
@@ -91,7 +94,8 @@ export function FileTree() {
     setSelected(null)
     setError('')
     setPicking(false)
-    setFolderName(null)
+    setMaking(false)
+    setRenaming(null)
     if (!sessionId) return
     const saved = readRoot(sessionId)
     void loadRoot(sessionId, saved || '.', Boolean(saved))
@@ -152,26 +156,28 @@ export function FileTree() {
     return parentDir(path) ?? root
   }
 
-  const commitRename = async () => {
+  const commitRename = async (raw: string) => {
     if (!renaming) return
-    const name = renameValue.trim()
+    const name = raw.trim()
     if (!name || name.includes('/') || name.includes('\\')) {
-      setError('名称不能为空，也不能包含斜杠')
+      setRenameError('名称不能为空，也不能包含斜杠')
       return
     }
     if (name === renaming.name) {
       setRenaming(null)
+      setRenameError('')
       return
     }
     const slash = renaming.path.lastIndexOf('/')
-    const to =
-      slash < 0 ? name : slash === 0 ? `/${name}` : `${renaming.path.slice(0, slash)}/${name}`
+    const to = slash < 0 ? name : slash === 0 ? `/${name}` : `${renaming.path.slice(0, slash)}/${name}`
+    const parent = parentDir(renaming.path) ?? root
     try {
       await window.api.sftp.rename(forward.id, renaming.path, to)
       setRenaming(null)
-      await listInto(parentDir(renaming.path) ?? root)
+      setRenameError('')
+      await listInto(parent)
     } catch (e) {
-      setError(sftpMessage(e))
+      setRenameError(sftpMessage(e))
     }
   }
 
@@ -208,16 +214,20 @@ export function FileTree() {
     }
   }
 
-  const mkdir = async () => {
-    const name = folderName?.trim()
-    if (!name) return
+  const mkdir = async (raw: string) => {
+    const name = raw.trim()
+    if (!name || name.includes('/') || name.includes('\\')) {
+      setFolderError('名称不能为空，也不能包含斜杠')
+      return
+    }
     const dest = directoryOf(selected)
     try {
       await window.api.sftp.mkdir(forward.id, dest, name)
-      setFolderName(null)
+      setMaking(false)
+      setFolderError('')
       await ensureOpen(dest)
     } catch (e) {
-      setError(sftpMessage(e))
+      setFolderError(sftpMessage(e))
     }
   }
 
@@ -255,28 +265,7 @@ export function FileTree() {
       const listing = cache[item.path]
       return (
         <Fragment key={item.path}>
-          {renaming?.path === item.path ? (
-            <form
-              className="px-2 py-0.5"
-              style={{ paddingLeft: depth * TREE_INDENT }}
-              onSubmit={(e) => {
-                e.preventDefault()
-                void commitRename()
-              }}
-            >
-              <Input
-                autoFocus
-                value={renameValue}
-                className="h-6 text-xs"
-                placeholder="回车确认"
-                onChange={(e) => setRenameValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setRenaming(null)
-                }}
-              />
-            </form>
-          ) : (
-            <ContextMenu>
+          <ContextMenu>
               <ContextMenuTrigger asChild>
                 <div
                   role="treeitem"
@@ -327,10 +316,12 @@ export function FileTree() {
                   </ContextMenuItem>
                 )}
                 <ContextMenuItem
-                  onClick={() => {
-                    setRenaming(item)
-                    setRenameValue(item.name)
-                  }}
+                  onClick={() =>
+                    openAfterMenu(() => {
+                      setRenameError('')
+                      setRenaming(item)
+                    })
+                  }
                 >
                   <Pencil /> 重命名
                 </ContextMenuItem>
@@ -344,7 +335,6 @@ export function FileTree() {
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
-          )}
           {expanded && (
             <div>
               {loading[item.path] && !listing && (
@@ -382,12 +372,8 @@ export function FileTree() {
           title="打开目录"
           aria-expanded={picking}
           onClick={() => {
-            setFolderName(null)
-            setPicking((open) => {
-              if (open) return false
-              setDraft(root === '.' ? '/' : root)
-              return true
-            })
+            setPathError('')
+            setPicking(true)
           }}
         >
           <FolderInput />
@@ -397,7 +383,15 @@ export function FileTree() {
         </Button>
         {!unsupported && (
           <>
-            <Button variant="ghost" size="icon-sm" title="新建文件夹" onClick={() => setFolderName('')}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title="新建文件夹"
+              onClick={() => {
+                setFolderError('')
+                setMaking(true)
+              }}
+            >
               <FolderPlus />
             </Button>
             <Button variant="ghost" size="icon-sm" title="上传" disabled={busy} onClick={() => void upload()}>
@@ -410,52 +404,6 @@ export function FileTree() {
         <Hint text="这台机器没有 SFTP。已经试过在当前 SSH 连接里安装。需要 root 或免密 sudo，并且机器能访问软件源。不需要另开端口。" />
       ) : (
         <>
-          {picking && (
-            <form
-              className="flex gap-1 px-2 pb-1"
-              onSubmit={(e) => {
-                e.preventDefault()
-                const path = draft.trim()
-                if (!path) return
-                void loadRoot(forward.id, path)
-              }}
-            >
-              <Input
-                autoFocus
-                value={draft}
-                placeholder="/root 或 /home"
-                title="远程绝对路径"
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setPicking(false)
-                }}
-                className="h-7 font-mono text-xs"
-              />
-              <Button type="submit" size="sm" disabled={busy || draft.trim() === ''}>
-                打开
-              </Button>
-            </form>
-          )}
-          {folderName !== null && (
-            <form
-              className="flex gap-1 px-2 pb-1"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void mkdir()
-              }}
-            >
-              <Input
-                autoFocus
-                value={folderName}
-                placeholder="文件夹名"
-                onChange={(e) => setFolderName(e.target.value)}
-                className="h-7"
-              />
-              <Button type="submit" size="sm">
-                创建
-              </Button>
-            </form>
-          )}
           {busy && entries.length === 0 && !error && (
             <Hint text="正在通过当前 SSH 连接准备 SFTP，不会另开端口。" />
           )}
@@ -491,11 +439,12 @@ export function FileTree() {
                     </ContextMenuItem>
                   )}
                   <ContextMenuItem
-                    onClick={() => {
-                      setFolderName(null)
-                      setDraft(root === '.' ? '/' : root)
-                      setPicking(true)
-                    }}
+                    onClick={() =>
+                      openAfterMenu(() => {
+                        setPathError('')
+                        setPicking(true)
+                      })
+                    }
                   >
                     <FolderInput /> 打开其他目录
                   </ContextMenuItem>
@@ -515,6 +464,59 @@ export function FileTree() {
           </ScrollArea>
         </>
       )}
+      <RemarkDialog
+        open={renaming !== null}
+        title="重命名"
+        description={renaming ? `给「${renaming.name}」换个名字。` : ''}
+        initial={renaming?.name ?? ''}
+        placeholder="新的名称"
+        error={renameError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRenaming(null)
+            setRenameError('')
+          }
+        }}
+        onSave={(value) => void commitRename(value)}
+      />
+      <RemarkDialog
+        open={making}
+        title="新建文件夹"
+        description="在当前目录新建一个文件夹。"
+        initial=""
+        placeholder="文件夹名"
+        error={folderError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMaking(false)
+            setFolderError('')
+          }
+        }}
+        onSave={(value) => void mkdir(value)}
+      />
+      <RemarkDialog
+        open={picking}
+        title="打开目录"
+        description="填写这台机器上的目录。"
+        initial={root === '.' ? '/' : root}
+        placeholder="/root 或 /home"
+        error={pathError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPicking(false)
+            setPathError('')
+          }
+        }}
+        onSave={(value) => {
+          const path = value.trim()
+          if (!path) {
+            setPathError('目录不能为空')
+            return
+          }
+          setPathError('')
+          void loadRoot(forward.id, path)
+        }}
+      />
     </div>
   )
 }

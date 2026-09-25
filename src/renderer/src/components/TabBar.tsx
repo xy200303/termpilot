@@ -11,10 +11,10 @@ import {
 } from '@/components/ui/context-menu'
 import { cn } from '@/lib/utils'
 import { copyAgentPrompt, termAgentPrompt, windowLabel } from '../agentPrompt'
+import { openAfterMenu, RemarkDialog } from './RemarkDialog'
 import { useAppStore } from '../stores/useAppStore'
 import { captureTerminalView, type CaptureDone } from '../terminal/captureView'
 import { CaptureDialog } from './CaptureDialog'
-import { RenameInput } from './RenameInput'
 
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
 
@@ -32,10 +32,12 @@ export function TabBar() {
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const closeTab = useAppStore((s) => s.closeTab)
   const renameTab = useAppStore((s) => s.renameTab)
+  const setTabRemark = useAppStore((s) => s.setTabRemark)
   const setNotice = useAppStore((s) => s.setNotice)
   const [shot, setShot] = useState<CaptureDone | null>(null)
   const [shotError, setShotError] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [remarkingId, setRemarkingId] = useState<string | null>(null)
 
   const shoot = (mode: 'viewport' | 'scrollback') => {
     if (!activeTabId) return
@@ -62,20 +64,6 @@ export function TabBar() {
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {tabs.map((t) => {
           const active = t.id === activeTabId
-          if (renamingId === t.id) {
-            return (
-              <RenameInput
-                key={t.id}
-                initial={t.title}
-                className="h-7 w-40 text-xs"
-                onCommit={(value) => {
-                  setRenamingId(null)
-                  renameTab(t.id, value)
-                }}
-                onCancel={() => setRenamingId(null)}
-              />
-            )
-          }
           const session = sessions.find((item) => item.id === t.sessionId) ?? null
           return (
             <ContextMenu key={t.id}>
@@ -84,6 +72,7 @@ export function TabBar() {
                   variant={active ? 'secondary' : 'ghost'}
                   size="sm"
                   className="max-w-48"
+                  title={t.remark?.trim() || undefined}
                   onClick={() => setActiveTab(t.id)}
                   onDoubleClick={(event) => {
                     event.preventDefault()
@@ -110,7 +99,8 @@ export function TabBar() {
                 >
                   复制为 Agent 提示词
                 </ContextMenuItem>
-                <ContextMenuItem onClick={() => setRenamingId(t.id)}>重命名</ContextMenuItem>
+                <ContextMenuItem onClick={() => openAfterMenu(() => setRenamingId(t.id))}>重命名</ContextMenuItem>
+                <ContextMenuItem onClick={() => openAfterMenu(() => setRemarkingId(t.id))}>备注</ContextMenuItem>
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={() => closeTab(t.id)}>关闭</ContextMenuItem>
               </ContextMenuContent>
@@ -137,6 +127,30 @@ export function TabBar() {
         <GalleryVertical />
       </Button>
     </div>
+    <RemarkDialog
+      open={renamingId !== null}
+      title="重命名"
+      description={`给「${tabs.find((tab) => tab.id === renamingId)?.title ?? ''}」换个名字。`}
+      initial={tabs.find((tab) => tab.id === renamingId)?.title ?? ''}
+      placeholder="窗口名称"
+      onOpenChange={(open) => !open && setRenamingId(null)}
+      onSave={(value) => {
+        if (renamingId) renameTab(renamingId, value)
+        setRenamingId(null)
+      }}
+    />
+    <RemarkDialog
+      open={remarkingId !== null}
+      title="备注"
+      description={`给「${tabs.find((tab) => tab.id === remarkingId)?.title ?? ''}」写一句，方便以后认出它。留空就是清掉。`}
+      initial={tabs.find((tab) => tab.id === remarkingId)?.remark ?? ''}
+      placeholder="这扇窗口在做什么"
+      onOpenChange={(open) => !open && setRemarkingId(null)}
+      onSave={(value) => {
+        if (remarkingId) setTabRemark(remarkingId, value)
+        setRemarkingId(null)
+      }}
+    />
     <CaptureDialog
       shot={shot}
       error={shotError}

@@ -6,14 +6,9 @@ export function windowLabel(title: string, connectionName?: string | null): stri
   return `${connectionName} · ${title}`
 }
 
-/** 右键一条连接。调用只认编号，名称和备注用来认出它。 */
+/** 右键一条连接。只写这条连接本身的事实。 */
 export function connectionAgentPrompt(session: SessionConfig): string {
-  const lines = [
-    '请用 TermPilot 打开这条连接。connection_open 的 connection 只填下面的编号。',
-    '',
-    `编号：${session.publicId}`,
-    `名称：${session.name}`
-  ]
+  const lines = [`编号：${session.publicId}`, `名称：${session.name}`]
   if (session.mode === 'reverse') {
     lines.push('类型：反向监听')
     if (session.listenPort) lines.push(`本机端口：${session.listenPort}`)
@@ -24,24 +19,17 @@ export function connectionAgentPrompt(session: SessionConfig): string {
     if (session.jumpHost) lines.push('经跳板')
   }
   if (session.remark?.trim()) lines.push(`备注：${session.remark.trim()}`)
-  lines.push('名称和备注只帮助你认出这条连接，不能拿去当参数。备注若是空的，弄清它是干什么的之后用 connection_update 写上一句。')
   return lines.join('\n')
 }
 
-/** 右键一扇已经打开的终端。 */
+/** 右键一扇终端。只写这扇终端和它所属连接的事实。 */
 export function termAgentPrompt(tab: Tab, session: SessionConfig | null): string {
-  const lines = [
-    '请用 TermPilot 接着使用这扇已经打开的终端，不要新开。term_exec 等工具的 termId 只填下面的编号。',
-    '',
-    `终端：${tab.id}`,
-    `标题：${tab.title}`
-  ]
+  const lines = [`终端：${tab.id}`, `标题：${tab.title}`]
   if (tab.remark?.trim()) lines.push(`备注：${tab.remark.trim()}`)
   if (session) {
     lines.push(`所属连接：${session.publicId}`, `连接名称：${session.name}`)
     if (session.remark?.trim()) lines.push(`连接备注：${session.remark.trim()}`)
   }
-  lines.push('标题和备注只帮助你认出这扇终端。备注若是空的，弄清它在做什么之后用 term_update 写上一句。')
   return lines.join('\n')
 }
 

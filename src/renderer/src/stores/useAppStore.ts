@@ -96,6 +96,8 @@ interface AppState {
   openLocalTab: () => void
   closeTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
+  setTabRemark: (tabId: string, remark: string) => void
+  setSessionRemark: (session: SessionConfig, remark: string) => Promise<void>
   setActiveTab: (tabId: string) => void
   toggleListen: (session: SessionConfig) => Promise<void>
   /** 主进程终端状态事件入口（App 中订阅一次） */
@@ -331,7 +333,35 @@ export const useAppStore = create<AppState>((set, get) => ({
     const name = title.replace(/\s+/g, ' ').trim().slice(0, 80)
     if (!name) return
     set({ tabs: get().tabs.map((tab) => (tab.id === tabId ? { ...tab, title: name } : tab)) })
-    window.api.term.label(tabId, name)
+    window.api.term.label(tabId, { title: name })
+  },
+
+  setTabRemark: (tabId, remark) => {
+    const text = remark.replace(/\s+/g, ' ').trim().slice(0, 200)
+    set({ tabs: get().tabs.map((tab) => (tab.id === tabId ? { ...tab, remark: text } : tab)) })
+    window.api.term.label(tabId, { remark: text })
+  },
+
+  setSessionRemark: async (session, remark) => {
+    const text = remark.replace(/\s+/g, ' ').trim().slice(0, 200)
+    if (text === (session.remark ?? '').trim()) return
+    await window.api.sessions.update(session.id, {
+      name: session.name,
+      group: session.group,
+      mode: session.mode,
+      host: session.host,
+      port: session.port,
+      username: session.username,
+      authType: session.authType,
+      keyPath: session.keyPath,
+      listenPort: session.listenPort,
+      remark: text,
+      jumpHost: session.jumpHost ?? '',
+      jumpPort: session.jumpPort,
+      jumpUsername: session.jumpUsername,
+      sshOptions: session.sshOptions
+    })
+    await get().loadSessions()
   },
 
   closeTab: (tabId) => {
