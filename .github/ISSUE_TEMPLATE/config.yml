@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞
+    url: https://github.com/xy200303/termpilot/security/advisories/new
+    about: 可被利用的漏洞请私下报告，不要开公开 Issue。

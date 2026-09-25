@@ -1,0 +1,23 @@
+name: 功能
+description: 提议一项新能力或体验改进
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: 请先说明要解决的问题，再写建议做法。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 当前哪一步做不到，或哪里容易误用
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议
+      description: 希望用户或 Agent 最终看到什么结果
+    validations:
+      required: true

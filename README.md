@@ -8,7 +8,7 @@
 
 **你的终端，助手可以接着用。**
 
-登录远程电脑用的窗口。账号存在本机，你在这里登上去，助手继续操作这个还没断开的会话。
+本机 SSH 终端。凭据保存在本机。用户在窗口中登录后，Agent 继续操作同一条未断开的会话。
 
 <a href="https://github.com/xy200303/termpilot/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/xy200303/termpilot?style=flat-square"></a>
 <img alt="Windows" src="https://img.shields.io/badge/-Windows-blue?style=flat-square&logo=windows&logoColor=white">
@@ -27,48 +27,50 @@ Windows · macOS · Linux
 </tr>
 </table>
 
-## 从登录到下一条命令
+## 会话模型
 
-对比的是同一次操作会停在哪，不是功能清单。
+下表比较同一次操作的中断点，不是功能清单。
 
-| | 登录 | 跑到一半要输入 | 接着做下一件 |
+| | 登录 | 中途需要输入 | 继续下一步 |
 | --- | --- | --- | --- |
-| 你自己的远程终端 | 你在软件里输入密码 | 菜单、安装向导、sudo 密码都只有你能碰 | 会话还在，助手进不了这个窗口 |
-| 助手自己去连 | 它要拿到密码或私钥 | 这次调用结束，提示已经不在了 | 经常重新连接，目录和正在跑的程序对不上 |
-| TermPilot | 你在窗口里登录，口令留在本机 | 助手的下一次按键打进当前画面，你看得到 | 还是这个终端，不用再连一次 |
+| 独立远程终端 | 用户在软件中输入密码 | 菜单、安装向导和 sudo 密码只由用户操作 | 会话仍在，Agent 不能进入该窗口 |
+| Agent 自行连接 | Agent 需要获得密码或私钥 | 本次调用结束后，提示符不再保留 | 经常重新连接，工作目录和正在运行的程序不一致 |
+| TermPilot | 用户在窗口中登录，口令留在本机 | Agent 的后续按键进入当前画面，用户可见 | 仍是同一终端，无需再次连接 |
 
-要删除或执行危险命令时，TermPilot 会先停住，等你在窗口里点允许。
+删除或执行危险命令前，TermPilot 会暂停，并在窗口中等待用户确认。
 
-## 交给助手
+## 交给 Agent
 
-先打开 TermPilot，在设置里允许助手连接。然后把下面这段话发给 Claude Code、Kimi Code、Codex、Cursor、WorkBuddy 或 CodeBuddy：
+先打开 TermPilot，在设置中启用 Agent 连接。然后将下面这段话发给 Claude Code、Kimi Code、Codex、Cursor、WorkBuddy 或 CodeBuddy：
 
 ```text
 请安装 TermPilot 配套 skill：读取 https://raw.githubusercontent.com/xy200303/termpilot/main/skills/termpilot/SKILL.md 并安装到你的用户级 skills 目录，再读取本机 TermPilot 的 mcp.json（Windows 是 %APPDATA%\TermPilot\mcp.json），只把名为 termpilot 的 MCP 注册到你自己的配置里，其它服务器不要动；完成后用这个 skill 操作 TermPilot。
 ```
 
-助手会自己装好用法说明，并接上 TermPilot。之后直接说连哪台机器、做什么就行。连接用的口令写在你电脑上的 `mcp.json`，不会放进代码仓库。
+Agent 会安装使用说明并注册 TermPilot。之后直接说明目标主机和操作。连接口令写在本机 `mcp.json` 中，不进入代码仓库。
 
-助手如果接不上，也可以直接运行 `termpilot`。窗口没开时，这条命令会先把 TermPilot 打开。用 `tools` 看有哪些，`schema` 看参数，`call` 来执行。先看文字，需要看画面时再截图。已经打开的终端会接着用，不会再新开一个。
+MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该命令会先启动 TermPilot。`tools` 列出工具，`schema` 查看参数，`call` 执行调用。优先读取文本；需要查看画面时再截图。已打开的终端继续使用，不为同一操作再打开一个。
 
 ## 功能
 
-- 用密码或私钥登录。一台机器可以存多个账号，按机器分组。没有公网地址的机器可以主动连回你的电脑，而且只接受本机连入。
-- 本机终端和远程终端排在同一行标签里。右键可以复制、截图、粘贴。有选中文字时 `Ctrl+C` 是复制，没选中时是中断当前命令；`Ctrl+V` 粘贴。
-- 远程文件按文件夹展开。双击文本就能改，`Ctrl+S` 写回服务器。
-- 可以截当前这一屏、指定的几行，或把滚过的内容接成一张长图。截的是窗口里已经显示出来的内容。
-- 在某条连接或某台服务器上右键「复制为 Agent 提示词」，把这一条发给助手。
-- 窗口颜色和终端颜色分开设置。
+- 支持密码或私钥登录。同一主机可保存多个账号，并按主机分组。无公网地址的主机可连回本机，且只接受本机连入。
+- 本机终端与远程终端使用同一行标签。右键可复制、截图和粘贴。有选中文本时 `Ctrl+C` 为复制，无选中时为中断；`Ctrl+V` 为粘贴。
+- 远程文件按目录展开。双击文本文件进行编辑，`Ctrl+S` 写回服务器。
+- 可截取当前画面、指定行，或将滚动内容合成为长图。截图内容为窗口中已经显示的画面。
+- 在连接或终端上右键「复制为 Agent 提示词」，将该条事实发给 Agent。
+- 窗口配色与终端配色分开设置。
 
 ## 下载
 
-最新版在 [Releases](https://github.com/xy200303/termpilot/releases/latest)。当前是 [v0.2.0](https://github.com/xy200303/termpilot/releases/tag/v0.2.0)，安装包没有代码签名。各版改了什么见 [更新日志](CHANGELOG.md)。
+最新安装包见 [Releases](https://github.com/xy200303/termpilot/releases/latest)。安装包未做代码签名。版本说明见 [更新日志](CHANGELOG.md)。
 
 | 平台 | 文件 |
 | --- | --- |
-| Windows x64 | `TermPilot.Setup.0.2.0.exe`、`TermPilot-0.2.0-win.zip` |
-| macOS（Apple Silicon） | `TermPilot-0.2.0-arm64.dmg`、`TermPilot-0.2.0-arm64-mac.zip` |
-| Linux x64 | `TermPilot-0.2.0.AppImage`、`termpilot_0.2.0_amd64.deb` |
+| Windows x64 | `TermPilot.Setup.<version>.exe`、`TermPilot-<version>-win.zip` |
+| macOS（Apple Silicon） | `TermPilot-<version>-arm64.dmg`、`TermPilot-<version>-arm64-mac.zip` |
+| Linux x64 | `TermPilot-<version>.AppImage`、`termpilot_<version>_amd64.deb` |
+
+`<version>` 与对应 Release 的版本号一致。
 
 ## 从源码运行
 
@@ -77,15 +79,15 @@ npm install
 npm run dev
 ```
 
-会话数据库在 `%APPDATA%\TermPilot\termpilot.db`。
+会话数据库位于 `%APPDATA%\TermPilot\termpilot.db`。
 
 ```bash
 npm run typecheck
 npm run build
 ```
 
-推送到 `main` 会做类型检查和构建。打上和 `package.json` 里 `version` 一致的标签，例如 `v0.2.0`，会在 Windows、macOS、Linux 上各打一个安装包，并发到 GitHub Release。发布说明来自 [`.github/release-body.md`](.github/release-body.md)。本机只打当前系统：`npm run dist:win`、`npm run dist:mac` 或 `npm run dist:linux`。
+推送到 `main` 会执行类型检查和构建。创建与 `package.json` 中 `version` 一致的标签（例如 `v0.5.8`）后，工作流在 Windows、macOS 和 Linux 上打包，并发布到 GitHub Release。发布说明来自 [`.github/release-body.md`](.github/release-body.md)。提交说明、更新日志和开发约定见 [AGENT.md](AGENT.md)。仅构建当前系统时使用 `npm run dist:win`、`npm run dist:mac` 或 `npm run dist:linux`。
 
 ## 许可
 
-MIT
+本软件以 [MIT 协议](LICENSE) 授权。参与开发请阅读 [贡献说明](CONTRIBUTING.md)。
