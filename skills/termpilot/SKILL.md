@@ -7,7 +7,7 @@ description: >-
 
 # TermPilot
 
-TermPilot 是本机的 SSH 终端。人和 Agent 使用同一套已保存的连接。密码和私钥口令只留在 TermPilot 里，不要向用户索取，也不要写进回复。
+TermPilot 是本机 SSH 终端。用户与 Agent 使用同一套已保存连接。密码和私钥口令只保存在 TermPilot 中。不要向用户索取，也不要写入回复。
 
 ## 安装
 
@@ -46,17 +46,17 @@ termpilot call term_exec --json-file args.json --json
 
 参数可以直接写在命令后面。很长的 JSON 可以写进文件，用 `call <工具名> --json-file <路径>`；或从标准输入传，用 `--json-stdin`。加上 `--json` 时，输出是一行 `{"ok":true,"text":"..."}`，中文用 `\u` 转义。参数不是对象时，报错会带上实际收到的前 200 个字符。
 
-先看文字：`term_lines` 比截图快。截图返回的是本机图片路径，需要看画面时再读那个文件。已经有 `termId` 就接着用，不要为了同一件事再开一扇。
+优先读取文本：`term_lines` 比截图快。截图返回本机图片路径，需要查看画面时再读取该文件。已有 `termId` 时继续使用该终端。
 
 ## 操作
 
-查找只用编号。`conn-` 开头的是连接，`term-` 开头的是终端。名称和备注只用来认出「这是干什么的」，不能拿去当参数。弄清一条连接或一扇终端在做什么之后，自己写上备注：连接用 `connection_update` 的 `remark`，终端用 `term_update`。
+查找只使用编号。`conn-` 是连接，`term-` 是终端。名称和备注只用于识别，不能作为参数。确认用途后写入备注：连接使用 `connection_update` 的 `remark`，终端使用 `term_update`。
 
-先 `connection_list` 或 `term_list`。列表里带编号、名称和备注。对上之后，`connection_open`、`connection_close`、`connection_update`、`connection_delete` 和 `sftp_*` 的 `connection` 填 `conn-` 编号。`term_exec`、`term_write`、`term_read`、`term_close`、`term_lines` 和截图的 `termId` 填 `term-` 编号。
+先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号。
 
-终端关掉之前会留着。软件重启后，同一编号、备注和上次输出还在，先 `term_read` 看之前留下的记录，再决定要不要继续用这扇。没有现成终端时，才用 `connection_open` 新开一扇。`term_exec` 的命令末尾带换行。改远程文件前先确认目录；用户没有明确要求删除时，不要 `sftp_remove`，也不要在命令里使用 `rm`。危险操作会在 TermPilot 窗口里等用户点允许。
+终端在关闭前保持存在。应用重启后，同一编号、备注和上次输出仍在。`status` 不是 `connected` 时，用 `term_reconnect` 恢复这一扇，不要再 `connection_open`。先用 `term_read` 查看已有记录。没有这扇终端时，才用 `connection_open` 新开。`term_exec` 的命令以换行结束。修改远程文件前先确认目录。用户未明确要求删除时，不调用 `sftp_remove`，也不在命令中使用 `rm`。危险操作在 TermPilot 窗口中等待用户确认。
 
-可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_write`、`term_read`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`。
+可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`。
 
 要截指定行时，先 `term_lines` 看行号（不填范围就是当前画面），再把 `startLine` 和 `endLine` 传给 `term_screenshot`。两端都包含，返回的是这一段已经裁好的一张图，不要自己按像素裁。整段历史才用 `term_screenshot_scrollback`。
 

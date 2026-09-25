@@ -39,6 +39,8 @@ interface TermEntry {
   ptyProc?: IPty
   title: string
   remark: string
+  /** 每次拨号加一。旧连接迟到的关闭事件不再拆掉新的。 */
+  liveGen: number
 }
 
 /**
@@ -93,6 +95,35 @@ export class TerminalService {
     } catch {
       /* 连接已断开时忽略 resize 错误 */
     }
+  }
+
+  /**
+   * 同一扇终端重新拨号。编号、标题、备注和已有输出都留着。
+   * 已经连着时直接返回。
+   */
+  async reconnect(termId: string): Promise<void> {
+    const term = this.terms.get(termId)
+    if (!term) throw new Error('终端不存在或已关闭')
+    if (term.kind !== 'ssh' || !term.sessionId) throw new Error('本机终端断开后不会保留，请用 term_open_local 再开一扇')
+    const session = this.storage.list().find((item) => item.id === term.sessionId)
+    if (!session) throw new Error('这条连接已经删除了')
+    if (session.mode === 'reverse') throw new Error('反向监听要在界面上点开始监听')
+    if (term.stream) return
+    if (this.lastStatus.get(termId)?.status === 'connecting') {
+      await this.waitStatus(termId, 20_000)
+      return
+    }
+    this.releaseLive(term)
+    const pending = this.waitNextStatus(termId, 20_000)
+    await this.create({
+      termId,
+      kind: 'ssh',
+      sessionId: term.sessionId,
+      title: term.title,
+      cols: 120,
+      rows: 32
+    })
+    await pending
   }
 
   /** 人关掉或助手关掉。编号不再恢复。 */
@@ -207,7 +238,7 @@ export class TerminalService {
 
   async execCommand(termId: string, command: string, timeoutMs: number): Promise<string> {
     const term = this.terms.get(termId)
-    if (!term?.stream && !term?.ptyProc) throw new Error('终端还没连上')
+    if (!term?.stream && !term?.ptyProc) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
     const before = this.output.get(termId) ?? ''
     this.input(termId, command.endsWith('\n') ? command : `${command}\n`)
     const deadline = Date.now() + timeoutMs
@@ -256,28 +287,30 @@ export class TerminalService {
       sessionId: session.id,
       kind: 'ssh',
       title: opts.title?.trim() || '窗口',
-      remark: ''
+      remark: '',
+      liveGen: 0
     }
     if (!prior) {
       this.terms.set(opts.termId, entry)
       this.persist(entry)
     }
+    const gen = this.arm(entry)
     this.sendStatus(opts.termId, session.id, 'connecting')
 
     const secret = this.storage.getSecret(session.id)
     const jumpSecret = this.storage.getJumpSecret(session.id)
     try {
       const hold = await this.sshPool.acquire(session, secret, jumpSecret)
-      if (!this.terms.has(opts.termId)) {
+      if (!this.alive(entry, gen)) {
         hold.release()
         return
       }
-      this.bindShared(entry, hold, opts)
+      this.bindShared(entry, hold, opts, gen)
       return
     } catch (error) {
-      if (!this.terms.has(opts.termId)) return
+      if (!this.alive(entry, gen)) return
       if (session.jumpHost?.trim() && isForwardDenied(error)) {
-        this.openJumpShell(entry, opts, session, secret, jumpSecret)
+        this.openJumpShell(entry, opts, session, secret, jumpSecret, gen)
         return
       }
       this.sendStatus(opts.termId, session.id, 'error', error instanceof Error ? error.message : String(error))
@@ -285,20 +318,22 @@ export class TerminalService {
   }
 
   /** 转发已经通了。shell 开在这条会话上，不再向跳板要一次连接。 */
-  private bindShared(entry: TermEntry, hold: SshHold, opts: TermCreateOptions): void {
+  private bindShared(entry: TermEntry, hold: SshHold, opts: TermCreateOptions, gen: number): void {
     const sessionId = entry.sessionId
     entry.client = hold.client
     entry.release = hold.release
     hold.client.on('error', (err) => {
+      if (!this.alive(entry, gen)) return
       this.releaseLive(entry)
       this.sendStatus(opts.termId, sessionId, 'error', err.message)
     })
     hold.client.on('close', () => {
+      if (!this.alive(entry, gen)) return
       this.releaseLive(entry)
       this.sendStatus(opts.termId, sessionId, 'disconnected')
     })
     hold.client.shell({ term: 'xterm-256color', cols: opts.cols, rows: opts.rows }, (err, stream) => {
-      if (!this.terms.has(opts.termId)) return
+      if (!this.alive(entry, gen)) return
       if (err || !stream) {
         this.sendStatus(opts.termId, sessionId, 'error', `打开 shell 失败: ${err?.message ?? '未知原因'}`)
         return
@@ -308,6 +343,7 @@ export class TerminalService {
       stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
       stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
       stream.on('close', () => {
+        if (!this.alive(entry, gen)) return
         this.releaseLive(entry)
         this.sendStatus(opts.termId, sessionId, 'disconnected')
       })
@@ -320,16 +356,19 @@ export class TerminalService {
     opts: TermCreateOptions,
     session: SessionConfig,
     secret: string | null,
-    jumpSecret: string | null
+    jumpSecret: string | null,
+    gen: number
   ): void {
     const client = new Client()
     entry.client = client
     client
       .on('error', (err) => {
+        if (!this.alive(entry, gen)) return
         this.releaseLive(entry)
         this.sendStatus(opts.termId, session.id, 'error', err.message)
       })
       .on('close', () => {
+        if (!this.alive(entry, gen)) return
         this.releaseLive(entry)
         this.sendStatus(opts.termId, session.id, 'disconnected')
       })
@@ -338,17 +377,20 @@ export class TerminalService {
         cols: opts.cols,
         rows: opts.rows,
         onJumpShell: (stream) => {
+          if (!this.alive(entry, gen)) return
           entry.stream = stream
           this.sendStatus(opts.termId, session.id, 'connected')
           stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
           stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
           stream.on('close', () => {
+            if (!this.alive(entry, gen)) return
             this.releaseLive(entry)
             this.sendStatus(opts.termId, session.id, 'disconnected')
           })
         }
       })
     } catch (e) {
+      if (!this.alive(entry, gen)) return
       this.releaseLive(entry)
       this.sendStatus(opts.termId, session.id, 'error', e instanceof Error ? e.message : String(e))
     }
@@ -375,7 +417,8 @@ export class TerminalService {
       sessionId: null,
       kind: 'local',
       title: opts.title?.trim() || '窗口',
-      remark: ''
+      remark: '',
+      liveGen: 0
     }
     if (!prior) {
       this.terms.set(opts.termId, entry)
@@ -393,8 +436,9 @@ export class TerminalService {
       entry.ptyProc = proc
       this.sendStatus(opts.termId, null, 'connected')
       proc.onData((d) => this.sendData(opts.termId, Buffer.from(d, 'utf-8')))
+      const gen = this.arm(entry)
       proc.onExit(() => {
-        if (this.parking) return
+        if (this.parking || !this.alive(entry, gen)) return
         this.sendStatus(opts.termId, null, 'disconnected')
         this.close(opts.termId)
       })
@@ -431,7 +475,8 @@ export class TerminalService {
         sessionId: saved.sessionId,
         kind: saved.kind,
         title: saved.title,
-        remark: saved.remark
+        remark: saved.remark,
+        liveGen: 0
       })
       if (saved.scrollback) this.output.set(saved.id, saved.scrollback)
       this.lastStatus.set(saved.id, {
@@ -467,6 +512,34 @@ export class TerminalService {
     const text = this.output.get(termId)
     if (text === undefined) return
     this.storage.saveTermScrollback(termId, text)
+  }
+
+  private arm(entry: TermEntry): number {
+    entry.liveGen += 1
+    return entry.liveGen
+  }
+
+  private alive(entry: TermEntry, gen: number): boolean {
+    return this.terms.get(entry.id) === entry && entry.liveGen === gen
+  }
+
+  /** 只听这次拨号之后的状态，不把上次的失败当成这次的结果。 */
+  private waitNextStatus(termId: string, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.statusListeners.delete(onStatus)
+        reject(new Error('连接超时'))
+      }, timeoutMs)
+      const onStatus = (event: TermStatusEvent) => {
+        if (event.termId !== termId) return
+        if (event.status === 'connecting') return
+        clearTimeout(timer)
+        this.statusListeners.delete(onStatus)
+        if (event.status === 'connected') resolve()
+        else reject(new Error(event.error ?? '连接失败'))
+      }
+      this.statusListeners.add(onStatus)
+    })
   }
 
   private releaseLive(term: TermEntry | undefined): void {

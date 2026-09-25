@@ -318,7 +318,6 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
 function SessionNode(props: { session: SessionConfig; depth: number }) {
   const session = props.session
   const isReverse = session.mode === 'reverse'
-  const status = useAppStore((s) => s.sessionStatus[session.id] ?? 'disconnected')
   const listener = useAppStore((s) => s.listeners[session.id])
   const tabs = useAppStore((s) => s.tabs)
   const activeTabId = useAppStore((s) => s.activeTabId)
@@ -337,7 +336,6 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   const toggleGroup = useAppStore((s) => s.toggleGroup)
 
   const nested = tabs.filter((tab) => tab.sessionId === session.id && tab.kind !== 'local')
-  const live = isReverse ? Boolean(listener?.listening) : status === 'connected'
   const account = isReverse
     ? session.listenPort
       ? `:${session.listenPort}`
@@ -362,7 +360,6 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
             hint={remark}
             meta={meta}
             active={active}
-            live={live}
             open={open}
             onToggle={nested.length > 0 ? () => toggleGroup(key) : undefined}
             onClick={() => {
@@ -417,12 +414,14 @@ function TermRow(props: { tab: Tab; session: SessionConfig | null; depth: number
   const termState = useAppStore((s) => s.termState)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const closeTab = useAppStore((s) => s.closeTab)
+  const reconnectTab = useAppStore((s) => s.reconnectTab)
   const renameTab = useAppStore((s) => s.renameTab)
   const setTabRemark = useAppStore((s) => s.setTabRemark)
   const setNotice = useAppStore((s) => s.setNotice)
   const [renaming, setRenaming] = useState(false)
   const [editingRemark, setEditingRemark] = useState(false)
   const remark = tab.remark?.trim() ?? ''
+  const down = tab.kind !== 'reverse' && (termState[tab.id]?.status === 'disconnected' || termState[tab.id]?.status === 'error')
 
   return (
     <>
@@ -443,6 +442,7 @@ function TermRow(props: { tab: Tab; session: SessionConfig | null; depth: number
           </ContextMenuItem>
           <ContextMenuItem onClick={() => openAfterMenu(() => setRenaming(true))}>重命名</ContextMenuItem>
           <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>备注</ContextMenuItem>
+          {down ? <ContextMenuItem onClick={() => reconnectTab(tab.id)}>重新连接</ContextMenuItem> : null}
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => closeTab(tab.id)}>关闭</ContextMenuItem>
         </ContextMenuContent>
@@ -476,7 +476,7 @@ function TermRow(props: { tab: Tab; session: SessionConfig | null; depth: number
 }
 
 /** 每一级往右一截。箭头占位始终留着，没有箭头的子行才不会缩回父级左边。 */
-const TREE_STEP = 16
+const TREE_STEP = 2
 
 function SectionHead(props: { icon: ReactNode; title: string; actionTitle: string; onAdd: () => void }) {
   return (
@@ -526,8 +526,7 @@ function TreeRow({
       {...rest}
       title={hint || undefined}
       className={cn(
-        'flex w-full items-center gap-1 rounded-md pr-2 text-[13px] hover:bg-sidebar-accent',
-        hint ? 'min-h-7 py-0.5' : 'h-7',
+        'flex h-7 w-full items-center gap-1 rounded-md pr-2 text-[13px] hover:bg-sidebar-accent',
         active && 'bg-sidebar-accent',
         className
       )}
@@ -548,16 +547,15 @@ function TreeRow({
         <span className="size-4 shrink-0" />
       )}
       <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onClick}>
-        <span
-          className={cn(
-            'size-1.5 shrink-0 rounded-full border',
-            live ? 'border-primary bg-primary' : 'border-muted-foreground/50'
-          )}
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate">{label}</span>
-          {hint ? <span className="block truncate text-[11px] leading-4 text-muted-foreground">{hint}</span> : null}
-        </span>
+        {live !== undefined ? (
+          <span
+            className={cn(
+              'size-1.5 shrink-0 rounded-full border',
+              live ? 'border-primary bg-primary' : 'border-muted-foreground/50'
+            )}
+          />
+        ) : null}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
         {meta && <span className="max-w-24 shrink-0 truncate text-[11px] text-muted-foreground">{meta}</span>}
       </button>
     </div>

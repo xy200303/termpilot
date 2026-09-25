@@ -31,6 +31,8 @@ export function TabBar() {
   const activeTabId = useAppStore((s) => s.activeTabId)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const closeTab = useAppStore((s) => s.closeTab)
+  const reconnectTab = useAppStore((s) => s.reconnectTab)
+  const termState = useAppStore((s) => s.termState)
   const renameTab = useAppStore((s) => s.renameTab)
   const setTabRemark = useAppStore((s) => s.setTabRemark)
   const setNotice = useAppStore((s) => s.setNotice)
@@ -101,6 +103,10 @@ export function TabBar() {
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => openAfterMenu(() => setRenamingId(t.id))}>重命名</ContextMenuItem>
                 <ContextMenuItem onClick={() => openAfterMenu(() => setRemarkingId(t.id))}>备注</ContextMenuItem>
+                {t.kind !== 'reverse' &&
+                (termState[t.id]?.status === 'disconnected' || termState[t.id]?.status === 'error') ? (
+                  <ContextMenuItem onClick={() => reconnectTab(t.id)}>重新连接</ContextMenuItem>
+                ) : null}
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={() => closeTab(t.id)}>关闭</ContextMenuItem>
               </ContextMenuContent>

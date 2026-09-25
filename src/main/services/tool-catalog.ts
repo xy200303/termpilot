@@ -69,7 +69,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_list',
-    description: '列出打开过、还没关掉的终端。重启之后编号、备注和上次输出还在，用 term_read 能看到之前留下的记录。termId 是 term- 编号。connection 是它所属连接的 conn- 编号，本机终端为空。title 和 remark 只帮助认出这扇终端，调用时只填 termId。',
+    description: '列出打开过、还没关掉的终端。status 为 connected 表示还连着，disconnected 或 error 表示已经断开。重启之后编号、备注和上次输出还在。断开时用 term_reconnect 恢复同一扇，不要再 connection_open。termId 是 term- 编号。',
     readOnly: true
   },
   {
@@ -101,6 +101,11 @@ export const TOOLS: readonly ToolDef[] = [
       termId,
       maxChars: z.number().int().min(200).max(50_000).optional().describe('最多返回多少字符，默认 8000')
     }
+  },
+  {
+    name: 'term_reconnect',
+    description: '把已经断开的终端重新连上。编号、标题、备注和上次输出都保留。已经连着时直接返回。不要为此再调用 connection_open。',
+    input: { termId }
   },
   {
     name: 'term_close',

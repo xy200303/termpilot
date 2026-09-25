@@ -95,6 +95,7 @@ interface AppState {
   openSessionTab: (session: SessionConfig, fresh?: boolean) => void
   openLocalTab: () => void
   closeTab: (tabId: string) => void
+  reconnectTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
   setTabRemark: (tabId: string, remark: string) => void
   setSessionRemark: (session: SessionConfig, remark: string) => Promise<void>
@@ -362,6 +363,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       sshOptions: session.sshOptions
     })
     await get().loadSessions()
+  },
+
+  reconnectTab: (tabId) => {
+    const tab = get().tabs.find((item) => item.id === tabId)
+    if (!tab || tab.kind === 'reverse') return
+    const status = get().termState[tabId]?.status
+    if (status === 'connected' || status === 'connecting') return
+    set({
+      activeTabId: tabId,
+      selectedSessionId: tab.sessionId ?? get().selectedSessionId,
+      activeEditorKey: null
+    })
+    window.api.term.create({
+      termId: tab.id,
+      kind: tab.kind,
+      sessionId: tab.sessionId ?? undefined,
+      title: tab.title,
+      cols: 80,
+      rows: 24
+    })
   },
 
   closeTab: (tabId) => {

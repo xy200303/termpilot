@@ -284,8 +284,10 @@ export class McpService {
         this.terminal.setLabel(termId, { remark })
         return `已写上备注`
       }
+      case 'term_reconnect':
+        return this.reconnectTerm(need(raw, 'termId'))
       case 'term_exec': {
-        const termId = this.requireTerm(need(raw, 'termId'))
+        const termId = this.requireLive(need(raw, 'termId'))
         let command = need(raw, 'command')
         if (!command.endsWith('\n')) command += '\n'
         await this.guard(command)
@@ -363,8 +365,23 @@ export class McpService {
     }
   }
 
+  private async reconnectTerm(termId: string): Promise<string> {
+    const id = this.requireTerm(termId)
+    const current = this.terminal.listTerms().find((term) => term.id === id)
+    if (current?.status === 'connected') return `终端 ${id} 已经连着。`
+    await this.terminal.reconnect(id)
+    const session = this.storage.list().find((item) => item.id === current?.sessionId)
+    return [
+      `已重新连接终端 ${id}。`,
+      session ? `连接：${session.publicId}（${session.name}）` : '',
+      '编号没变，上次输出还在。'
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
   private async writeTerm(raw: Record<string, unknown>): Promise<string> {
-    const termId = this.requireTerm(need(raw, 'termId'))
+    const termId = this.requireLive(need(raw, 'termId'))
     const keys = keyArg(raw)
     const text = textArg(raw, 'text')
     const data = textArg(raw, 'data')
@@ -599,6 +616,13 @@ export class McpService {
         status: term.status
       }
     })
+  }
+
+  private requireLive(termId: string): string {
+    const id = this.requireTerm(termId)
+    const term = this.terminal.listTerms().find((item) => item.id === id)
+    if (term?.status !== 'connected') throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
+    return id
   }
 
   private requireTerm(termId: string): string {
