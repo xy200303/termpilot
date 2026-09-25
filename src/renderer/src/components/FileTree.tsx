@@ -401,7 +401,7 @@ export function FileTree() {
         )}
       </div>
       {unsupported ? (
-        <Hint text="这台机器没有 SFTP。已经试过在当前 SSH 连接里安装。需要 root 或免密 sudo，并且机器能访问软件源。不需要另开端口。" />
+        <Hint text="内置 SFTP 没有用起来，机器上原来的文件通道也打不开。改 sshd 需要 root 或免密 sudo。" />
       ) : (
         <>
           {busy && entries.length === 0 && !error && (

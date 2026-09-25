@@ -19,7 +19,11 @@ interface LiveConn {
  */
 export class SftpService {
   private conns = new Map<string, Promise<LiveConn>>()
-  private installs = new Map<string, Promise<void>>()
+  /** 这台机器的文件通道该走哪条 SSH。fresh 表示刚改过子系统，不能复用登录时的旧会话。 */
+  private route = new Map<string, 'shared' | 'fresh'>()
+  private choosing = new Map<string, Promise<'shared' | 'fresh'>>()
+  /** 没改成内置时留下的说明。原来的通道也打不开，才显示给用户。 */
+  private switchNote = new Map<string, string[]>()
 
   constructor(
     private storage: StorageService,
@@ -130,29 +134,64 @@ export class SftpService {
   }
 
   private async sftpOf(sessionId: string): Promise<SFTPWrapper> {
+    const live = this.conns.get(sessionId)
+    if (live) {
+      return live.then((conn) => conn.sftp).catch((error: unknown) => {
+        this.conns.delete(sessionId)
+        throw error
+      })
+    }
+    const kind = await this.choose(sessionId)
     try {
-      return await this.open(sessionId)
+      return await (kind === 'fresh' ? this.openFresh(sessionId) : this.open(sessionId))
     } catch (error) {
-      if (!isMissingSftp(error)) throw error
-      await this.installOnce(sessionId)
-      try {
-        return await this.openFresh(sessionId)
-      } catch (again) {
-        const message = again instanceof Error ? again.message : String(again)
-        this.emit(sessionId, 'error', `文件通道仍然打不开：${message}`)
-        throw again
+      const note = this.switchNote.get(sessionId)
+      if (note && note.length > 0) {
+        this.switchNote.delete(sessionId)
+        this.emit(sessionId, 'start', '内置 SFTP 没改成，机器上原来的文件通道也没打开')
+        for (const line of note) this.emit(sessionId, 'log', line)
+        const message = error instanceof Error ? error.message : String(error)
+        this.emit(sessionId, 'error', message)
       }
+      throw error
     }
   }
 
-  private installOnce(sessionId: string): Promise<void> {
-    const existing = this.installs.get(sessionId)
-    if (existing) return existing
-    const pending = this.installSftp(sessionId).finally(() => {
-      this.installs.delete(sessionId)
+  /** 先用内置 SFTP。已经是就直接用；不是就先改，再开新连接。改不了才用原来的。 */
+  private choose(sessionId: string): Promise<'shared' | 'fresh'> {
+    const known = this.route.get(sessionId)
+    if (known) return Promise.resolve(known)
+    const pending = this.choosing.get(sessionId)
+    if (pending) return pending
+    const next = this.decide(sessionId).finally(() => {
+      this.choosing.delete(sessionId)
     })
-    this.installs.set(sessionId, pending)
-    return pending
+    this.choosing.set(sessionId, next)
+    return next
+  }
+
+  private async decide(sessionId: string): Promise<'shared' | 'fresh'> {
+    const hold = await this.openHold(sessionId)
+    try {
+      const result = await execScript(hold.client, installScript(), () => undefined)
+      const lines = result.lines.filter((line) => !line.startsWith('TERMPILOT_SFTP '))
+      if (result.code === 0 && result.lines.some((line) => line === 'TERMPILOT_SFTP switched')) {
+        this.emit(sessionId, 'start', '这台机器还没用 sshd 自带的 SFTP，先改过去')
+        for (const line of lines) this.emit(sessionId, 'log', line)
+        this.emit(sessionId, 'done', '已经改成内置 SFTP，正在连接')
+        this.route.set(sessionId, 'fresh')
+        return 'fresh'
+      }
+      if (result.code === 0 && result.lines.some((line) => line === 'TERMPILOT_SFTP already')) {
+        this.route.set(sessionId, 'shared')
+        return 'shared'
+      }
+      this.switchNote.set(sessionId, lines)
+      this.route.set(sessionId, 'shared')
+      return 'shared'
+    } finally {
+      hold.release()
+    }
   }
 
   private open(sessionId: string): Promise<SFTPWrapper> {
@@ -169,22 +208,6 @@ export class SftpService {
       this.conns.delete(sessionId)
       throw error
     })
-  }
-
-  /** 在当前 SSH 连接上安装 SFTP 子系统，不新开端口。 */
-  private async installSftp(sessionId: string): Promise<void> {
-    this.emit(sessionId, 'start', '先看这台机器有没有 SFTP，有就不安装')
-    const hold = await this.openHold(sessionId)
-    try {
-      await execScript(hold.client, installScript(), (line) => this.emit(sessionId, 'log', line))
-      this.emit(sessionId, 'done', '安装命令已结束，正在重新连接')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.emit(sessionId, 'error', message)
-      throw error
-    } finally {
-      hold.release()
-    }
   }
 
   private emit(sessionId: string, phase: SftpInstallEvent['phase'], text: string): void {
@@ -254,18 +277,18 @@ export class SftpService {
   }
 }
 
-function isMissingSftp(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  return /exit code 127|establishing SFTP|sftp subsystem|sftp-server/i.test(message)
-}
-
-function execScript(client: Client, script: string, onLog: (line: string) => void): Promise<void> {
+function execScript(
+  client: Client,
+  script: string,
+  onLog: (line: string) => void
+): Promise<{ code: number; lines: string[] }> {
   return new Promise((resolve, reject) => {
     client.exec('sh -s', (err, stream) => {
       if (err) {
         reject(err)
         return
       }
+      const lines: string[] = []
       let pending = ''
       const take = (chunk: Buffer | string) => {
         pending += chunk.toString()
@@ -273,16 +296,21 @@ function execScript(client: Client, script: string, onLog: (line: string) => voi
         while (nl >= 0) {
           const line = pending.slice(0, nl).replace(/\r$/, '')
           pending = pending.slice(nl + 1)
-          if (line.trim()) onLog(line)
+          if (line.trim()) {
+            lines.push(line)
+            onLog(line)
+          }
           nl = pending.indexOf('\n')
         }
       }
       stream.on('data', take)
       stream.stderr.on('data', take)
       stream.on('close', (code: number | null) => {
-        if (pending.trim()) onLog(pending.trim())
-        if (code === 0) resolve()
-        else reject(new Error(pending.trim() || `安装 SFTP 失败，退出码 ${code ?? '未知'}`))
+        if (pending.trim()) {
+          lines.push(pending.trim())
+          onLog(pending.trim())
+        }
+        resolve({ code: code ?? 1, lines })
       })
       stream.end(script)
     })

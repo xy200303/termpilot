@@ -16,7 +16,7 @@ type InstallView = {
   lines: string[]
 }
 
-/** 远程安装 SFTP 时弹出，把远端输出原样滚出来。 */
+/** 文件通道打不开时弹出，把远端改子系统的输出原样滚出来。 */
 export function SftpInstallDialog() {
   const [view, setView] = useState<InstallView | null>(null)
   const box = useRef<HTMLPreElement>(null)
@@ -49,9 +49,9 @@ export function SftpInstallDialog() {
           <DialogTitle>文件通道</DialogTitle>
           <DialogDescription>
             {status === 'running'
-              ? '先看这台机器有没有 SFTP。已经有就不会安装。'
+              ? '正在改成 sshd 自带的 SFTP。'
               : status === 'ok'
-                ? '检查结束，正在重新连接。'
+                ? '已经改成内置 SFTP，正在连接。'
                 : '文件通道没有打开，下面是这台机器的输出。'}
           </DialogDescription>
         </DialogHeader>
