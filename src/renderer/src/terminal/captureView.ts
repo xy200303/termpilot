@@ -48,7 +48,9 @@ export async function captureTerminalView(opts: {
       const start = info.viewportY
       const end = Math.min(info.length, start + Math.max(1, info.rows))
       if (end <= start) throw new Error('没有可截的画面')
-      return captureReplay(opts.termId, start, end, end)
+      const done = await captureReplay(opts.termId, start, end, info.length, start, end)
+      const last = end - 1
+      return { paths: done.paths, note: `当前画面是第 ${start}–${Math.max(start, last)} 行` }
     }
     const shot = await grab(opts.termId)
     const paths = await window.api.capture.save([shot.png])
@@ -59,21 +61,25 @@ export async function captureTerminalView(opts: {
   const info = terminalPool.pageInfo(opts.termId)
   if (!info) throw new Error('终端不在画面上')
   const rows = Math.max(1, info.rows)
-  let start = opts.startLine ?? 0
-  let end = opts.endLine ?? info.length
-  if (opts.startLine === undefined && opts.endLine === undefined) {
-    start = Math.max(0, info.length - rows * MAX_PAGES)
-    end = info.length
-  }
+  const total = info.length
+  const wantStart = opts.startLine ?? 0
+  let wantEnd = opts.endLine ?? total
+  let start = wantStart
+  let end = wantEnd
   if (opts.cropOnly) {
-    if (start >= info.length) throw new Error(`行号超出缓冲，一共 ${info.length} 行`)
-    end = Math.min(end, info.length)
+    if (start >= total) throw new Error(`行号超出缓冲，一共 ${total} 行`)
+    end = Math.min(end, total)
+    wantEnd = end
     if (end <= start) throw new Error('范围内没有行')
   } else if (end <= start) {
     end = start + rows
+    wantEnd = end
   }
-  const capped = Math.min(end, start + rows * MAX_PAGES)
-  if (composeOn()) return captureReplay(opts.termId, start, end, capped)
+  const maxRows = rows * MAX_PAGES
+  const explicit = opts.startLine !== undefined || opts.endLine !== undefined
+  if (!explicit && end - start > maxRows) start = end - maxRows
+  const capped = Math.min(end, start + maxRows)
+  if (composeOn()) return captureReplay(opts.termId, start, capped, total, wantStart, wantEnd)
   const saved = info.viewportY
   const shots: PageShot[] = []
   const deadline = performance.now() + CAPTURE_BUDGET_MS
@@ -98,24 +104,13 @@ export async function captureTerminalView(opts: {
   if (shots.length === 0) throw new Error('没有可截的画面')
 
   const longPaths = await window.api.capture.save(await stitch(shots))
-  const rangeNote = `第 ${start}–${Math.max(start, covered - 1)} 行`
-  const partialNote = covered < end ? `范围较长，只截了 ${shots.length} 屏` : ''
-  if (opts.cropOnly) {
-    return {
-      paths: longPaths,
-      note: [rangeNote, partialNote].filter(Boolean).join('。')
-    }
-  }
+  const rangeNote = bufferNote(total, start, covered, wantStart, wantEnd)
+  if (opts.cropOnly) return { paths: longPaths, note: rangeNote }
   const framePaths = await window.api.capture.save(shots.map((shot) => shot.png))
   if (shots.length === 1 && shots[0]?.skipRows === 0 && shots[0].keepRows === shots[0].rows) {
-    return { paths: framePaths, note: partialNote || undefined }
+    return { paths: framePaths, note: rangeNote }
   }
-  const note = [
-    `前 ${framePaths.length} 张是逐屏实拍，后面 ${longPaths.length} 张是按行连续接成的长图`,
-    partialNote
-  ]
-    .filter(Boolean)
-    .join('。')
+  const note = `前 ${framePaths.length} 张是逐屏实拍，后面 ${longPaths.length} 张是按行连续接成的长图。${rangeNote}`
   return { paths: [...framePaths, ...longPaths], note }
 }
 
@@ -125,9 +120,16 @@ function composeOn(): boolean {
   return useAppStore.getState().appearance.experimentalScreenshot
 }
 
-async function captureReplay(termId: string, start: number, end: number, capped: number): Promise<CaptureDone> {
+async function captureReplay(
+  termId: string,
+  start: number,
+  capped: number,
+  total: number,
+  wantStart: number,
+  wantEnd: number
+): Promise<CaptureDone> {
   const drawn = await replayCanvases(termId, start, capped)
-  return deliverReplay(drawn.pngs, start, drawn.covered, end)
+  return deliverReplay(drawn.pngs, total, start, drawn.covered, wantStart, wantEnd)
 }
 
 async function replayCanvases(
@@ -172,17 +174,26 @@ async function paintRange(
   }
 }
 
-async function deliverReplay(pngs: string[], start: number, covered: number, end: number): Promise<CaptureDone> {
+async function deliverReplay(
+  pngs: string[],
+  total: number,
+  start: number,
+  covered: number,
+  wantStart: number,
+  wantEnd: number
+): Promise<CaptureDone> {
   const images =
     pngs.length === 1 ? pngs : await stitch(pngs.map((png) => ({ png, skipRows: 0, keepRows: 1, rows: 1 })))
   const paths = await window.api.capture.save(images)
-  return { paths, note: replayNote(start, covered, end) }
+  return { paths, note: bufferNote(total, start, covered, wantStart, wantEnd) }
 }
 
-function replayNote(start: number, covered: number, end: number): string {
-  const shown = `第 ${start}–${Math.max(start, covered - 1)} 行`
-  const partial = covered < end ? `范围较长，只截了前 ${covered - start} 行` : ''
-  return [shown, partial].filter(Boolean).join('。')
+/** 没截全时必须写出来。以前先把起点收到末尾，截完又刚好盖住这段，提示就不会出现。 */
+function bufferNote(total: number, from: number, covered: number, wantStart: number, wantEnd: number): string {
+  const to = Math.max(from, covered - 1)
+  const text = `缓冲共 ${total} 行，已截取第 ${from}–${to} 行`
+  if (from > wantStart || covered < wantEnd) return `${text}（超出上限）`
+  return text
 }
 
 let captureTail: Promise<void> = Promise.resolve()
