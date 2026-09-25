@@ -39,7 +39,11 @@ export function paintFromContents(contents: WebContents, appTheme: AppTheme): vo
 export function watchSystemChrome(): void {
   nativeTheme.on('updated', () => {
     const dark = nativeTheme.shouldUseDarkColors
-    for (const win of BrowserWindow.getAllWindows()) paintWindowChrome(win, dark)
+    for (const win of BrowserWindow.getAllWindows()) {
+      // 窗口还没显示时改背景色，Windows 会把第一帧停在白屏。
+      if (!win.isVisible()) continue
+      paintWindowChrome(win, dark)
+    }
   })
 }
 

@@ -36,6 +36,70 @@ function appIcon(): string {
   return join(app.getAppPath(), 'resources', 'icon.png')
 }
 
+/** Windows 上标题栏覆盖层偶发把第一帧停在白底。显示后改一次尺寸让系统重画；画面仍是空的就重新加载。 */
+function recoverBlankWindow(win: BrowserWindow): void {
+  let shown = false
+  let loaded = false
+  let nudged = false
+  let reloads = 0
+
+  const reload = (why: string) => {
+    if (win.isDestroyed() || reloads >= 2) return
+    reloads += 1
+    console.error(`[TermPilot] 窗口没有画出来（${why}），重新加载`)
+    setTimeout(() => {
+      if (!win.isDestroyed()) win.webContents.reload()
+    }, 200)
+  }
+
+  const show = () => {
+    if (win.isDestroyed()) return
+    shown = true
+    if (!win.isVisible()) win.show()
+    if (nudged || !loaded || process.platform !== 'win32') return
+    nudged = true
+    setTimeout(() => {
+      if (win.isDestroyed()) return
+      const [width, height] = win.getContentSize()
+      win.setContentSize(width, height + 1)
+      win.setContentSize(width, height)
+    }, 50)
+  }
+
+  win.once('ready-to-show', show)
+
+  win.webContents.on('did-finish-load', () => {
+    loaded = true
+    show()
+    setTimeout(() => {
+      if (win.isDestroyed()) return
+      void win.webContents
+        .executeJavaScript(
+          'Boolean(document.getElementById("root") && document.getElementById("root").childElementCount > 0)',
+          true
+        )
+        .then((painted) => {
+          if (!painted) reload('画面是空的')
+        })
+        .catch(() => reload('画面检查失败'))
+    }, 400)
+  })
+
+  win.webContents.on('preload-error', (_event, _path, error) => {
+    reload(error instanceof Error ? error.message : 'preload')
+  })
+
+  win.webContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
+    if (!isMainFrame || code === -3) return
+    reload(`${code} ${description}`)
+  })
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') return
+    reload(details.reason)
+  })
+}
+
 function createWindow(storage: StorageService): void {
   const dark = followAppTheme(storage.getAppearance().app)
   const win = new BrowserWindow({
@@ -60,7 +124,9 @@ function createWindow(storage: StorageService): void {
       // 安全基线：沙箱 + 上下文隔离，渲染进程无 Node 能力
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // 隐藏期间也要画出第一帧，否则显示时会停在白底。
+      backgroundThrottling: false
     }
   })
   mainWindow = win
@@ -77,7 +143,7 @@ function createWindow(storage: StorageService): void {
     console.error('[TermPilot] MCP start failed:', error)
   })
 
-  win.on('ready-to-show', () => win.show())
+  recoverBlankWindow(win)
 
   // 外部链接一律交给系统浏览器，不在应用内打开
   win.webContents.setWindowOpenHandler(({ url }) => {
