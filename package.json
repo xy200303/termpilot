@@ -1,6 +1,6 @@
 {
   "name": "termpilot",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "TermPilot - Agent 可操控的 SSH 终端（XShell 风格 GUI + 内置 MCP Server）",
   "main": "out/main/index.js",
   "license": "MIT",
