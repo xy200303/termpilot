@@ -56,7 +56,7 @@ termpilot call term_exec --json-file args.json --json
 
 先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号。
 
-终端在关闭前保持存在。应用重启后，同一编号、备注和上次输出仍在。`status` 不是 `connected` 时，用 `term_reconnect` 恢复这一扇，不要再 `connection_open`。先用 `term_read` 查看已有记录。没有这扇终端时，才用 `connection_open` 新开。`term_exec` 的命令以换行结束。修改远程文件前先确认目录。用户未明确要求删除时，不调用 `sftp_remove`，也不在命令中使用 `rm`。危险操作在 TermPilot 窗口中等待用户确认。
+终端在关闭前保持存在。应用重启后，同一编号、备注和上次输出仍在。`status` 不是 `connected` 时，用 `term_reconnect` 恢复这一扇，不要再 `connection_open`。先用 `term_read` 查看已有记录。没有这扇终端时，才用 `connection_open` 新开。`term_exec` 的命令以换行结束。修改远程文件前先确认目录。用户未明确要求删除时，不调用 `sftp_remove`，也不在命令中使用 `rm`。`sftp_download` 和 `sftp_upload` 只传 512MB 以内的文件。几个 GB 的文件留在远程机器上处理，不要下载到本机。危险操作在 TermPilot 窗口中等待用户确认。
 
 可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`。
 

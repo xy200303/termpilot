@@ -159,7 +159,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'sftp_upload',
-    description: '把本机绝对路径的文件上传到远端路径。',
+    description: '把本机绝对路径的文件上传到远端路径。超过 512MB 会拒绝。',
     input: {
       connection: connId,
       localPath: z.string().describe('本机绝对路径'),
@@ -168,7 +168,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'sftp_download',
-    description: '把远端文件下载到本机绝对路径。',
+    description: '把远端文件下载到本机绝对路径。超过 512MB 会拒绝。几个 GB 的文件留在远程机器上处理。',
     input: {
       connection: connId,
       remotePath: z.string().describe('远端路径'),

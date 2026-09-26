@@ -14,7 +14,8 @@ export function buildConnectConfig(session: SessionConfig, secret: string | null
     port: session.port,
     username: session.username,
     readyTimeout: 15000,
-    keepaliveInterval: 15000
+    keepaliveInterval: 15000,
+    keepaliveCountMax: 40
   }
   const keyPath = resolveKeyPath(session)
   switch (session.authType) {
@@ -109,7 +110,8 @@ export function dialSsh(
       password: hop.password ?? undefined,
       tryKeyboard: true,
       readyTimeout: 20000,
-      keepaliveInterval: 15000
+      keepaliveInterval: 15000,
+      keepaliveCountMax: 40
     }
     applyDialOptions(cfg, options)
     if (sock) cfg.sock = sock

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, posix } from 'node:path'
 import { app, dialog, type WebContents } from 'electron'
 import { Client, type OpenMode, type SFTPWrapper } from 'ssh2'
@@ -55,15 +55,19 @@ export class SftpService {
   async put(sessionId: string, localPath: string, remotePath: string): Promise<void> {
     assertLocal(localPath)
     if (!existsSync(localPath)) throw new Error('本地文件不存在')
+    refuseHuge(statSync(localPath).size)
     const sftp = await this.sftpOf(sessionId)
-    await using(sftp, remotePath, (target) => call((cb) => sftp.fastPut(localPath, target, cb)))
+    await using(sftp, remotePath, (target) => call((cb) => sftp.fastPut(localPath, target, XFER, cb)))
   }
 
   async get(sessionId: string, remotePath: string, localPath: string): Promise<void> {
     assertLocal(localPath)
     if (!existsSync(dirname(localPath))) throw new Error('本地目录不存在')
     const sftp = await this.sftpOf(sessionId)
-    await using(sftp, remotePath, (target) => call((cb) => sftp.fastGet(target, localPath, cb)))
+    await using(sftp, remotePath, async (target) => {
+      refuseHuge(await statSize(sftp, target))
+      await call((cb) => sftp.fastGet(target, localPath, XFER, cb))
+    })
   }
 
   async rename(sessionId: string, from: string, to: string): Promise<void> {
@@ -94,8 +98,9 @@ export class SftpService {
     if (picked.canceled || picked.filePaths.length === 0) return 0
     const sftp = await this.sftpOf(sessionId)
     for (const local of picked.filePaths) {
+      refuseHuge(statSync(local).size)
       const remote = posix.join(dir || '.', basename(local))
-      await using(sftp, remote, (target) => call((cb) => sftp.fastPut(local, target, cb)))
+      await using(sftp, remote, (target) => call((cb) => sftp.fastPut(local, target, XFER, cb)))
     }
     return picked.filePaths.length
   }
@@ -108,7 +113,10 @@ export class SftpService {
     })
     if (picked.canceled || !picked.filePath) return false
     const sftp = await this.sftpOf(sessionId)
-    await using(sftp, file.path, (target) => call((cb) => sftp.fastGet(target, picked.filePath!, cb)))
+    await using(sftp, file.path, async (target) => {
+      refuseHuge(await statSize(sftp, target))
+      await call((cb) => sftp.fastGet(target, picked.filePath!, XFER, cb))
+    })
     return true
   }
 
@@ -378,12 +386,23 @@ function assertLocal(file: string): void {
   if (!isAbsolute(file)) throw new Error('本地路径需要是绝对路径')
 }
 
+function refuseHuge(bytes: number): void {
+  if (bytes <= MAX_TRANSFER_BYTES) return
+  const gb = bytes / (1024 * 1024 * 1024)
+  const size = gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.ceil(bytes / (1024 * 1024))} MB`
+  throw new Error(`文件有 ${size}，超过 512 MB。SFTP 不适合传几个 GB，请在远程机器上直接处理。`)
+}
+
 function call(run: (cb: (err: Error | undefined | null) => void) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     run((err) => (err ? reject(err) : resolve()))
   })
 }
 
+/** ssh2 默认 64 路并行。跳板上窗口一满，传输停住，保活会把连接掐掉。 */
+const XFER = { concurrency: 4, chunkSize: 128 * 1024 }
+/** 几个 GB 的文件不走 SFTP。源码和普通文件停在 512MB 以内。 */
+const MAX_TRANSFER_BYTES = 512 * 1024 * 1024
 const MAX_EDIT_BYTES = 1_500_000
 const CHUNK = 32 * 1024
 const loginDirs = new WeakMap<SFTPWrapper, Promise<string>>()
