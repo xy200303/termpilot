@@ -35,7 +35,11 @@ enable_subsystem() {
   fi
   as_root rm -f /etc/ssh/sshd_config.termpilot.bak /etc/ssh/sshd_config.d/*.conf.termpilot.bak
   if command -v systemctl >/dev/null 2>&1; then
-    as_root systemctl reload sshd >/dev/null 2>&1 || as_root systemctl reload ssh >/dev/null 2>&1 || true
+    if command -v timeout >/dev/null 2>&1; then
+      as_root timeout 8 systemctl reload sshd >/dev/null 2>&1 || as_root timeout 8 systemctl reload ssh >/dev/null 2>&1 || true
+    else
+      as_root systemctl reload sshd >/dev/null 2>&1 || as_root systemctl reload ssh >/dev/null 2>&1 || true
+    fi
   fi
   if [ -f /var/run/sshd.pid ]; then
     as_root kill -HUP "$(cat /var/run/sshd.pid)" >/dev/null 2>&1 || true
@@ -45,7 +49,11 @@ if ! command -v sshd >/dev/null 2>&1; then
   echo "没有 sshd，不能改成内置 SFTP"
   exit 1
 fi
-target=$(sshd -T 2>/dev/null | awk 'tolower($1)=="subsystem" && tolower($2)=="sftp" { print $3; exit }')
+if command -v timeout >/dev/null 2>&1; then
+  target=$(timeout 8 sshd -T 2>/dev/null | awk 'tolower($1)=="subsystem" && tolower($2)=="sftp" { print $3; exit }')
+else
+  target=$(sshd -T 2>/dev/null | awk 'tolower($1)=="subsystem" && tolower($2)=="sftp" { print $3; exit }')
+fi
 if [ "$target" = "internal-sftp" ]; then
   echo "TERMPILOT_SFTP already"
   exit 0

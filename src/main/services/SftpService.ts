@@ -36,7 +36,7 @@ export class SftpService {
     const requested = dir && dir !== '' ? dir : '.'
     return using(sftp, requested, async (target) => {
       const path = await realpath(sftp, target).catch(() => target)
-      const entries = await readdir(sftp, path)
+      const entries = await withTimeout(readdir(sftp, path), 20_000, '读取目录超时')
       return { path, entries }
     })
   }
@@ -149,23 +149,33 @@ export class SftpService {
         throw error
       })
     }
-    const kind = await this.choose(sessionId)
+    if (this.route.get(sessionId) === 'fresh') return this.openFresh(sessionId)
     try {
-      return await (kind === 'fresh' ? this.openFresh(sessionId) : this.open(sessionId))
+      return await this.open(sessionId)
     } catch (error) {
-      const note = this.switchNote.get(sessionId)
-      if (note && note.length > 0) {
-        this.switchNote.delete(sessionId)
-        this.emit(sessionId, 'start', '内置 SFTP 没改成，机器上原来的文件通道也没打开')
-        for (const line of note) this.emit(sessionId, 'log', line)
-        const message = error instanceof Error ? error.message : String(error)
-        this.emit(sessionId, 'error', message)
+      if (this.route.has(sessionId) || !isMissingSftp(error)) throw error
+      const kind = await this.choose(sessionId).catch((again: unknown) => {
+        const note = again instanceof Error ? again.message : String(again)
+        this.switchNote.set(sessionId, [note])
+        this.route.set(sessionId, 'shared')
+        return 'shared' as const
+      })
+      if (kind !== 'fresh') {
+        const note = this.switchNote.get(sessionId)
+        if (note && note.length > 0) {
+          this.switchNote.delete(sessionId)
+          this.emit(sessionId, 'start', '文件通道没有打开')
+          for (const line of note) this.emit(sessionId, 'log', line)
+          const message = error instanceof Error ? error.message : String(error)
+          this.emit(sessionId, 'error', message)
+        }
+        throw error
       }
-      throw error
+      return this.openFresh(sessionId)
     }
   }
 
-  /** 先用内置 SFTP。已经是就直接用；不是就先改，再开新连接。改不了才用原来的。 */
+  /** 原来的通道打不开时才改。已经能列目录就不要动 sshd。 */
   private choose(sessionId: string): Promise<'shared' | 'fresh'> {
     const known = this.route.get(sessionId)
     if (known) return Promise.resolve(known)
@@ -241,19 +251,7 @@ export class SftpService {
     }
     const pending = this.sshPool
       .acquireIsolated(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
-      .then(
-        (hold) =>
-          new Promise<LiveConn>((resolve, reject) => {
-            hold.client.sftp((err, sftp) => {
-              if (err || !sftp) {
-                hold.release()
-                reject(err ?? new Error('打不开 SFTP'))
-                return
-              }
-              resolve({ client: hold.client, sftp, release: hold.release })
-            })
-          })
-      )
+      .then((hold) => new Promise<LiveConn>((resolve, reject) => void armSftp(hold, resolve, reject)))
     this.conns.set(sessionId, pending)
     return pending.then((conn) => conn.sftp).catch((error: unknown) => {
       this.conns.delete(sessionId)
@@ -265,24 +263,48 @@ export class SftpService {
     return this.openHold(sessionId).then(
       (hold) =>
         new Promise((resolve, reject) => {
-          hold.client.sftp((err, sftp) => {
-            if (err || !sftp) {
-              hold.release()
-              reject(err ?? new Error('打不开 SFTP'))
-              return
-            }
-            hold.client.on('close', () => {
-              const pending = this.conns.get(sessionId)
-              void pending?.then((conn) => {
-                if (conn.client === hold.client) this.conns.delete(sessionId)
-              })
-              hold.release()
+          const finish = armSftp(hold, resolve, reject)
+          hold.client.on('close', () => {
+            const pending = this.conns.get(sessionId)
+            void pending?.then((conn) => {
+              if (conn.client === hold.client) this.conns.delete(sessionId)
             })
-            resolve({ client: hold.client, sftp, release: hold.release })
+            if (finish.settled) hold.release()
           })
         })
     )
   }
+}
+
+function isMissingSftp(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /exit code 127|establishing SFTP|sftp subsystem|sftp-server|没有响应|子系统超时/i.test(message)
+}
+
+function armSftp(
+  hold: SshHold,
+  resolve: (conn: LiveConn) => void,
+  reject: (error: Error) => void
+): { settled: boolean } {
+  const state = { settled: false }
+  const timer = setTimeout(() => {
+    if (state.settled) return
+    state.settled = true
+    hold.release()
+    reject(new Error('SFTP 子系统没有响应'))
+  }, 12_000)
+  hold.client.sftp((err, sftp) => {
+    if (state.settled) return
+    state.settled = true
+    clearTimeout(timer)
+    if (err || !sftp) {
+      hold.release()
+      reject(err ?? new Error('打不开 SFTP'))
+      return
+    }
+    resolve({ client: hold.client, sftp, release: hold.release })
+  })
+  return state
 }
 
 function execScript(
@@ -291,9 +313,30 @@ function execScript(
   onLog: (line: string) => void
 ): Promise<{ code: number; lines: string[] }> {
   return new Promise((resolve, reject) => {
-    client.exec('sh -s', (err, stream) => {
-      if (err) {
-        reject(err)
+    let settled = false
+    let stream: { close: () => void } | undefined
+    const done = (run: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      run()
+    }
+    const timer = setTimeout(() => {
+      try {
+        stream?.close()
+      } catch {
+        /* 通道已经关了 */
+      }
+      done(() => reject(new Error('检查 SFTP 子系统超时')))
+    }, 15_000)
+    client.exec('sh -s', (err, opened) => {
+      if (err || !opened) {
+        done(() => reject(err ?? new Error('无法执行远程命令')))
+        return
+      }
+      stream = opened
+      if (settled) {
+        opened.close()
         return
       }
       const lines: string[] = []
@@ -311,17 +354,33 @@ function execScript(
           nl = pending.indexOf('\n')
         }
       }
-      stream.on('data', take)
-      stream.stderr.on('data', take)
-      stream.on('close', (code: number | null) => {
+      opened.on('data', take)
+      opened.stderr.on('data', take)
+      opened.on('close', (code: number | null) => {
         if (pending.trim()) {
           lines.push(pending.trim())
           onLog(pending.trim())
         }
-        resolve({ code: code ?? 1, lines })
+        done(() => resolve({ code: code ?? 1, lines }))
       })
-      stream.end(script)
+      opened.end(script)
     })
+  })
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error: unknown) => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    )
   })
 }
 
