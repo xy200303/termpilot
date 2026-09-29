@@ -140,12 +140,12 @@ export class TerminalService {
     this.storage.forgetOpenTerm(termId)
   }
 
-  /** 界面订上之后，把已经记下的输出补到画面上。 */
+  /** 界面订上之后，把已经记下的输出补到画面上。按完整行重放，避免回车和半截转义把后面的会话盖住。 */
   bindView(termId: string): void {
     const text = this.output.get(termId) ?? ''
     const first = !this.viewReady.has(termId)
     this.viewReady.add(termId)
-    if (first && text) this.push(termId, Buffer.from(text, 'utf8'))
+    if (first && text) this.push(termId, Buffer.from(replayText(text), 'utf8'))
   }
 
   saved(): { id: string; sessionId: string | null; kind: 'ssh' | 'local'; title: string; remark: string }[] {
@@ -589,6 +589,24 @@ export class TerminalService {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 记下的是原始流。重放前收成完整行，新会话从下一行开始。 */
+function replayText(raw: string): string {
+  let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  if (text.length >= 32_000) {
+    const cut = text.indexOf('\n')
+    if (cut >= 0) text = text.slice(cut + 1)
+  }
+  text = text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]?$/, '')
+  text = text.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)?$/, '')
+  text = text.replace(/\x1b\[([0-9;?]*)([ -/]*)([@-~])/g, (all, _params, inter, final) =>
+    final === 'm' && !inter ? all : ''
+  )
+  text = text.replace(/\x1b\][^\x07]*\x07/g, '')
+  text = text.replace(/\x1b[()][0-9A-Za-z]/g, '')
+  if (!text.endsWith('\n')) text += '\n'
+  return `\x1b[0m${text}`
 }
 
 function isForwardDenied(error: unknown): boolean {
