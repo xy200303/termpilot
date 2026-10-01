@@ -23,6 +23,39 @@ import { parseSshCommand } from '../../../shared/parse-ssh'
 import { sshOptionsForSession, type SshConnectOptions } from '../../../shared/ssh-options'
 import type { AuthType, ConnectMode, SessionInput } from '../../../shared/types'
 
+/** 名字里 @ 后面的地址。空格或路径不当成主机。 */
+function addressInName(name: string): string | null {
+  const at = name.lastIndexOf('@')
+  if (at <= 0) return null
+  const host = name.slice(at + 1).trim()
+  if (!host || /[\s/\\]/.test(host)) return null
+  return host
+}
+
+/**
+ * 侧边栏按主机地址分组。
+ * 这类连接的名字是「用户名@地址」。只改名字里的地址、主机框还是旧的，分组会留在旧机器下。
+ * 反过来只改主机框、名字还挂着旧地址，看起来也像没挪走。保存时让两边一致。
+ */
+function reconcileEditedAddress(
+  previous: { name: string; host: string },
+  next: { name: string; host: string }
+): { name: string; host: string } {
+  const previousHost = previous.host.trim()
+  const previousName = previous.name.trim()
+  let name = next.name.trim()
+  let host = next.host.trim()
+  const named = addressInName(name)
+  const previousNamed = addressInName(previousName)
+  if (host === previousHost && name !== previousName && named && previousNamed === previousHost && named !== host) {
+    host = named
+  }
+  if (previousHost && host !== previousHost && name.endsWith(`@${previousHost}`)) {
+    name = `${name.slice(0, -previousHost.length)}${host}`
+  }
+  return { name, host }
+}
+
 const empty = (mode: ConnectMode): SessionInput => ({
   name: '',
   group: '',
@@ -156,6 +189,10 @@ export function SessionForm() {
         sshOptions: parsed.options ?? null
       }
       setForm(next)
+    }
+    if (session && mode === 'forward') {
+      const synced = reconcileEditedAddress(session, { name: next.name, host: next.host })
+      next = { ...next, name: synced.name, host: synced.host }
     }
     if (!next.name.trim()) {
       reject('名称不能为空', 'connect')
