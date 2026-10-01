@@ -60,7 +60,7 @@ export function AppSidebar() {
     <div
       className={cn(
         'flex h-full shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200',
-        collapsed ? 'w-12' : 'w-64'
+        collapsed ? 'w-12 min-w-12 max-w-12' : 'w-64 min-w-64 max-w-64'
       )}
     >
       <div
@@ -110,7 +110,7 @@ export function AppSidebar() {
         </div>
       ) : (
         <>
-          <SidebarContent>{pane === 'connect' ? <ConnectTree /> : <FileTree />}</SidebarContent>
+          <SidebarContent className="min-w-0 overflow-x-hidden">{pane === 'connect' ? <ConnectTree /> : <FileTree />}</SidebarContent>
           <div className="flex items-center gap-1 border-t px-2 py-2">
             <button
               type="button"
@@ -186,7 +186,7 @@ function ModeRoot(props: { mode: ConnectMode; title: string; sessions: SessionCo
   const setEditing = useAppStore((s) => s.setEditing)
 
   return (
-    <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
+    <Collapsible className="min-w-0" open={open} onOpenChange={() => toggleGroup(key)}>
       <SidebarGroup className="px-2 py-0.5">
         <SectionHead
           icon={props.mode === 'forward' ? <Monitor /> : <Radio />}
@@ -194,8 +194,8 @@ function ModeRoot(props: { mode: ConnectMode; title: string; sessions: SessionCo
           actionTitle={props.mode === 'forward' ? '新建正向 SSH' : '新建反向监听'}
           onAdd={() => setEditing({ action: 'create', mode: props.mode })}
         />
-        <CollapsibleContent>
-          <SidebarGroupContent className="grid gap-0.5">
+        <CollapsibleContent className="min-w-0 overflow-hidden">
+          <SidebarGroupContent className="grid min-w-0 gap-0.5">
             {props.mode === 'forward'
               ? machinesOf(props.sessions).map((machine) => (
                   <HostNode
@@ -225,11 +225,11 @@ function LocalRoot() {
   const locals = tabs.filter((tab) => tab.kind === 'local')
 
   return (
-    <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
+    <Collapsible className="min-w-0" open={open} onOpenChange={() => toggleGroup(key)}>
       <SidebarGroup className="px-2 py-0.5">
         <SectionHead icon={<TerminalSquare />} title="本机终端" actionTitle="新建本机终端" onAdd={openLocalTab} />
-        <CollapsibleContent>
-          <SidebarGroupContent className="grid gap-0.5">
+        <CollapsibleContent className="min-w-0 overflow-hidden">
+          <SidebarGroupContent className="grid min-w-0 gap-0.5">
             {locals.map((tab) => (
               <TermRow key={tab.id} tab={tab} session={null} depth={1} />
             ))}
@@ -264,8 +264,8 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
   const [editingNote, setEditingNote] = useState(false)
 
   return (
-    <Collapsible open={open} onOpenChange={() => toggleGroup(key)}>
-      <div className="group/host flex items-center" style={{ paddingLeft: props.depth * TREE_STEP }}>
+    <Collapsible className="min-w-0" open={open} onOpenChange={() => toggleGroup(key)}>
+      <div className="group/host flex min-w-0 items-center" style={{ paddingLeft: props.depth * TREE_STEP }}>
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <CollapsibleTrigger
@@ -306,7 +306,7 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
           if (next !== note) void setHostNote(props.hostKey, next)
         }}
       />
-      <CollapsibleContent className="grid gap-0.5">
+      <CollapsibleContent className="grid min-w-0 gap-0.5 overflow-hidden">
         {props.sessions.map((session) => (
           <SessionNode key={session.id} session={session} depth={props.depth + 1} />
         ))}
@@ -351,7 +351,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
     (selectedId === session.id && nested.every((tab) => tab.id !== activeTabId))
 
   return (
-    <div>
+    <div className="min-w-0">
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <TreeRow
@@ -526,7 +526,7 @@ function TreeRow({
       {...rest}
       title={hint || undefined}
       className={cn(
-        'flex h-7 w-full items-center gap-1 rounded-md pr-2 text-[13px] hover:bg-sidebar-accent',
+        'flex h-7 w-full min-w-0 items-center gap-1 overflow-hidden rounded-md pr-2 text-[13px] hover:bg-sidebar-accent',
         active && 'bg-sidebar-accent',
         className
       )}
@@ -546,7 +546,7 @@ function TreeRow({
       ) : (
         <span className="size-4 shrink-0" />
       )}
-      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onClick}>
+      <button type="button" className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left" onClick={onClick}>
         {live !== undefined ? (
           <span
             className={cn(

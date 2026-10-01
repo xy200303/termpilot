@@ -73,7 +73,7 @@ export function TabBar() {
                 <Button
                   variant={active ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="max-w-48"
+                  className="max-w-48 min-w-0 overflow-hidden"
                   title={t.remark?.trim() || undefined}
                   onClick={() => setActiveTab(t.id)}
                   onDoubleClick={(event) => {
@@ -82,7 +82,7 @@ export function TabBar() {
                   }}
                 >
                   <TerminalSquare />
-                  <span className="truncate">{windowLabel(t.title, session?.name)}</span>
+                  <span className="min-w-0 truncate">{windowLabel(t.title, session?.name)}</span>
                   <span
                     role="button"
                     className="rounded-sm opacity-60 hover:opacity-100"
