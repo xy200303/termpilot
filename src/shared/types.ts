@@ -1,4 +1,5 @@
 import type { SshConnectOptions } from './ssh-options'
+import type { SerialParity, SessionProtocol } from './protocol'
 
 /** 认证方式（仅正向 SSH） */
 export type AuthType = 'password' | 'key'
@@ -19,14 +20,26 @@ export interface SessionConfig {
   name: string
   /** 分组名（侧边栏文件夹），空字符串表示未分组 */
   group: string
+  /** 缺省 'ssh'，旧配置没有这一列 */
+  protocol: SessionProtocol
   mode: ConnectMode
-  /** 正向 SSH */
+  /** 正向 SSH / Telnet */
   host: string
   port: number
   username: string
   authType: AuthType
   /** 私钥路径（authType = key 时） */
   keyPath?: string
+  /** 串口设备路径（protocol = serial 时），例如 COM3 / /dev/ttyUSB0 */
+  serialPath?: string
+  /** 串口波特率，缺省 115200 */
+  baudRate?: number
+  /** 串口数据位，缺省 8 */
+  dataBits?: number
+  /** 串口停止位，缺省 1 */
+  stopBits?: number
+  /** 串口校验，缺省 none */
+  parity?: SerialParity
   /** 反向监听：本机端口。只监听 127.0.0.1，由 cpolar 映射到公网 */
   listenPort?: number
   /** 备注，例如 cpolar 分配的公网地址 */
@@ -48,12 +61,19 @@ export interface SessionConfig {
 export interface SessionInput {
   name: string
   group: string
+  /** undefined 表示不修改（更新时），缺省 'ssh' */
+  protocol?: SessionProtocol
   mode: ConnectMode
   host: string
   port: number
   username: string
   authType: AuthType
   keyPath?: string
+  serialPath?: string
+  baudRate?: number
+  dataBits?: number
+  stopBits?: number
+  parity?: SerialParity
   listenPort?: number
   remark?: string
   /** 明文密码或私钥口令；undefined 表示不修改 */

@@ -92,6 +92,12 @@ export class StorageService {
     this.ensureColumn('sessions', 'ssh_options', 'TEXT')
     this.ensureColumn('sessions', 'public_id', 'TEXT')
     this.ensureColumn('sessions', 'config_host', 'TEXT')
+    this.ensureColumn('sessions', 'protocol', "TEXT NOT NULL DEFAULT 'ssh'")
+    this.ensureColumn('sessions', 'serial_path', 'TEXT')
+    this.ensureColumn('sessions', 'baud_rate', 'INTEGER')
+    this.ensureColumn('sessions', 'data_bits', 'INTEGER')
+    this.ensureColumn('sessions', 'stop_bits', 'INTEGER')
+    this.ensureColumn('sessions', 'parity', 'TEXT')
     this.backfillPublicIds()
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sessions_public_id ON sessions(public_id)')
     this.db.exec(`
@@ -209,8 +215,9 @@ export class StorageService {
         `INSERT INTO sessions (
           id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
-          jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options,
+          protocol, serial_path, baud_rate, data_bits, stop_bits, parity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -232,7 +239,13 @@ export class StorageService {
         input.jumpHost?.trim() ? (input.jumpPort ?? 22) : null,
         input.jumpHost?.trim() ? input.jumpUsername?.trim() || null : null,
         input.jumpHost?.trim() ? (this.encryptSecret(input.jumpSecret) ?? null) : null,
-        encodeOptions(input.sshOptions)
+        encodeOptions(input.sshOptions),
+        input.protocol ?? 'ssh',
+        input.serialPath?.trim() || null,
+        input.baudRate ?? null,
+        input.dataBits ?? null,
+        input.stopBits ?? null,
+        input.parity ?? null
       )
     const saved = this.require(id)
     this.publishSsh(id)
@@ -242,7 +255,7 @@ export class StorageService {
   update(id: string, patch: SessionInput): SessionConfig | null {
     const existing = this.db
       .prepare(
-        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options FROM sessions WHERE id = ?'
+        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options, protocol, serial_path, baud_rate, data_bits, stop_bits, parity FROM sessions WHERE id = ?'
       )
       .get(id)
     if (!existing) return null
@@ -259,6 +272,12 @@ export class StorageService {
     const jumpPort = patch.jumpPort ?? optionalInteger(existing.jump_port) ?? 22
     const jumpUsername = (patch.jumpUsername !== undefined ? patch.jumpUsername : text(existing.jump_username)).trim()
     const sshOptions = patch.sshOptions === undefined ? (existing.ssh_options ?? null) : encodeOptions(patch.sshOptions)
+    const protocol = patch.protocol ?? (existing.protocol === 'telnet' || existing.protocol === 'serial' ? existing.protocol : 'ssh')
+    const serialPath = patch.serialPath !== undefined ? patch.serialPath.trim() || null : optionalText(existing.serial_path) ?? null
+    const baudRate = patch.baudRate ?? optionalInteger(existing.baud_rate) ?? null
+    const dataBits = patch.dataBits ?? optionalInteger(existing.data_bits) ?? null
+    const stopBits = patch.stopBits ?? optionalInteger(existing.stop_bits) ?? null
+    const parity = patch.parity ?? optionalText(existing.parity) ?? null
     this.db
       .prepare(
         `UPDATE sessions SET
@@ -266,7 +285,8 @@ export class StorageService {
           auth_type = ?, key_path = ?, listen_port = ?, remark = ?,
           secret_encrypted = ?, updated_at = ?,
           jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?,
-          ssh_options = ?
+          ssh_options = ?, protocol = ?, serial_path = ?, baud_rate = ?, data_bits = ?,
+          stop_bits = ?, parity = ?
         WHERE id = ?`
       )
       .run(
@@ -287,6 +307,12 @@ export class StorageService {
         jumpHost ? jumpUsername || null : null,
         jumpSecret,
         sshOptions,
+        protocol,
+        serialPath,
+        baudRate,
+        dataBits,
+        stopBits,
+        parity,
         id
       )
     const saved = this.require(id)
@@ -375,8 +401,9 @@ export class StorageService {
         `INSERT INTO sessions (
           id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
-          jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options,
+          protocol, serial_path, baud_rate, data_bits, stop_bits, parity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         newId,
@@ -398,7 +425,13 @@ export class StorageService {
         optionalInteger(row.jump_port) ?? null,
         optionalText(row.jump_username) ?? null,
         typeof row.jump_secret_encrypted === 'string' ? row.jump_secret_encrypted : null,
-        typeof row.ssh_options === 'string' ? row.ssh_options : null
+        typeof row.ssh_options === 'string' ? row.ssh_options : null,
+        row.protocol === 'telnet' || row.protocol === 'serial' ? row.protocol : 'ssh',
+        optionalText(row.serial_path) ?? null,
+        optionalInteger(row.baud_rate) ?? null,
+        optionalInteger(row.data_bits) ?? null,
+        optionalInteger(row.stop_bits) ?? null,
+        optionalText(row.parity) ?? null
       )
     const saved = this.require(newId)
     this.publishSsh(newId)
@@ -525,17 +558,25 @@ export class StorageService {
   private toPublic(row: Record<string, SQLOutputValue>): SessionConfig {
     const auth = row.auth_type === 'password' ? 'password' : 'key'
     const mode: ConnectMode = row.mode === 'reverse' ? 'reverse' : 'forward'
+    const protocol = row.protocol === 'telnet' || row.protocol === 'serial' ? row.protocol : 'ssh'
+    const parity = optionalText(row.parity)
     return {
       id: text(row.id),
       publicId: text(row.public_id),
       name: text(row.name),
       group: text(row.group_name),
+      protocol,
       mode,
       host: text(row.host),
-      port: integer(row.port, 22),
+      port: integer(row.port, protocol === 'telnet' ? 23 : 22),
       username: text(row.username),
       authType: auth satisfies AuthType,
       keyPath: optionalText(row.key_path),
+      serialPath: optionalText(row.serial_path),
+      baudRate: optionalInteger(row.baud_rate),
+      dataBits: optionalInteger(row.data_bits),
+      stopBits: optionalInteger(row.stop_bits),
+      parity: parity === 'even' || parity === 'odd' || parity === 'mark' || parity === 'space' ? parity : parity === 'none' ? 'none' : undefined,
       listenPort: optionalInteger(row.listen_port),
       remark: optionalText(row.remark),
       hasSecret: typeof row.secret_encrypted === 'string' && row.secret_encrypted.length > 0,
@@ -650,7 +691,7 @@ export class StorageService {
     if (!this.sshWrite) return
     try {
       const session = this.require(id)
-      if (session.mode !== 'forward' || !session.host.trim()) {
+      if (session.protocol !== 'ssh' || session.mode !== 'forward' || !session.host.trim()) {
         this.dropSshAlias(id)
         return
       }
