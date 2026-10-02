@@ -79,7 +79,13 @@ export const TOOLS: readonly ToolDef[] = [
     input: {
       termId,
       command: z.string().describe('要执行的命令。末尾没有换行时会自动补上'),
-      timeoutMs: z.number().int().min(500).max(120_000).optional().describe('等待毫秒，默认 20000')
+      timeoutMs: z
+        .number()
+        .int()
+        .min(500)
+        .max(3_600_000)
+        .optional()
+        .describe('这次调用最多等多久，默认 20000。不是命令的时限。到点后命令还在远端跑，终端里也还在滚，只是先把已经回来的内容交出去。要一直等到命令跑完，把这个值调大。')
     }
   },
   {
