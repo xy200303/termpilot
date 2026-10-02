@@ -250,11 +250,10 @@ export class TerminalService {
   }
 
   /**
-   * 等命令跑完再返回。PTY 没有退出码，就在命令后面让 shell 自己打一个
-   * 只有这次调用才知道的标记，里面带上退出码。看到标记就是跑完了。
-   * 标记和回显的 printf 行打印完立刻用光标回退抹掉，同一个数据块里写完就擦，
-   * 屏幕上基本看不到。到 timeoutMs 还没看到标记，就把已经回来的内容交出去，
-   * 命令还在远端跑。
+   * 等命令跑完再返回。完成信号是提示符：发命令前记下当时提示符的长相，
+   * 等输出安静下来，最后一行又变回提示符就是跑完了。POSIX shell 还会顺手
+   * 打一个看不见的标记带回退出码；本机 Windows 的 PowerShell 没有这一步，
+   * 只靠提示符。到 timeoutMs 还没跑完，就把已经回来的内容交出去，命令还在远端跑。
    */
   async execCommand(
     termId: string,
@@ -264,17 +263,35 @@ export class TerminalService {
     const term = this.terms.get(termId)
     if (!term?.stream && !term?.ptyProc) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
     const origin = this.logicalEnd(termId)
-    const marker = `__TP_DONE_${Math.random().toString(36).slice(2, 10)}__`
+    const promptBefore = lastScreenLine(this.readTail(termId, 4000))
     const body = command.endsWith('\n') ? command.slice(0, -1) : command
-    // 打印标记行，然后回退两行抹掉回显的命令行和标记行，光标回到命令行原来的位置
-    this.input(termId, `${body}\nprintf '${marker}%s\\n\\033[2A\\033[2K\\033[1B\\033[2K\\033[1A' "$?"\n`)
+    const posix = term.kind === 'ssh' || process.platform !== 'win32'
+    const marker = `__TP_DONE_${Math.random().toString(36).slice(2, 10)}__`
+    // 标记打印完立刻用光标回退抹掉，同一个数据块里写完就擦，屏幕上基本看不到
+    const probe = posix ? `\nprintf '${marker}%s\\n\\033[2A\\033[2K\\033[1B\\033[2K\\033[1A' "$?"` : ''
+    this.input(termId, `${body}${probe}\n`)
     const deadline = Date.now() + timeoutMs
     let exitCode: number | null = null
+    let finished = false
+    let seen = 0
+    let quietAt = Date.now()
     while (Date.now() < deadline) {
-      await delay(80)
-      const found = this.since(termId, origin).match(new RegExp(`${marker}(\\d+)`))
+      await delay(100)
+      const out = this.since(termId, origin)
+      const found = posix ? out.match(new RegExp(`${marker}(\\d+)`)) : null
       if (found) {
         exitCode = Number(found[1])
+        finished = true
+        break
+      }
+      if (out.length !== seen) {
+        seen = out.length
+        quietAt = Date.now()
+        continue
+      }
+      // 输出安静了一小会儿，且最后一行又变回提示符，就是跑完了
+      if (Date.now() - quietAt >= 600 && isPromptAgain(lastScreenLine(out), promptBefore)) {
+        finished = true
         break
       }
     }
@@ -283,7 +300,7 @@ export class TerminalService {
       .split('\n')
       .filter((line) => !line.includes(marker))
       .join('\n')
-    return { output, exitCode, finished: exitCode !== null }
+    return { output, exitCode, finished }
   }
 
   /** 退出时断开。窗口编号和备注留着，输出不写入磁盘。 */
@@ -607,6 +624,25 @@ export class TerminalService {
     if (!wc || wc.isDestroyed()) return
     wc.send(IPC.termStatus, payload)
   }
+}
+
+/** 画面最后一个非空行，去掉 ANSI。提示符就长这样。 */
+function lastScreenLine(raw: string): string {
+  const lines = raw
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\r/g, '\n')
+    .split('\n')
+  return (lines.filter((line) => line.trim().length > 0).pop() ?? '').trim()
+}
+
+/** 最后一行是不是又回到了提示符。 */
+function isPromptAgain(last: string, before: string): boolean {
+  if (!last || last.length > 300) return false
+  if (before && last === before) return true
+  // 命令 cd 到别处后提示符前半截会变，结尾的 $、#、❯ 那一段不变
+  const tail = before.match(/[$#>%❯»]\s*$/)?.[0]?.trim()
+  if (tail && last.endsWith(tail)) return true
+  return /[$#>%❯»]\s*$/.test(last)
 }
 
 function delay(ms: number): Promise<void> {

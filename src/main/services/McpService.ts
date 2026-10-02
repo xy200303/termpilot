@@ -293,7 +293,8 @@ export class McpService {
         await this.guard(command)
         const run = await this.terminal.execCommand(termId, command, intArg(raw, 'timeoutMs') ?? 20_000)
         const output = clipCommand(agentText(run.output))
-        if (run.finished) return `${output}\n\nexit code: ${run.exitCode}`
+        if (run.finished && run.exitCode !== null) return `${output}\n\nexit code: ${run.exitCode}`
+        if (run.finished) return output
         return `${output}\n\n命令还在跑，以上是已经回来的内容。`
       }
       case 'term_write':
