@@ -50,6 +50,8 @@ interface TermEntry {
 export class TerminalService {
   private terms = new Map<string, TermEntry>()
   private output = new Map<string, string>()
+  /** 上次退出时已经画好的行。打开窗口时按行写回，不再解析原始流。 */
+  private savedLines = new Map<string, string>()
   /** 缓冲从头部丢掉的字节数。用来在裁短之后仍只切出本次新增。 */
   private dropped = new Map<string, number>()
   private lastStatus = new Map<string, TermStatusEvent>()
@@ -133,13 +135,25 @@ export class TerminalService {
     this.releaseLive(t)
     this.terms.delete(termId)
     this.output.delete(termId)
+    this.savedLines.delete(termId)
     this.dropped.delete(termId)
     this.lastStatus.delete(termId)
     this.viewReady.delete(termId)
     this.storage.forgetOpenTerm(termId)
   }
 
-  /** 界面订上之后，把这次运行里已经到达、还没画上的输出补上。不回放上次退出前的记录。 */
+  /** 恢复窗口时取出上次退出时已经画好的行。不是原始流，按行写回即可。 */
+  history(termId: string): { text: string } {
+    return { text: this.savedLines.get(termId) ?? '' }
+  }
+
+  /** 界面把当前缓冲里的行交过来。存这份，下次打开按行写回。 */
+  saveScrollback(termId: string, text: string): void {
+    if (!this.terms.has(termId) || typeof text !== 'string') return
+    this.storage.saveTermScrollback(termId, text)
+  }
+
+  /** 界面订上之后，把这次运行里已经到达、还没画上的输出补上。 */
   bindView(termId: string): void {
     const text = this.output.get(termId) ?? ''
     const first = !this.viewReady.has(termId)
@@ -487,6 +501,7 @@ export class TerminalService {
         remark: saved.remark,
         liveGen: 0
       })
+      if (saved.scrollback) this.savedLines.set(saved.id, saved.scrollback)
       this.lastStatus.set(saved.id, {
         termId: saved.id,
         sessionId: saved.sessionId,

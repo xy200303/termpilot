@@ -374,7 +374,7 @@ export class McpService {
     return [
       `已重新连接终端 ${id}。`,
       session ? `连接：${session.publicId}（${session.name}）` : '',
-      '编号没变，接回一条新的 shell。'
+      '编号没变，上次退出时已经画好的行还在，新会话从下一行开始。'
     ]
       .filter(Boolean)
       .join('\n')

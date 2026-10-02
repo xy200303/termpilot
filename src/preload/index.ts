@@ -57,6 +57,9 @@ const api = {
   },
   term: {
     saved: () => ipcRenderer.invoke(IPC.termSaved) as Promise<SavedTerm[]>,
+    history: (termId: string) =>
+      ipcRenderer.invoke(IPC.termHistory, termId) as Promise<{ text: string }>,
+    saveScrollback: (termId: string, text: string) => ipcRenderer.send(IPC.termScrollSave, termId, text),
     bindView: (termId: string) => ipcRenderer.send(IPC.termBindView, termId),
     create: (opts: TermCreateOptions) => ipcRenderer.invoke(IPC.termCreate, opts),
     input: (termId: string, data: string) => ipcRenderer.send(IPC.termInput, termId, data),

@@ -34,6 +34,8 @@ export interface TermLook {
 
 class TerminalPool {
   private entries = new Map<string, PoolEntry>()
+  /** 存盘定时器的清理。终端销毁时停掉。 */
+  private savers = new Map<string, () => void>()
   private palette: ITheme = terminalPalette('light').theme
 
   /** 换终端配色。已经打开的终端一起改，后面新建的也用这一套。 */
@@ -79,11 +81,44 @@ class TerminalPool {
     const disposeData = window.api.term.onData((id, data) => {
       if (id === termId) term.write(data)
     })
-    window.api.term.bindView(termId)
+    void this.restore(term, termId)
 
     const entry: PoolEntry = { term, fit, host, disposeData }
     this.entries.set(termId, entry)
     return entry
+  }
+
+  /**
+   * 上次退出时已经画好的行按行写回，再让主进程推这次的新输出。
+   * 之后定时把当前缓冲里的行交给主进程存盘，退出时就能再画回来。
+   */
+  private restore(term: Terminal, termId: string): Promise<void> {
+    const run = async () => {
+      const snap = await window.api.term.history(termId)
+      if (snap.text) {
+        await new Promise<void>((resolve) => {
+          term.write(`\x1b[0m${snap.text}`, () => resolve())
+        })
+      }
+    }
+    return run().finally(() => {
+      window.api.term.bindView(termId)
+      const save = () => window.api.term.saveScrollback(termId, this.snapshot(termId))
+      save()
+      const timer = setInterval(save, 2000)
+      window.addEventListener('beforeunload', save)
+      this.savers.set(termId, () => {
+        clearInterval(timer)
+        window.removeEventListener('beforeunload', save)
+      })
+    })
+  }
+
+  /** 当前缓冲里的行，带颜色。行与行之间是换行，不再含回车和光标移动。 */
+  private snapshot(termId: string): string {
+    const term = this.entries.get(termId)?.term
+    if (!term) return ''
+    return ansiLines(term)
   }
 
   /** 挂载到指定容器（re-parent），并做一次同步 fit + 下一帧 refit 强制重绘 */
@@ -245,6 +280,8 @@ class TerminalPool {
   dispose(termId: string): void {
     const e = this.entries.get(termId)
     if (!e) return
+    this.savers.get(termId)?.()
+    this.savers.delete(termId)
     e.disposeData()
     e.term.dispose()
     this.entries.delete(termId)
@@ -333,6 +370,37 @@ function ansiSlice(term: Terminal, start: number, end: number): string {
     parts.push(`\x1b[?25h\x1b[${cursorLine - start + 1};${buffer.cursorX + 1}H`)
   }
   return parts.join('')
+}
+
+/** 整段缓冲按行转成 ANSI。行尾空白去掉，不藏光标，不含定位序列。 */
+function ansiLines(term: Terminal): string {
+  const buffer = term.buffer.active
+  const cols = Math.max(2, term.cols)
+  const cell = buffer.getNullCell()
+  const parts: string[] = []
+  let style = ''
+  for (let y = 0; y < buffer.length; y++) {
+    const line = buffer.getLine(y)
+    const row: string[] = []
+    if (line) {
+      for (let x = 0; x < cols; x++) {
+        const current = line.getCell(x, cell)
+        if (!current || current.getWidth() === 0) continue
+        const next = sgr(current)
+        if (next !== style) {
+          row.push('\x1b[0m', next)
+          style = next
+        }
+        row.push(current.getChars() || ' ')
+      }
+    }
+    let text = row.join('')
+    text = text.replace(/(\x1b\[[0-9;]*m)*[ ]+$/, '')
+    parts.push(text)
+  }
+  while (parts.length > 0 && parts[parts.length - 1] === '') parts.pop()
+  if (style) parts.push('\x1b[0m')
+  return parts.length ? `${parts.join('\r\n')}\r\n` : ''
 }
 
 function sgr(cell: IBufferCell): string {

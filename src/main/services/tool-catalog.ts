@@ -69,7 +69,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_list',
-    description: '列出打开过、还没关掉的终端。status 为 connected 表示还连着，disconnected 或 error 表示已经断开。重启之后编号、标题和备注还在，重新打开是一条新的 shell，不回放上次退出前的输出。断开时用 term_reconnect 恢复同一扇，不要再 connection_open。termId 是 term- 编号。',
+    description: '列出打开过、还没关掉的终端。status 为 connected 表示还连着，disconnected 或 error 表示已经断开。重启之后编号、标题和备注还在，上次退出时已经画好的行也会按行写回，新会话从下一行开始。断开时用 term_reconnect 恢复同一扇，不要再 connection_open。termId 是 term- 编号。',
     readOnly: true
   },
   {
@@ -105,7 +105,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_reconnect',
-    description: '把已经断开的终端重新连上。编号、标题和备注保留，接回一条新的 shell。已经连着时直接返回。不要为此再调用 connection_open。',
+    description: '把已经断开的终端重新连上。编号、标题和备注保留，上次退出时已经画好的行也会按行写回。已经连着时直接返回。不要为此再调用 connection_open。',
     input: { termId }
   },
   {

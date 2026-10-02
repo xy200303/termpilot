@@ -57,6 +57,14 @@ export function registerIpc(
   // -------------------------------------------------------------- 终端
   ipcMain.handle(IPC.termSaved, () => terminal.saved())
 
+  ipcMain.handle(IPC.termHistory, (_e, termId: string) =>
+    typeof termId === 'string' ? terminal.history(termId) : { text: '' }
+  )
+
+  ipcMain.on(IPC.termScrollSave, (_e, termId: string, text: string) => {
+    if (typeof termId === 'string' && typeof text === 'string') terminal.saveScrollback(termId, text)
+  })
+
   ipcMain.handle(IPC.termCreate, (_e, opts: TermCreateOptions) => terminal.create(opts))
 
   ipcMain.on(IPC.termBindView, (_e, termId: string) => {

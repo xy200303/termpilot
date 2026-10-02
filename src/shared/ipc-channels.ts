@@ -11,6 +11,10 @@ export const IPC = {
   hostNoteSet: 'host:note-set',
 
   termSaved: 'term:saved',
+  /** 恢复窗口时取出上次退出时已经画好的行。不再回放原始流。 */
+  termHistory: 'term:history',
+  /** 界面把当前缓冲里的行交给主进程存盘 */
+  termScrollSave: 'term:scroll-save',
   termBindView: 'term:bind-view',
   termCreate: 'term:create',
   termInput: 'term:input',

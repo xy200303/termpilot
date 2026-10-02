@@ -96,7 +96,7 @@ export interface TermCreateOptions {
   rows: number
 }
 
-/** 重启后要恢复的终端。编号、标题和备注留着，重新打开是一条新的 shell，不回放上次输出。 */
+/** 重启后要恢复的终端。编号、标题和备注留着，上次退出时已经画好的行也留着。 */
 export interface SavedTerm {
   id: string
   sessionId: string | null
