@@ -75,7 +75,32 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'term_exec',
     description:
-      '把命令打进这扇已经打开的 shell，等它跑完（提示符回到画面）后，只返回这次新出现的内容；POSIX shell 还会带回退出码。到 timeoutMs 还没跑完，就先把已经回来的内容交出去，命令还在远端跑。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。停掉前台命令用 term_write，keys 填 ["ctrl-c"]。',
+      '执行命令的默认工具（原 term_exec2）。在独立 exec 通道上跑，不占终端画面，可以并发，也不需要先开终端。返回 JSON：stdout 和 stderr 分流返回，都是原始字节流（不折行、无回显、无 ANSI）；exitCode 来自协议事件；另有 durationMs、timedOut、truncated。命令原样交给远端 bash（没有则 sh）执行，多行、heredoc、引号都支持，不要自己转义。session 填同一个名字时，cd 和 export 跨调用承接（存在远端 ~/.cache/termpilot/exec/ 下）；不填则每次全新环境。prelude 在每次执行前注入固定的 source/export。交互式操作、TUI、要看终端画面或截图时用 term_pty。',
+    input: {
+      connection: connId,
+      command: z.string().describe('要执行的命令，原样嵌入远端脚本，不需要转义'),
+      session: z.string().optional().describe('环境会话名。填了就在同名会话间承接 cd 和 export；不填每次全新环境'),
+      prelude: z.string().optional().describe('每次执行前先注入的片段，比如 source 环境脚本。固定不变的环境配置放这里'),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(500)
+        .max(3_600_000)
+        .optional()
+        .describe('最多等多久，默认 20000。到点后断开通道（timedOut 为 true）并返回已经收到的内容，远端进程可能已被挂断。命令预计要跑很久时，把这个值调大。'),
+      maxBytes: z
+        .number()
+        .int()
+        .min(1000)
+        .max(1_000_000)
+        .optional()
+        .describe('stdout 和 stderr 各自最多返回多少字符，默认 50000。超出时保留开头和结尾，truncated 为 true')
+    }
+  },
+  {
+    name: 'term_pty',
+    description:
+      '把命令打进这扇已经打开的终端（原 term_exec）。等它跑完（提示符回到画面）后，只返回这次新出现的内容；POSIX shell 还会带回退出码。输出是终端渲染结果：有回显、按窗口宽度折行、可能带颜色，不要拿去给程序解析——解析用 term_exec。到 timeoutMs 还没跑完，就先把已经回来的内容交出去，命令还在远端跑。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。停掉前台命令用 term_write，keys 填 ["ctrl-c"]。',
     input: {
       termId,
       command: z.string().describe('要执行的命令。末尾没有换行时会自动补上'),
@@ -89,27 +114,9 @@ export const TOOLS: readonly ToolDef[] = [
     }
   },
   {
-    name: 'term_exec2',
-    description:
-      '在独立 exec 通道上跑命令，不占任何终端画面，可以并发，也不需要先开终端。返回原始 stdout（不折行、无回显、无 ANSI）、stderr 和协议级退出码，输出要被程序解析时用它，不要用 term_exec。命令原样交给远端 bash（没有则 sh）执行，多行、heredoc、引号都支持。同名 session 之间自动承接 cd 和 export（存在远端 ~/.cache/termpilot/exec2/ 下）；prelude 可以在每次执行前注入固定的 source/export。交互式操作、TUI、要看终端画面或截图时用 term_exec。',
-    input: {
-      connection: connId,
-      command: z.string().describe('要执行的命令，原样嵌入远端脚本，不需要转义'),
-      session: z.string().optional().describe('环境会话名，默认 main。同名 session 之间承接 cd 和 export；不同名互不影响'),
-      prelude: z.string().optional().describe('每次执行前先注入的片段，比如 source 环境脚本。固定不变的环境配置放这里'),
-      timeoutMs: z
-        .number()
-        .int()
-        .min(500)
-        .max(3_600_000)
-        .optional()
-        .describe('最多等多久，默认 20000。到点后断开通道并返回已经收到的内容，远端进程可能已被挂断。命令预计要跑很久时，把这个值调大。')
-    }
-  },
-  {
     name: 'term_write',
     description:
-      '向当前终端发送按键或文字，用于上下左右选择、输入内容、回车确认和 TUI。keys 按顺序先发，然后输入 text，submit 为 true 时最后回车。发完返回当前画面。密码和验证码不要代填。',
+      '向当前终端发送按键或文字，用于上下左右选择、输入内容、回车确认和 TUI。仅作用于 PTY 终端。keys 按顺序先发，然后输入 text，submit 为 true 时最后回车。发完返回当前画面。密码和验证码不要代填。',
     input: {
       termId,
       keys: z.array(z.enum(TERM_KEYS)).max(40).optional().describe('按键名，按顺序发送'),
@@ -120,7 +127,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_read',
-    description: '读取终端最近输出，已去掉 ANSI 控制符。',
+    description: '读取终端最近输出，已去掉 ANSI 控制符。仅作用于 PTY 终端。',
     readOnly: true,
     input: {
       termId,
@@ -144,18 +151,18 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_open_local',
-    description: '打开一扇本机终端，返回 termId。没有连接。之后用 term_exec 执行命令，并用 term_update 写上备注。'
+    description: '打开一扇本机终端，返回 termId。没有连接。之后用 term_pty 执行命令，并用 term_update 写上备注。'
   },
   {
     name: 'term_lines',
-    description: '读出终端缓冲里的文字，每行带行号。不填范围就是当前画面。0 是最旧的一行。先用它确定行号，再交给 term_screenshot。',
+    description: '读出终端缓冲里的文字，每行带行号。仅作用于 PTY 终端。不填范围就是当前画面。0 是最旧的一行。先用它确定行号，再交给 term_screenshot。',
     readOnly: true,
     input: lineFields
   },
   {
     name: 'term_screenshot',
     description:
-      '截取终端画面。不填行号就截当前这一屏。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。一次大约 20 屏，更长就只保留末尾，结果里写明缓冲总行数和实际截到的行。行号用 term_lines 查。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时拍摄已经画出来的画面。',
+      '截取终端画面。仅作用于 PTY 终端。不填行号就截当前这一屏。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。一次大约 20 屏，更长就只保留末尾，结果里写明缓冲总行数和实际截到的行。行号用 term_lines 查。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时拍摄已经画出来的画面。',
     readOnly: true,
     images: 'always',
     input: lineFields
@@ -163,7 +170,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'term_screenshot_scrollback',
     description:
-      '把终端缓冲接成长图。startLine / endLine 两端都包含，0 是最旧的一行；填了范围就只返回裁好的这一段。一次大约 20 屏，超过后分成多张并只保留末尾，结果写明「缓冲共 X 行，已截取第 A–B 行（超出上限）」。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时逐屏拍摄再接上。',
+      '把终端缓冲接成长图。仅作用于 PTY 终端。startLine / endLine 两端都包含，0 是最旧的一行；填了范围就只返回裁好的这一段。一次大约 20 屏，超过后分成多张并只保留末尾，结果写明「缓冲共 X 行，已截取第 A–B 行（超出上限）」。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时逐屏拍摄再接上。',
     readOnly: true,
     images: 'ranged',
     input: lineFields

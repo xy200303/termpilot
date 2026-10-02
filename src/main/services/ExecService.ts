@@ -5,7 +5,10 @@ export interface ExecResult {
   stdout: string
   stderr: string
   exitCode: number | null
-  finished: boolean
+  durationMs: number
+  timedOut: boolean
+  /** stdout 或 stderr 因 maxBytes 被截断时为 true。截断保留开头和结尾。 */
+  truncated: boolean
 }
 
 /** 单条流最多攒多少字符。超出后不再追加，防止输出洪水撑爆内存。 */
@@ -15,7 +18,8 @@ const CAP = 1_000_000
  * 自动化命令通道：在共用 SSH 会话上开独立 exec 通道，不占终端画面，天然并发。
  * stdout/stderr 是原始字节流——不折行、无回显、无 ANSI；退出码来自协议事件，命令一结束就知道。
  * 脚本走 stdin 交给远端 bash（没有则 sh），命令原样嵌入，不经"键盘输入"，没有转义问题。
- * 同名 session 的 cd 和 export 存在远端 ~/.cache/termpilot/exec2/ 下，下次执行先回放。
+ * 填了 session 时，cd 和 export 存在远端 ~/.cache/termpilot/exec/ 下，下次同名 session 先回放；
+ * 不填则每次都是全新环境。
  */
 export class ExecService {
   /** 每条连接持有一个引用，和终端、文件树共用同一条 SSH 会话。 */
@@ -39,81 +43,108 @@ export class ExecService {
 
   async exec(
     sessionId: string,
-    opts: { command: string; session?: string; prelude?: string; timeoutMs: number }
+    opts: { command: string; session?: string; prelude?: string; timeoutMs: number; maxBytes: number }
   ): Promise<ExecResult> {
     const hold = await this.hold(sessionId)
-    const name = (opts.session ?? 'main').replace(/[^\w-]/g, '_') || 'main'
+    const name = opts.session?.replace(/[^\w-]/g, '_') || null
     const script = buildScript(name, opts.prelude ?? '', opts.command)
-    return new Promise<ExecResult>((resolve, reject) => {
-      hold.client.exec('command -v bash >/dev/null 2>&1 && exec bash -s || exec sh -s', (error, stream) => {
-        if (error) {
-          // 通道开不起来多半是连接断了，丢掉缓存的引用，下次重新拨号
-          this.conns.delete(sessionId)
-          hold.release()
-          reject(error)
-          return
-        }
-        let stdout = ''
-        let stderr = ''
-        let exitCode: number | null = null
-        let settled = false
-        const timer = setTimeout(() => {
-          if (settled) return
-          settled = true
-          try {
-            stream.destroy()
-          } catch {
-            /* 已经断了 */
+    const started = Date.now()
+    const raw = await new Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }>(
+      (resolve, reject) => {
+        hold.client.exec('command -v bash >/dev/null 2>&1 && exec bash -s || exec sh -s', (error, stream) => {
+          if (error) {
+            // 通道开不起来多半是连接断了，丢掉缓存的引用，下次重新拨号
+            this.conns.delete(sessionId)
+            hold.release()
+            reject(error)
+            return
           }
-          resolve({ stdout, stderr, exitCode, finished: false })
-        }, opts.timeoutMs)
-        stream.on('data', (data: Buffer) => {
-          if (stdout.length < CAP) stdout += data.toString('utf8')
+          let stdout = ''
+          let stderr = ''
+          let exitCode: number | null = null
+          let settled = false
+          const timer = setTimeout(() => {
+            if (settled) return
+            settled = true
+            try {
+              stream.destroy()
+            } catch {
+              /* 已经断了 */
+            }
+            resolve({ stdout, stderr, exitCode, timedOut: true })
+          }, opts.timeoutMs)
+          stream.on('data', (data: Buffer) => {
+            if (stdout.length < CAP) stdout += data.toString('utf8')
+          })
+          stream.stderr.on('data', (data: Buffer) => {
+            if (stderr.length < CAP) stderr += data.toString('utf8')
+          })
+          stream.on('exit', (code: number | null) => {
+            exitCode = code
+          })
+          stream.on('error', () => {
+            /* close 会跟着来 */
+          })
+          stream.on('close', () => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            resolve({ stdout, stderr, exitCode, timedOut: false })
+          })
+          stream.write(script)
+          stream.end()
         })
-        stream.stderr.on('data', (data: Buffer) => {
-          if (stderr.length < CAP) stderr += data.toString('utf8')
-        })
-        stream.on('exit', (code: number | null) => {
-          exitCode = code
-        })
-        stream.on('error', () => {
-          /* close 会跟着来 */
-        })
-        stream.on('close', () => {
-          if (settled) return
-          settled = true
-          clearTimeout(timer)
-          resolve({ stdout, stderr, exitCode, finished: exitCode !== null })
-        })
-        stream.write(script)
-        stream.end()
-      })
-    })
+      }
+    )
+    const out = clipStream(raw.stdout, opts.maxBytes)
+    const err = clipStream(raw.stderr, opts.maxBytes)
+    return {
+      stdout: out.text,
+      stderr: err.text,
+      exitCode: raw.exitCode,
+      durationMs: Date.now() - started,
+      timedOut: raw.timedOut,
+      truncated: out.truncated || err.truncated
+    }
   }
 }
 
 /**
  * 拼远端脚本。用户命令原样嵌在 { } 组里，stdin 重定向到 /dev/null，
- * 防止命令自己读 stdin 时把脚本后半截吃掉。环境状态（export -p 和 pwd）
- * 落在远端状态文件里，下次同名 session 先回放再执行。
+ * 防止命令自己读 stdin 时把脚本后半截吃掉。有 session 名时才回放和
+ * 保存环境状态（export -p 和 pwd）；没有就是全新环境，跑完即走。
  */
-function buildScript(name: string, prelude: string, command: string): string {
-  const dir = '$HOME/.cache/termpilot/exec2'
-  const parts = [
-    'S="' + dir + '/' + name + '"',
-    'mkdir -p "' + dir + '" 2>/dev/null && chmod 700 "' + dir + '" 2>/dev/null',
-    'if [ -f "$S.env" ]; then . "$S.env" 2>/dev/null; fi',
-    'if [ -f "$S.pwd" ]; then cd "$(cat "$S.pwd")" 2>/dev/null || true; fi'
-  ]
+function buildScript(name: string | null, prelude: string, command: string): string {
+  const parts: string[] = []
+  if (name) {
+    const dir = '$HOME/.cache/termpilot/exec'
+    parts.push(
+      'S="' + dir + '/' + name + '"',
+      'mkdir -p "' + dir + '" 2>/dev/null && chmod 700 "' + dir + '" 2>/dev/null',
+      'if [ -f "$S.env" ]; then . "$S.env" 2>/dev/null; fi',
+      'if [ -f "$S.pwd" ]; then cd "$(cat "$S.pwd")" 2>/dev/null || true; fi'
+    )
+  }
   if (prelude.trim()) parts.push(prelude)
-  parts.push(
-    '{',
-    command,
-    '} < /dev/null',
-    'rc=$?',
-    'export -p > "$S.env" 2>/dev/null && chmod 600 "$S.env" 2>/dev/null',
-    'pwd > "$S.pwd" 2>/dev/null',
-    'exit $rc'
-  )
+  parts.push('{', command, '} < /dev/null')
+  if (name) {
+    parts.push(
+      'rc=$?',
+      'export -p > "$S.env" 2>/dev/null && chmod 600 "$S.env" 2>/dev/null',
+      'pwd > "$S.pwd" 2>/dev/null',
+      'exit $rc'
+    )
+  }
   return parts.join('\n') + '\n'
+}
+
+/** 截断保留开头和结尾，中间注明原长。 */
+function clipStream(text: string, max: number): { text: string; truncated: boolean } {
+  if (text.length <= max) return { text, truncated: false }
+  const head = Math.floor(max / 2)
+  const tail = max - head
+  return {
+    text: `${text.slice(0, head)}\n…中间已截断，原长 ${text.length} 字符…\n${text.slice(-tail)}`,
+    truncated: true
+  }
 }

@@ -289,6 +289,19 @@ export class McpService {
       case 'term_reconnect':
         return this.reconnectTerm(need(raw, 'termId'))
       case 'term_exec': {
+        const found = this.requireForward(need(raw, 'connection'))
+        const command = need(raw, 'command')
+        await this.guard(command)
+        const run = await this.exec2.exec(found.id, {
+          command,
+          session: textArg(raw, 'session'),
+          prelude: textArg(raw, 'prelude'),
+          timeoutMs: intArg(raw, 'timeoutMs') ?? 20_000,
+          maxBytes: intArg(raw, 'maxBytes') ?? 50_000
+        })
+        return JSON.stringify(run)
+      }
+      case 'term_pty': {
         const termId = this.requireLive(need(raw, 'termId'))
         let command = need(raw, 'command')
         if (!command.endsWith('\n')) command += '\n'
@@ -298,23 +311,6 @@ export class McpService {
         if (run.finished && run.exitCode !== null) return `${output}\n\nexit code: ${run.exitCode}`
         if (run.finished) return output
         return `${output}\n\n命令还在跑，以上是已经回来的内容。`
-      }
-      case 'term_exec2': {
-        const found = this.requireForward(need(raw, 'connection'))
-        const command = need(raw, 'command')
-        await this.guard(command)
-        const run = await this.exec2.exec(found.id, {
-          command,
-          session: textArg(raw, 'session'),
-          prelude: textArg(raw, 'prelude'),
-          timeoutMs: intArg(raw, 'timeoutMs') ?? 20_000
-        })
-        const parts = [clipCommand(run.stdout.replace(/\r\n/g, '\n').replace(/\n+$/, ''))]
-        const stderr = clip(run.stderr.replace(/\r\n/g, '\n').trim())
-        if (stderr) parts.push(`stderr:\n${stderr}`)
-        if (run.finished) parts.push(`exit code: ${run.exitCode}`)
-        else parts.push('到点还没跑完，通道已断开，远端进程可能已被挂断。以上是已经回来的内容。')
-        return parts.join('\n\n')
       }
       case 'term_write':
         return this.writeTerm(raw)
