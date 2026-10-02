@@ -25,6 +25,9 @@ import type { ReverseListenerService } from './ReverseListenerService'
 import type { SftpService } from './SftpService'
 import type { StorageService } from './StorageService'
 import type { TerminalService } from './TerminalService'
+import { listSerialPorts } from './transport/serial'
+import { capabilitiesOf, protocolLabel, TELNET_DEFAULT_PORT } from '../../shared/protocol'
+import type { SerialParity, SessionProtocol } from '../../shared/protocol'
 
 const SENSITIVE = /^(\/etc|\/boot|\/bin|\/sbin|\/usr|\/dev|\/sys|\/proc)(\/|$)|^[A-Za-z]:\\Windows\\/i
 
@@ -32,6 +35,7 @@ const DANGEROUS =
   /(?:^|[;&|`\n])\s*(?:sudo\s+)?(rm|rmdir|mkfs|dd|shutdown|reboot|poweroff|halt)\b|chmod\s+[^\n]*-[^\n]*R|chown\s+[^\n]*-[^\n]*R|>\s*\/(?:dev|etc)\b/i
 
 type SessionPatch = {
+  protocol?: SessionProtocol
   name?: string
   mode?: ConnectMode
   host?: string
@@ -40,6 +44,11 @@ type SessionPatch = {
   authType?: AuthType
   keyPath?: string
   secret?: string
+  serialPath?: string
+  baudRate?: number
+  dataBits?: number
+  stopBits?: number
+  parity?: SerialParity
   jumpHost?: string
   jumpPort?: number
   jumpUsername?: string
@@ -289,7 +298,7 @@ export class McpService {
       case 'term_reconnect':
         return this.reconnectTerm(need(raw, 'termId'))
       case 'term_exec': {
-        const found = this.requireForward(need(raw, 'connection'))
+        const found = this.requireCapability(need(raw, 'connection'), 'exec')
         const command = need(raw, 'command')
         await this.guard(command)
         const run = await this.exec2.exec(found.id, {
@@ -337,34 +346,36 @@ export class McpService {
         const shot = lineShot(raw)
         return this.capture(this.requireTerm(shot.termId), 'scrollback', shot.startLine, shot.endLine, shot.ranged)
       }
+      case 'serial_list':
+        return JSON.stringify(await listSerialPorts(), null, 2)
       case 'sftp_list': {
-        const found = this.requireForward(need(raw, 'connection'))
+        const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         const listed = await this.sftp.list(found.id, textArg(raw, 'path') || '.')
         return JSON.stringify(listed, null, 2)
       }
       case 'sftp_mkdir': {
         const path = need(raw, 'path')
-        const found = this.requireForward(need(raw, 'connection'))
+        const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guardPath(path)
         await this.sftp.mkdirPath(found.id, path)
         return `已创建 ${path}`
       }
       case 'sftp_upload': {
         const remotePath = need(raw, 'remotePath')
-        const found = this.requireForward(need(raw, 'connection'))
+        const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guardPath(remotePath)
         await this.sftp.put(found.id, need(raw, 'localPath'), remotePath)
         return `已上传到 ${remotePath}`
       }
       case 'sftp_download': {
         const localPath = need(raw, 'localPath')
-        const found = this.requireForward(need(raw, 'connection'))
+        const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.sftp.get(found.id, need(raw, 'remotePath'), localPath)
         return `已下载到 ${localPath}`
       }
       case 'sftp_rename': {
         const to = need(raw, 'to')
-        const found = this.requireForward(need(raw, 'connection'))
+        const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guardPath(to)
         await this.sftp.rename(found.id, need(raw, 'from'), to)
         return `已改名为 ${to}`
@@ -373,7 +384,7 @@ export class McpService {
         const path = need(raw, 'path')
         const kind = need(raw, 'kind')
         if (kind !== 'file' && kind !== 'dir' && kind !== 'link') throw new Error('kind 只能是 file、dir 或 link')
-        const found = this.requireForward(need(raw, 'connection'))
+        const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guard(`rm ${path}`)
         await this.sftp.remove(found.id, path, kind)
         return `已删除 ${path}`
@@ -521,15 +532,26 @@ export class McpService {
   }
 
   private normalize(current: SessionConfig | null, patch: SessionPatch, creating: boolean): SessionInput {
+    const protocol = patch.protocol ?? current?.protocol ?? 'ssh'
+    const protocolChanged = protocol !== (current?.protocol ?? 'ssh')
     const input: SessionInput = {
       name: (patch.name ?? current?.name ?? '').trim(),
       group: (patch.group ?? current?.group ?? '').trim(),
-      mode: patch.mode ?? current?.mode ?? 'forward',
+      protocol,
+      // 字节流协议只有正向直连一种形态
+      mode: protocol === 'ssh' ? (patch.mode ?? current?.mode ?? 'forward') : 'forward',
       host: (patch.host ?? current?.host ?? '').trim(),
-      port: patch.port ?? current?.port ?? 22,
+      port:
+        patch.port ??
+        (protocolChanged || current === null ? (protocol === 'telnet' ? TELNET_DEFAULT_PORT : 22) : current.port),
       username: (patch.username ?? current?.username ?? '').trim(),
       authType: patch.authType ?? current?.authType ?? 'password',
       keyPath: (patch.keyPath ?? current?.keyPath ?? '').trim() || undefined,
+      serialPath: patch.serialPath ?? current?.serialPath,
+      baudRate: patch.baudRate ?? current?.baudRate,
+      dataBits: patch.dataBits ?? current?.dataBits,
+      stopBits: patch.stopBits ?? current?.stopBits,
+      parity: patch.parity ?? current?.parity,
       listenPort: patch.listenPort ?? current?.listenPort,
       remark: patch.remark ?? current?.remark,
       secret: patch.secret ? patch.secret : undefined,
@@ -539,7 +561,13 @@ export class McpService {
       jumpSecret: patch.jumpSecret
     }
     if (!input.name) throw new Error('名称不能为空')
-    if (input.mode === 'forward') {
+    if (protocol === 'serial') {
+      if (!input.serialPath?.trim()) {
+        throw new Error('串口连接需要 serialPath（COM3 / /dev/ttyUSB0）。先用 serial_list 看本机有哪些串口')
+      }
+    } else if (protocol === 'telnet') {
+      if (!input.host) throw new Error('Telnet 需要主机地址 host')
+    } else if (input.mode === 'forward') {
       if (!input.host || !input.username) throw new Error('主机和用户名不能为空')
       if (input.authType === 'key' && !input.keyPath) throw new Error('私钥认证需要填写 keyPath')
       if (creating && input.authType === 'password' && !input.secret) throw new Error('密码认证需要填写 secret')
@@ -599,6 +627,20 @@ export class McpService {
     return found
   }
 
+  /**
+   * 按能力降级：Telnet 和串口只有一条字节流，没有 exec 通道、没有 SFTP。
+   * 对它们调 term_exec / sftp_* 时给出能力说明，而不是瞎报 Not connected。
+   */
+  private requireCapability(key: string, capability: 'exec' | 'sftp') {
+    const found = this.requireForward(key)
+    if (capabilitiesOf(found.protocol)[capability]) return found
+    const feature = capability === 'exec' ? 'exec 通道（term_exec）' : 'SFTP 文件传输（sftp_*）'
+    throw new Error(
+      `该连接是${protocolLabel(found.protocol)}协议，只有终端字节流，不支持 ${feature}。` +
+        `改用 connection_open 开终端后走 term_pty / term_write 这一族。`
+    )
+  }
+
   private async guardPath(path: string): Promise<void> {
     if (!SENSITIVE.test(path)) return
     if (!this.storage.getMcpSettings().confirmDangerous) return
@@ -611,10 +653,14 @@ export class McpService {
       id: session.publicId,
       name: session.name,
       remark: session.remark ?? '',
+      protocol: session.protocol,
+      capabilities: capabilitiesOf(session.protocol),
       mode: session.mode,
       host: session.host,
       port: session.port,
       username: session.username,
+      serialPath: session.serialPath ?? null,
+      baudRate: session.baudRate ?? null,
       listenPort: session.listenPort ?? null,
       jump: Boolean(session.jumpHost)
     }
@@ -959,11 +1005,20 @@ function keyArg(raw: Record<string, unknown>): Array<(typeof TERM_KEYS)[number]>
 }
 
 function sessionPatch(raw: Record<string, unknown>): SessionPatch {
+  const protocol = textArg(raw, 'protocol')
+  if (protocol && protocol !== 'ssh' && protocol !== 'telnet' && protocol !== 'serial') {
+    throw new Error('protocol 只能是 ssh、telnet 或 serial')
+  }
   const mode = textArg(raw, 'mode')
   if (mode && mode !== 'forward' && mode !== 'reverse') throw new Error('mode 只能是 forward 或 reverse')
   const authType = textArg(raw, 'authType')
   if (authType && authType !== 'password' && authType !== 'key') throw new Error('authType 只能是 password 或 key')
+  const parity = textArg(raw, 'parity')
+  if (parity && parity !== 'none' && parity !== 'even' && parity !== 'odd' && parity !== 'mark' && parity !== 'space') {
+    throw new Error('parity 只能是 none、even、odd、mark 或 space')
+  }
   return {
+    protocol: protocol as SessionPatch['protocol'],
     mode: mode === 'reverse' ? 'reverse' : mode === 'forward' ? 'forward' : undefined,
     host: textArg(raw, 'host'),
     port: intArg(raw, 'port'),
@@ -971,6 +1026,11 @@ function sessionPatch(raw: Record<string, unknown>): SessionPatch {
     authType: authType === 'key' ? 'key' : authType === 'password' ? 'password' : undefined,
     keyPath: textArg(raw, 'keyPath'),
     secret: textArg(raw, 'secret'),
+    serialPath: textArg(raw, 'serialPath'),
+    baudRate: intArg(raw, 'baudRate'),
+    dataBits: intArg(raw, 'dataBits'),
+    stopBits: intArg(raw, 'stopBits'),
+    parity: parity as SessionPatch['parity'],
     listenPort: intArg(raw, 'listenPort'),
     group: textArg(raw, 'group'),
     remark: textArg(raw, 'remark')

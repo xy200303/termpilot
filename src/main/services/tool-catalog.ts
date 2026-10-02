@@ -11,17 +11,26 @@ export interface ToolDef {
 }
 
 const sessionFields: ZodRawShape = {
-  mode: z.enum(['forward', 'reverse']).optional().describe('forward 主动连服务器；reverse 只在 127.0.0.1 监听'),
-  host: z.string().optional().describe('正向 SSH 的主机'),
-  port: z.number().int().min(1).max(65535).optional().describe('正向 SSH 端口，默认 22'),
-  username: z.string().optional().describe('登录用户'),
+  protocol: z
+    .enum(['ssh', 'telnet', 'serial'])
+    .optional()
+    .describe('连接协议，默认 ssh。telnet 走 host/port；serial 走 serialPath。telnet 和 serial 只有终端字节流，没有 exec 通道和 SFTP'),
+  mode: z.enum(['forward', 'reverse']).optional().describe('仅 ssh 有效：forward 主动连服务器；reverse 只在 127.0.0.1 监听'),
+  host: z.string().optional().describe('正向 SSH / Telnet 的主机'),
+  port: z.number().int().min(1).max(65535).optional().describe('SSH 默认 22，Telnet 默认 23'),
+  username: z.string().optional().describe('SSH 登录用户'),
   authType: z.enum(['password', 'key']).optional().describe('password 或 key'),
   keyPath: z.string().optional().describe('私钥文件的本机绝对路径'),
   secret: z
     .string()
     .optional()
     .describe('密码或私钥口令。加密保存，之后不会再返回。留空表示不修改'),
-  listenPort: z.number().int().min(1).max(65535).optional().describe('反向监听端口'),
+  serialPath: z.string().optional().describe('串口设备路径（protocol = serial），例如 COM3 或 /dev/ttyUSB0。先用 serial_list 看本机有哪些串口'),
+  baudRate: z.number().int().optional().describe('串口波特率，默认 115200'),
+  dataBits: z.number().int().min(5).max(8).optional().describe('串口数据位，默认 8'),
+  stopBits: z.number().int().min(1).max(2).optional().describe('串口停止位，默认 1'),
+  parity: z.enum(['none', 'even', 'odd', 'mark', 'space']).optional().describe('串口校验，默认 none'),
+  listenPort: z.number().int().min(1).max(65535).optional().describe('反向监听端口（仅 ssh）'),
   group: z.string().optional().describe('侧边栏分组，留空归入未分组'),
   remark: z.string().optional().describe('备注')
 }
@@ -39,12 +48,13 @@ const lineFields: ZodRawShape = {
 export const TOOLS: readonly ToolDef[] = [
   {
     name: 'connection_list',
-    description: '列出已保存的连接。id 是 conn- 编号，用来调用。name 和 remark 只帮助认出这条连接是干什么的，不能拿去当参数。不含密码。',
+    description:
+      '列出已保存的连接。id 是 conn- 编号，用来调用。name 和 remark 只帮助认出这条连接是干什么的，不能拿去当参数。不含密码。每条连接带 protocol（ssh / telnet / serial）和 capabilities：只有 ssh 有 exec 通道（term_exec）、SFTP（sftp_*）和并发通道；telnet 和 serial 只有终端字节流，对它们用 term_pty / term_write / term_read / term_lines / term_screenshot 这一族。',
     readOnly: true
   },
   {
     name: 'connection_open',
-    description: '按 conn- 编号打开一条正向 SSH，并新开一扇终端。返回的 termId 只属于这扇终端。',
+    description: '按 conn- 编号打开一条连接（SSH / Telnet / 串口），并新开一扇终端。返回的 termId 只属于这扇终端。',
     input: { connection: connId }
   },
   {
@@ -54,7 +64,8 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'connection_create',
-    description: '新建并保存一条 SSH 连接。密码和私钥口令加密存在本机。返回 conn- 编号。弄清它是干什么的之后，用 connection_update 写上 remark。',
+    description:
+      '新建并保存一条连接，返回 conn- 编号。protocol 选 ssh（默认）、telnet 或 serial：ssh 要 host/username/secret；telnet 要 host（port 默认 23），登录在终端里交互完成；serial 要 serialPath（先 serial_list 探路），波特率默认 115200。密码和私钥口令加密存在本机。弄清它是干什么的之后，用 connection_update 写上 remark。',
     input: { name: z.string().describe('显示名称，不能和已有连接重名'), ...sessionFields }
   },
   {
@@ -66,6 +77,12 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'connection_delete',
     description: '删除一条已保存的连接，并关掉它打开的终端。开启危险确认时会先询问。',
     input: { connection: connId }
+  },
+  {
+    name: 'serial_list',
+    description:
+      '列出本机可用的串口设备（path、厂商、序号），给串口连接探路用。建串口连接：connection_create，protocol 填 serial，serialPath 填这里列出的 path。',
+    readOnly: true
   },
   {
     name: 'term_list',
