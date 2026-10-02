@@ -38,7 +38,15 @@ export class ExecService {
     if (!session) throw new Error('这条连接已经删除了')
     const pending = this.sshPool.acquire(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
     this.conns.set(sessionId, pending)
-    pending.catch(() => this.conns.delete(sessionId))
+    // 底层会话断开时主动丢掉缓存，下次 exec 重新拨号。
+    // 否则缓存里一直留着死会话，之后每次 exec 都秒报 ssh2 的 Not connected
+    pending
+      .then((h) => {
+        h.client.once('close', () => {
+          if (this.conns.get(sessionId) === pending) this.conns.delete(sessionId)
+        })
+      })
+      .catch(() => this.conns.delete(sessionId))
     return pending
   }
 
@@ -46,17 +54,33 @@ export class ExecService {
     sessionId: string,
     opts: { command: string; session?: string; prelude?: string; timeoutMs: number; maxBytes: number }
   ): Promise<ExecResult> {
-    const hold = await this.hold(sessionId)
+    let hold = await this.hold(sessionId)
+    try {
+      return await this.runOnce(hold, opts)
+    } catch (error) {
+      // 通道开不起来（连接已断）：丢掉缓存引用重拨一条再试一次。
+      // 此时命令从未发出，重试安全。重拨失败的错误（认证失败等）
+      // 原样抛给调用方——不吞成 Not connected，真实原因必须可见
+      this.conns.delete(sessionId)
+      hold.release()
+      hold = await this.hold(sessionId)
+      return this.runOnce(hold, opts)
+    }
+  }
+
+  private async runOnce(
+    hold: SshHold,
+    opts: { command: string; session?: string; prelude?: string; timeoutMs: number; maxBytes: number }
+  ): Promise<ExecResult> {
     const name = opts.session?.replace(/[^\w-]/g, '_') || null
     const script = buildScript(name, opts.prelude ?? '', opts.command)
     const started = Date.now()
     const raw = await new Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }>(
       (resolve, reject) => {
+        // 会话已死时 ssh2 从 exec() 同步抛 Not connected；
+        // 执行器里的同步异常会自动 reject，交给上层重拨重试
         hold.client.exec('command -v bash >/dev/null 2>&1 && exec bash -s || exec sh -s', (error, stream) => {
           if (error) {
-            // 通道开不起来多半是连接断了，丢掉缓存的引用，下次重新拨号
-            this.conns.delete(sessionId)
-            hold.release()
             reject(error)
             return
           }
