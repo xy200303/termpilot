@@ -75,7 +75,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'term_exec',
     description:
-      '把命令打进这扇已经打开的 shell，等 shell 回到提示符后，只返回这次新出现的内容。不含更早的滚动缓冲，也没有退出码。到 timeoutMs 还没看到提示符，就先把已经回来的内容交出去，命令还在远端跑。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。停掉前台命令用 term_write，keys 填 ["ctrl-c"]。',
+      '把命令打进这扇已经打开的 shell，等命令跑完后，只返回这次新出现的内容和退出码。到 timeoutMs 还没跑完，就先把已经回来的内容交出去，命令还在远端跑。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。停掉前台命令用 term_write，keys 填 ["ctrl-c"]。',
     input: {
       termId,
       command: z.string().describe('要执行的命令。末尾没有换行时会自动补上'),
@@ -85,7 +85,7 @@ export const TOOLS: readonly ToolDef[] = [
         .min(500)
         .max(3_600_000)
         .optional()
-        .describe('这次调用最多等多久，默认 20000。不是命令的时限。到点后还没回到提示符，就先把已经回来的内容交出去，命令还在远端跑。命令预计要跑很久时，把这个值调大。')
+        .describe('这次调用最多等多久，默认 20000。不是命令的时限。到点后还没跑完，就先把已经回来的内容交出去，命令还在远端跑。命令预计要跑很久时，把这个值调大。')
     }
   },
   {

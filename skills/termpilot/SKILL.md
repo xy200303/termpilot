@@ -54,7 +54,7 @@ termpilot call term_exec --json-file args.json --json
 
 正向连接会和本机 `~/.ssh/config` 里的具体 `Host` 对齐。改主机、端口、用户、私钥或跳板时，配置文件里的对应字段一起变。密码、备注和反向监听不写入该文件。带通配符的 `Host` 和 `Match` 不会导入。
 
-先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号。`term_exec` 打进当前 shell，等 shell 回到提示符后，只返回这次新出现的输出，不是整段滚动缓冲，也没有退出码。`timeoutMs` 是这次调用最多等多久，不是命令的时限。到点后还没回到提示符，就先把已经回来的内容交出去，命令还在远端跑。命令预计要跑很久时，把 `timeoutMs` 调大。前台命令停不下来时用 `term_write`，`keys` 填 `["ctrl-c"]`，不要再开一扇终端去结束它。
+先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号。`term_exec` 打进当前 shell，等命令跑完后，只返回这次新出现的输出和退出码，不是整段滚动缓冲。`timeoutMs` 是这次调用最多等多久，不是命令的时限。到点后还没跑完，就先把已经回来的内容交出去，命令还在远端跑。命令预计要跑很久时，把 `timeoutMs` 调大。前台命令停不下来时用 `term_write`，`keys` 填 `["ctrl-c"]`，不要再开一扇终端去结束它。
 
 终端在关闭前保持存在。应用重启后，同一编号、标题和备注仍在，上次退出时已经画好的行会按行写回，新会话从下一行开始。`status` 不是 `connected` 时，用 `term_reconnect` 恢复这一扇，不要再 `connection_open`。先用 `term_read` 查看已有记录。没有这扇终端时，才用 `connection_open` 新开。`term_exec` 的命令以换行结束。修改远程文件前先确认目录。用户未明确要求删除时，不调用 `sftp_remove`，也不在命令中使用 `rm`。`sftp_download` 和 `sftp_upload` 只传 512MB 以内的文件。几个 GB 的文件留在远程机器上处理，不要下载到本机。危险操作在 TermPilot 窗口中等待用户确认。
 

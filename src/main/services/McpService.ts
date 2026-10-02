@@ -291,8 +291,10 @@ export class McpService {
         let command = need(raw, 'command')
         if (!command.endsWith('\n')) command += '\n'
         await this.guard(command)
-        const output = await this.terminal.execCommand(termId, command, intArg(raw, 'timeoutMs') ?? 20_000)
-        return clipCommand(agentText(output))
+        const run = await this.terminal.execCommand(termId, command, intArg(raw, 'timeoutMs') ?? 20_000)
+        const output = clipCommand(agentText(run.output))
+        if (run.finished) return `${output}\n\nexit code: ${run.exitCode}`
+        return `${output}\n\n命令还在跑，以上是已经回来的内容。`
       }
       case 'term_write':
         return this.writeTerm(raw)

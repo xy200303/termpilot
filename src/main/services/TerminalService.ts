@@ -250,31 +250,33 @@ export class TerminalService {
   }
 
   /**
-   * 等命令跑完再返回。PTY 没有退出码，shell 回到提示符就是完成信号：
-   * 新出现的输出里，最后一行是提示符（末尾是 $、#、> 之类），并且安静了一小会儿。
-   * 到 timeoutMs 还没看到提示符，就把已经回来的内容交出去，命令还在远端跑。
+   * 等命令跑完再返回。PTY 没有退出码，就在命令后面让 shell 自己打一个
+   * 只有这次调用才知道的标记，里面带上退出码。看到标记就是跑完了。
+   * 到 timeoutMs 还没看到标记，就把已经回来的内容交出去，命令还在远端跑。
    */
-  async execCommand(termId: string, command: string, timeoutMs: number): Promise<string> {
+  async execCommand(
+    termId: string,
+    command: string,
+    timeoutMs: number
+  ): Promise<{ output: string; exitCode: number | null; finished: boolean }> {
     const term = this.terms.get(termId)
     if (!term?.stream && !term?.ptyProc) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
     const origin = this.logicalEnd(termId)
-    this.input(termId, command.endsWith('\n') ? command : `${command}\n`)
+    const marker = `__TP_DONE_${Math.random().toString(36).slice(2, 10)}__`
+    const body = command.endsWith('\n') ? command.slice(0, -1) : command
+    this.input(termId, `${body}\nprintf '\\n${marker}%s\\n' "$?"\n`)
     const deadline = Date.now() + timeoutMs
-    let last = this.output.get(termId) ?? ''
-    let quietSince = Date.now()
+    let exitCode: number | null = null
     while (Date.now() < deadline) {
       await delay(80)
-      const cur = this.output.get(termId) ?? ''
-      if (cur !== last) {
-        last = cur
-        quietSince = Date.now()
-        continue
+      const found = this.since(termId, origin).match(new RegExp(`${marker}(\\d+)`))
+      if (found) {
+        exitCode = Number(found[1])
+        break
       }
-      if (Date.now() - quietSince < 800) continue
-      const fresh = this.since(termId, origin)
-      if (looksLikePrompt(fresh)) break
     }
-    return this.since(termId, origin)
+    const output = this.since(termId, origin).replace(new RegExp(`\\r?\\n?${marker}\\d+\\r?\\n?`), '')
+    return { output, exitCode, finished: exitCode !== null }
   }
 
   /** 退出时断开。窗口编号和备注留着，输出不写入磁盘。 */
@@ -602,15 +604,6 @@ export class TerminalService {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/** 新出现的输出里，最后一行是不是 shell 提示符。提示符末尾是 $、#、>、% 之类。 */
-function looksLikePrompt(text: string): boolean {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
-  const last = lines.filter((line) => line.trim().length > 0).pop() ?? ''
-  const line = last.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '').trim()
-  if (!line || line.length > 200) return false
-  return /[$#>%❯]\s*$/.test(line)
 }
 
 function isForwardDenied(error: unknown): boolean {
