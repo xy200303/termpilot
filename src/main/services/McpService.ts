@@ -292,12 +292,12 @@ export class McpService {
         if (!command.endsWith('\n')) command += '\n'
         await this.guard(command)
         const output = await this.terminal.execCommand(termId, command, intArg(raw, 'timeoutMs') ?? 20_000)
-        return clipCommand(stripAnsi(output))
+        return clipCommand(agentText(output))
       }
       case 'term_write':
         return this.writeTerm(raw)
       case 'term_read':
-        return clip(stripAnsi(this.terminal.readTail(this.requireTerm(need(raw, 'termId')), intArg(raw, 'maxChars') ?? 8000)))
+        return clip(agentText(this.terminal.readTail(this.requireTerm(need(raw, 'termId')), intArg(raw, 'maxChars') ?? 8000)))
       case 'term_close': {
         const termId = this.requireTerm(need(raw, 'termId'))
         this.terminal.close(termId)
@@ -963,6 +963,21 @@ function stripAnsi(text: string): string {
   return text
     .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+}
+
+/**
+ * 交给助手的回显。去掉控制符，回车收拢成换行，行尾空白去掉，
+ * 连续的空行只留一个。行首缩进和行内的对齐保留，目录列表和表格不会散。
+ */
+function agentText(text: string): string {
+  return stripAnsi(text)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/g, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function clip(text: string, max = 16_000): string {
