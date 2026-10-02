@@ -196,8 +196,6 @@ const api = {
   reverse: {
     start: (sessionId: string) => ipcRenderer.invoke(IPC.reverseStart, sessionId),
     stop: (sessionId: string) => ipcRenderer.invoke(IPC.reverseStop, sessionId),
-    /** xterm 订阅完成后再放行缓存的远端输出 */
-    bind: (termId: string) => ipcRenderer.send(IPC.reverseBind, termId),
     onState: (cb: (e: ReverseListenState) => void) => {
       const listener = (_e: Electron.IpcRendererEvent, p: ReverseListenState) => cb(p)
       ipcRenderer.on(IPC.reverseState, listener)

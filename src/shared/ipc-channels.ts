@@ -71,7 +71,6 @@ export const IPC = {
 
   reverseStart: 'reverse:start',
   reverseStop: 'reverse:stop',
-  reverseBind: 'reverse:bind',
   reverseState: 'reverse:state',
   reverseIncoming: 'reverse:incoming',
 

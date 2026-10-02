@@ -8,7 +8,7 @@ import type { TermCreateOptions, TermDataEvent, TermMetaEvent, TermStatusEvent, 
 import { dialSsh, endJump } from '../ssh-config'
 import type { StorageService } from './StorageService'
 import type { SshHold, SshPool } from './SshPool'
-import { ptyChannel, sshChannel, TransportPool, transportChannel, type TerminalChannel } from './transport'
+import { ownedChannel, ptyChannel, sshChannel, TransportPool, transportChannel, type ByteTransport, type TerminalChannel } from './transport'
 
 /**
  * node-pty 是原生模块，且需要匹配 Electron ABI（electron-rebuild）。
@@ -28,7 +28,7 @@ try {
 interface TermEntry {
   id: string
   sessionId: string | null
-  kind: 'ssh' | 'local'
+  kind: 'ssh' | 'local' | 'reverse'
   /**
    * 这扇终端的活动通道：SSH shell、本机 PTY、Telnet / 串口字节流统一成 TerminalChannel。
    * 只管数据通路；共享连接的池引用在 release 上，断开时一起交还。
@@ -40,7 +40,7 @@ interface TermEntry {
   client?: Client
   /** 经过跳板时，目标连接挂在这上面。关掉终端要一起断开。 */
   jump?: Client
-  /** POSIX 退出码探针。SSH 和本机 POSIX 用；Telnet / 串口只靠提示符。 */
+  /** POSIX 退出码探针。SSH、本机 POSIX 和反向 shell 用；Telnet / 串口只靠提示符。 */
   probePosix?: boolean
   title: string
   remark: string
@@ -49,8 +49,9 @@ interface TermEntry {
 }
 
 /**
- * 终端服务：统一管理 SSH shell 通道（ssh2）、本地 PTY（node-pty）和 Telnet / 串口字节流，
- * 全部归一成 TerminalChannel。数据下行通过 webContents.send 推送，上行走 IPC send。
+ * 终端服务：统一管理 SSH shell 通道（ssh2）、本地 PTY（node-pty）、Telnet / 串口字节流
+ * 和反向监听接受进来的 socket，全部归一成 TerminalChannel。
+ * 数据下行通过 webContents.send 推送，上行走 IPC send。
  */
 export class TerminalService {
   private terms = new Map<string, TermEntry>()
@@ -116,6 +117,7 @@ export class TerminalService {
   async reconnect(termId: string): Promise<void> {
     const term = this.terms.get(termId)
     if (!term) throw new Error('终端不存在或已关闭')
+    if (term.kind === 'reverse') throw new Error('反向终端要等对端再连进来，不能从这里重拨')
     if (term.kind !== 'ssh' || !term.sessionId) throw new Error('本机终端断开后不会保留，请用 term_open_local 再开一扇')
     const session = this.storage.list().find((item) => item.id === term.sessionId)
     if (!session) throw new Error('这条连接已经删除了')
@@ -493,6 +495,44 @@ export class TerminalService {
     }
   }
 
+  // ------------------------------------------------------------ reverse
+
+  /**
+   * 反向监听接受进来的字节流，收编成一扇普通终端。
+   * 不持久化：重启后没有对端可拨，反向终端无源可恢复。
+   * onClosed 无论终端先被关掉还是对端先断开都会调到，给监听方清理计数用。
+   */
+  adoptStream(termId: string, sessionId: string, transport: ByteTransport, opts?: { remark?: string; onClosed?: () => void }): void {
+    const entry: TermEntry = {
+      id: termId,
+      sessionId,
+      kind: 'reverse',
+      title: '窗口',
+      remark: opts?.remark ?? '',
+      liveGen: 0,
+      // 反向 shell 大多是 POSIX（bash/sh），退出码探针按 POSIX 打
+      probePosix: true
+    }
+    this.terms.set(termId, entry)
+    const gen = this.arm(entry)
+    entry.channel = ownedChannel(transport)
+    transport.onData((data) => {
+      if (this.alive(entry, gen)) this.sendData(termId, data)
+    })
+    transport.onError((error) => {
+      if (!this.alive(entry, gen)) return
+      this.releaseLive(entry)
+      this.sendStatus(termId, sessionId, 'error', error.message)
+    })
+    transport.onClose(() => {
+      opts?.onClosed?.()
+      if (!this.alive(entry, gen)) return
+      this.releaseLive(entry)
+      this.sendStatus(termId, sessionId, 'disconnected')
+    })
+    this.sendStatus(termId, sessionId, 'connected')
+  }
+
   // -------------------------------------------------------------- local
 
   private createLocal(opts: TermCreateOptions): void {
@@ -602,6 +642,8 @@ export class TerminalService {
   }
 
   private persist(term: TermEntry): void {
+    // 反向终端无源可恢复，不落盘
+    if (term.kind === 'reverse') return
     this.storage.saveOpenTerm({
       id: term.id,
       sessionId: term.sessionId,

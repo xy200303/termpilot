@@ -139,7 +139,7 @@ function createWindow(storage: StorageService): void {
     mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
   const sshPool = new SshPool()
   terminal = new TerminalService(storage, sender, sshPool)
-  reverse = new ReverseListenerService(sender)
+  reverse = new ReverseListenerService(terminal, sender)
   sftp = new SftpService(storage, sender, sshPool)
   exec2 = new ExecService(storage, sshPool)
   mcp = new McpService(storage, terminal, sftp, exec2, reverse, sender)

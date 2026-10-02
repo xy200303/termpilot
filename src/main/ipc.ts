@@ -72,7 +72,6 @@ export function registerIpc(
   })
 
   ipcMain.on(IPC.termInput, (_e, termId: string, data: string) => {
-    if (reverse.input(termId, data)) return
     terminal.input(termId, data)
   })
 
@@ -90,7 +89,6 @@ export function registerIpc(
   })
 
   ipcMain.on(IPC.termClose, (_e, termId: string) => {
-    if (reverse.close(termId)) return
     terminal.close(termId)
   })
 
@@ -210,8 +208,6 @@ export function registerIpc(
   })
 
   ipcMain.handle(IPC.reverseStop, (_e, sessionId: string) => reverse.stop(sessionId))
-
-  ipcMain.on(IPC.reverseBind, (_e, termId: string) => reverse.bind(termId))
 
   ipcMain.handle(IPC.appVersion, () => app.getVersion())
   ipcMain.handle(IPC.appCheckUpdate, () => checkUpdate())

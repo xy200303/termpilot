@@ -10,7 +10,8 @@ import { SerialTransport } from './serial'
  * 但对外声明同一组能力（capabilitiesOf），MCP 工具按能力降级。
  */
 export interface ByteTransport {
-  readonly protocol: SessionProtocol
+  /** 'reverse' 是反向监听接受进来的 socket（socket.ts），不在会话配置的协议枚举里。 */
+  readonly protocol: SessionProtocol | 'reverse'
   readonly capabilities: ProtocolCapabilities
   /** 拨号。成功之后 onData 才会来数据。 */
   dial(): Promise<void>
@@ -127,5 +128,6 @@ export class TransportPool {
 
 export { capabilitiesOf }
 export type { ProtocolCapabilities, SessionProtocol }
-export { ptyChannel, sshChannel, transportChannel } from './channel'
+export { ownedChannel, ptyChannel, sshChannel, transportChannel } from './channel'
 export type { TerminalChannel } from './channel'
+export { SocketTransport } from './socket'

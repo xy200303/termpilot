@@ -461,9 +461,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   onReverseState: (e) => set({ listeners: { ...get().listeners, [e.sessionId]: e } }),
 
   onReverseIncoming: (e) => {
-    // 先挂上 xterm 的数据订阅，再通知主进程放行缓存
+    // 挂上 xterm 的数据订阅；主进程那边终端已建好，bindView 时补推之前缓冲的输出
     terminalPool.ensure(e.termId)
-    window.api.reverse.bind(e.termId)
     if (get().tabs.some((t) => t.id === e.termId)) {
       set({ activeTabId: e.termId, selectedSessionId: e.sessionId })
       return

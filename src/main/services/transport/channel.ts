@@ -53,3 +53,11 @@ export function transportChannel(transport: ByteTransport): TerminalChannel {
     close: () => undefined
   }
 }
+
+/** 独占的字节流（反向监听的 socket）。没有池，关这扇终端就断开这条流。 */
+export function ownedChannel(transport: ByteTransport): TerminalChannel {
+  return {
+    write: (data) => transport.write(data),
+    close: () => transport.close()
+  }
+}

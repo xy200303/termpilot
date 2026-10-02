@@ -1,27 +1,26 @@
-import { newTermId } from '../../shared/ids'
 import net from 'node:net'
 import type { WebContents } from 'electron'
+import { newTermId } from '../../shared/ids'
 import { IPC } from '../../shared/ipc-channels'
 import type { ReverseIncoming, ReverseListenState, TermStatusEvent } from '../../shared/types'
-
-interface PendingConn {
-  sessionId: string
-  socket: net.Socket
-  /** 渲染进程尚未挂上 xterm 时先缓存，避免丢开机横幅 */
-  buffer: Buffer[]
-  bound: boolean
-}
+import type { TerminalService } from './TerminalService'
+import { SocketTransport } from './transport'
 
 /**
  * 反向 shell 监听。
  * 只绑定 127.0.0.1：公网暴露交给 cpolar 等外部穿透，本工具不自己做端口映射。
- * 远端连入后，字节流直接接到对应终端标签。
+ * 远端连入后，socket 包成 SocketTransport 交给 TerminalService 收编成普通终端：
+ * 反向终端和 SSH / Telnet / 串口走同一套数据通路，MCP 的屏幕族工具也能用。
  */
 export class ReverseListenerService {
   private servers = new Map<string, { server: net.Server; port: number }>()
-  private conns = new Map<string, PendingConn>()
+  /** termId -> sessionId。只用来数在线对端和停监听时批量断开。 */
+  private peers = new Map<string, string>()
 
-  constructor(private getSender: () => WebContents | null) {}
+  constructor(
+    private terminal: TerminalService,
+    private getSender: () => WebContents | null
+  ) {}
 
   start(sessionId: string, port: number): void {
     if (this.servers.has(sessionId)) return
@@ -51,12 +50,12 @@ export class ReverseListenerService {
     const rec = this.servers.get(sessionId)
     this.servers.delete(sessionId)
     rec?.server.close()
-    for (const [termId, conn] of this.conns) {
-      if (conn.sessionId === sessionId) {
-        conn.socket.destroy()
-        this.conns.delete(termId)
-        this.emitStatus(termId, sessionId, 'disconnected')
-      }
+    // 关终端会带着断开 socket，onClosed 回调里再清理 peers
+    for (const [termId, sid] of [...this.peers]) {
+      if (sid !== sessionId) continue
+      this.terminal.close(termId)
+      // TerminalService.close 静默移除，界面上把标签状态补成已断开
+      this.send(IPC.termStatus, { termId, sessionId, status: 'disconnected' } satisfies TermStatusEvent)
     }
     this.emitState({
       sessionId,
@@ -66,68 +65,29 @@ export class ReverseListenerService {
     })
   }
 
-  /** 渲染进程的 xterm 已订阅数据后再放行缓存 */
-  bind(termId: string): void {
-    const conn = this.conns.get(termId)
-    if (!conn || conn.bound) return
-    conn.bound = true
-    for (const chunk of conn.buffer) this.emitData(termId, chunk)
-    conn.buffer = []
-    this.emitStatus(termId, conn.sessionId, 'connected')
-  }
-
-  input(termId: string, data: string): boolean {
-    const conn = this.conns.get(termId)
-    if (!conn) return false
-    conn.socket.write(data)
-    return true
-  }
-
-  close(termId: string): boolean {
-    const conn = this.conns.get(termId)
-    if (!conn) return false
-    conn.socket.destroy()
-    this.conns.delete(termId)
-    this.emitState({
-      sessionId: conn.sessionId,
-      listening: this.servers.has(conn.sessionId),
-      port: this.servers.get(conn.sessionId)?.port ?? 0,
-      peers: this.peerCount(conn.sessionId)
-    })
-    return true
-  }
-
   disposeAll(): void {
     for (const id of [...this.servers.keys()]) this.stop(id)
   }
 
   private accept(sessionId: string, socket: net.Socket): void {
     const termId = newTermId()
-    const conn: PendingConn = { sessionId, socket, buffer: [], bound: false }
-    this.conns.set(termId, conn)
-
-    socket.on('data', (chunk: Buffer | string) => {
-      const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
-      if (!conn.bound) {
-        conn.buffer.push(buf)
-        return
-      }
-      this.emitData(termId, buf)
-    })
-    socket.on('close', () => {
-      this.conns.delete(termId)
-      this.emitStatus(termId, sessionId, 'disconnected')
-      const rec = this.servers.get(sessionId)
-      this.emitState({
-        sessionId,
-        listening: Boolean(rec),
-        port: rec?.port ?? 0,
-        peers: this.peerCount(sessionId)
-      })
-    })
-    socket.on('error', () => socket.destroy())
-
+    this.peers.set(termId, sessionId)
     const peer = `${socket.remoteAddress ?? '?'}:${socket.remotePort ?? '?'}`
+
+    this.terminal.adoptStream(termId, sessionId, new SocketTransport(socket), {
+      remark: peer,
+      onClosed: () => {
+        if (!this.peers.delete(termId)) return
+        const rec = this.servers.get(sessionId)
+        this.emitState({
+          sessionId,
+          listening: Boolean(rec),
+          port: rec?.port ?? 0,
+          peers: this.peerCount(sessionId)
+        })
+      }
+    })
+
     const payload: ReverseIncoming = { sessionId, termId, peer }
     this.send(IPC.reverseIncoming, payload)
     const rec = this.servers.get(sessionId)
@@ -141,22 +101,8 @@ export class ReverseListenerService {
 
   private peerCount(sessionId: string): number {
     let n = 0
-    for (const c of this.conns.values()) if (c.sessionId === sessionId) n++
+    for (const sid of this.peers.values()) if (sid === sessionId) n++
     return n
-  }
-
-  private emitData(termId: string, data: Buffer): void {
-    this.send(IPC.termData, { termId, data })
-  }
-
-  private emitStatus(
-    termId: string,
-    sessionId: string,
-    status: TermStatusEvent['status'],
-    error?: string
-  ): void {
-    const payload: TermStatusEvent = { termId, sessionId, status, error }
-    this.send(IPC.termStatus, payload)
   }
 
   private emitState(state: ReverseListenState): void {
