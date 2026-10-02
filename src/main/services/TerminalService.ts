@@ -252,7 +252,9 @@ export class TerminalService {
   /**
    * 等命令跑完再返回。PTY 没有退出码，就在命令后面让 shell 自己打一个
    * 只有这次调用才知道的标记，里面带上退出码。看到标记就是跑完了。
-   * 到 timeoutMs 还没看到标记，就把已经回来的内容交出去，命令还在远端跑。
+   * 标记和回显的 printf 行打印完立刻用光标回退抹掉，同一个数据块里写完就擦，
+   * 屏幕上基本看不到。到 timeoutMs 还没看到标记，就把已经回来的内容交出去，
+   * 命令还在远端跑。
    */
   async execCommand(
     termId: string,
@@ -264,7 +266,8 @@ export class TerminalService {
     const origin = this.logicalEnd(termId)
     const marker = `__TP_DONE_${Math.random().toString(36).slice(2, 10)}__`
     const body = command.endsWith('\n') ? command.slice(0, -1) : command
-    this.input(termId, `${body}\nprintf '\\n${marker}%s\\n' "$?"\n`)
+    // 打印标记行，然后回退两行抹掉回显的命令行和标记行，光标回到命令行原来的位置
+    this.input(termId, `${body}\nprintf '${marker}%s\\n\\033[2A\\033[2K\\033[1B\\033[2K\\033[1A' "$?"\n`)
     const deadline = Date.now() + timeoutMs
     let exitCode: number | null = null
     while (Date.now() < deadline) {
@@ -275,7 +278,11 @@ export class TerminalService {
         break
       }
     }
-    const output = this.since(termId, origin).replace(new RegExp(`\\r?\\n?${marker}\\d+\\r?\\n?`), '')
+    // 标记行和回显的 printf 行都带 marker 字样，一起剔掉
+    const output = this.since(termId, origin)
+      .split('\n')
+      .filter((line) => !line.includes(marker))
+      .join('\n')
     return { output, exitCode, finished: exitCode !== null }
   }
 
