@@ -249,6 +249,11 @@ export class TerminalService {
     return (this.output.get(termId) ?? '').slice(-maxChars)
   }
 
+  /**
+   * 等命令跑完再返回。PTY 没有退出码，shell 回到提示符就是完成信号：
+   * 新出现的输出里，最后一行是提示符（末尾是 $、#、> 之类），并且安静了一小会儿。
+   * 到 timeoutMs 还没看到提示符，就把已经回来的内容交出去，命令还在远端跑。
+   */
   async execCommand(termId: string, command: string, timeoutMs: number): Promise<string> {
     const term = this.terms.get(termId)
     if (!term?.stream && !term?.ptyProc) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
@@ -265,7 +270,9 @@ export class TerminalService {
         quietSince = Date.now()
         continue
       }
-      if (this.logicalEnd(termId) > origin && Date.now() - quietSince >= 800) break
+      if (Date.now() - quietSince < 800) continue
+      const fresh = this.since(termId, origin)
+      if (looksLikePrompt(fresh)) break
     }
     return this.since(termId, origin)
   }
@@ -595,6 +602,15 @@ export class TerminalService {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 新出现的输出里，最后一行是不是 shell 提示符。提示符末尾是 $、#、>、% 之类。 */
+function looksLikePrompt(text: string): boolean {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  const last = lines.filter((line) => line.trim().length > 0).pop() ?? ''
+  const line = last.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '').trim()
+  if (!line || line.length > 200) return false
+  return /[$#>%❯]\s*$/.test(line)
 }
 
 function isForwardDenied(error: unknown): boolean {
