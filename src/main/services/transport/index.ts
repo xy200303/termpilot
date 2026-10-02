@@ -1,5 +1,5 @@
 import type { SessionConfig } from '../../../shared/types'
-import { capabilitiesOf, type ProtocolCapabilities, type SessionProtocol } from '../../../shared/protocol'
+import { capabilitiesOf, TELNET_DEFAULT_PORT, type ProtocolCapabilities, type SessionProtocol } from '../../../shared/protocol'
 import { TelnetTransport } from './telnet'
 import { SerialTransport } from './serial'
 
@@ -21,21 +21,27 @@ export interface ByteTransport {
   close(): void
 }
 
-/** 从会话配置拨一条字节流。仅 Telnet / 串口走这里，SSH 仍走 SshPool。 */
-export function dialTransport(session: SessionConfig): ByteTransport {
-  if (session.protocol === 'telnet') {
-    return new TelnetTransport(session.host.trim(), session.port || 23)
-  }
-  if (session.protocol === 'serial') {
-    return new SerialTransport({
+/**
+ * 字节流协议注册表。加新协议（如 BMC 串口重定向）只需：
+ * shared/protocol.ts 的 SessionProtocol 加一个值、这里登记一个拨号器、能力按实声明。
+ */
+const DIALERS: Partial<Record<SessionProtocol, (session: SessionConfig) => ByteTransport>> = {
+  telnet: (session) => new TelnetTransport(session.host.trim(), session.port || TELNET_DEFAULT_PORT),
+  serial: (session) =>
+    new SerialTransport({
       path: session.serialPath?.trim() ?? '',
       baudRate: session.baudRate,
       dataBits: session.dataBits,
       stopBits: session.stopBits,
       parity: session.parity
     })
-  }
-  throw new Error(`${session.protocol ?? 'ssh'} 不是字节流协议`)
+}
+
+/** 从会话配置拨一条字节流。仅注册表里的协议（Telnet / 串口）走这里，SSH 仍走 SshPool。 */
+export function dialTransport(session: SessionConfig): ByteTransport {
+  const dialer = DIALERS[session.protocol]
+  if (!dialer) throw new Error(`${session.protocol ?? 'ssh'} 不是字节流协议`)
+  return dialer(session)
 }
 
 interface Slot {
@@ -121,3 +127,5 @@ export class TransportPool {
 
 export { capabilitiesOf }
 export type { ProtocolCapabilities, SessionProtocol }
+export { ptyChannel, sshChannel, transportChannel } from './channel'
+export type { TerminalChannel } from './channel'

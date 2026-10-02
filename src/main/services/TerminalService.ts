@@ -3,14 +3,12 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import { Client } from 'ssh2'
-import type { ClientChannel } from 'ssh2'
-import type { IPty } from 'node-pty'
 import { IPC } from '../../shared/ipc-channels'
 import type { TermCreateOptions, TermDataEvent, TermMetaEvent, TermStatusEvent, SessionConfig } from '../../shared/types'
 import { dialSsh, endJump } from '../ssh-config'
 import type { StorageService } from './StorageService'
 import type { SshHold, SshPool } from './SshPool'
-import { TransportPool, type ByteTransport } from './transport'
+import { ptyChannel, sshChannel, TransportPool, transportChannel, type TerminalChannel } from './transport'
 
 /**
  * node-pty 是原生模块，且需要匹配 Electron ABI（electron-rebuild）。
@@ -31,17 +29,19 @@ interface TermEntry {
   id: string
   sessionId: string | null
   kind: 'ssh' | 'local'
+  /**
+   * 这扇终端的活动通道：SSH shell、本机 PTY、Telnet / 串口字节流统一成 TerminalChannel。
+   * 只管数据通路；共享连接的池引用在 release 上，断开时一起交还。
+   */
+  channel?: TerminalChannel
+  /** 共享连接的池引用（SSH 池 / 字节流池）。最后一次交还才真正断开。 */
+  release?: () => void
+  /** 跳板直登（无池）时整条 SSH 连接挂在这上面。关掉终端要一起断开。 */
   client?: Client
   /** 经过跳板时，目标连接挂在这上面。关掉终端要一起断开。 */
   jump?: Client
-  /** 和文件树共用的那条 SSH 会话。最后一次引用才真正断开。 */
-  release?: () => void
-  stream?: ClientChannel
-  /** Telnet / 串口的字节流。和 stream 互斥。 */
-  transport?: ByteTransport
   /** POSIX 退出码探针。SSH 和本机 POSIX 用；Telnet / 串口只靠提示符。 */
   probePosix?: boolean
-  ptyProc?: IPty
   title: string
   remark: string
   /** 每次拨号加一。旧连接迟到的关闭事件不再拆掉新的。 */
@@ -49,8 +49,8 @@ interface TermEntry {
 }
 
 /**
- * 终端服务：统一管理 SSH shell 通道（ssh2）与本地 PTY（node-pty）。
- * 数据下行通过 webContents.send 推送，上行走 IPC send。
+ * 终端服务：统一管理 SSH shell 通道（ssh2）、本地 PTY（node-pty）和 Telnet / 串口字节流，
+ * 全部归一成 TerminalChannel。数据下行通过 webContents.send 推送，上行走 IPC send。
  */
 export class TerminalService {
   private terms = new Map<string, TermEntry>()
@@ -79,7 +79,7 @@ export class TerminalService {
 
   async create(opts: TermCreateOptions): Promise<void> {
     const existing = this.terms.get(opts.termId)
-    if (existing?.stream || existing?.ptyProc || existing?.transport) return
+    if (existing?.channel) return
     if (existing && this.lastStatus.get(opts.termId)?.status === 'connecting') return
 
     if (opts.kind === 'local') {
@@ -95,19 +95,15 @@ export class TerminalService {
   }
 
   input(termId: string, data: string): void {
-    const t = this.terms.get(termId)
-    if (!t) return
-    if (t.stream) t.stream.write(data)
-    else if (t.transport) t.transport.write(data)
-    else if (t.ptyProc) t.ptyProc.write(data)
+    this.terms.get(termId)?.channel?.write(data)
   }
 
   resize(termId: string, cols: number, rows: number): void {
     const t = this.terms.get(termId)
     if (!t || cols <= 0 || rows <= 0) return
     try {
-      if (t.stream) t.stream.setWindow(rows, cols, 0, 0)
-      else if (t.ptyProc) t.ptyProc.resize(cols, rows)
+      // 字节流协议（Telnet / 串口）没有窗口尺寸一说，channel 不实现 resize
+      t.channel?.resize?.(cols, rows)
     } catch {
       /* 连接已断开时忽略 resize 错误 */
     }
@@ -124,7 +120,7 @@ export class TerminalService {
     const session = this.storage.list().find((item) => item.id === term.sessionId)
     if (!session) throw new Error('这条连接已经删除了')
     if (session.mode === 'reverse') throw new Error('反向监听要在界面上点开始监听')
-    if (term.stream) return
+    if (term.channel) return
     if (this.lastStatus.get(termId)?.status === 'connecting') {
       await this.waitStatus(termId, 20_000)
       return
@@ -274,7 +270,7 @@ export class TerminalService {
     timeoutMs: number
   ): Promise<{ output: string; exitCode: number | null; finished: boolean }> {
     const term = this.terms.get(termId)
-    if (!term?.stream && !term?.ptyProc && !term?.transport) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
+    if (!term?.channel) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
     const origin = this.logicalEnd(termId)
     const promptBefore = lastScreenLine(this.readTail(termId, 4000))
     const body = command.endsWith('\n') ? command.slice(0, -1) : command
@@ -373,7 +369,6 @@ export class TerminalService {
   /** 转发已经通了。shell 开在这条会话上，不再向跳板要一次连接。 */
   private bindShared(entry: TermEntry, hold: SshHold, opts: TermCreateOptions, gen: number): void {
     const sessionId = entry.sessionId
-    entry.client = hold.client
     entry.release = hold.release
     hold.client.on('error', (err) => {
       if (!this.alive(entry, gen)) return
@@ -391,7 +386,7 @@ export class TerminalService {
         this.sendStatus(opts.termId, sessionId, 'error', `打开 shell 失败: ${err?.message ?? '未知原因'}`)
         return
       }
-      entry.stream = stream
+      entry.channel = sshChannel(stream)
       this.sendStatus(opts.termId, sessionId, 'connected')
       stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
       stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
@@ -431,7 +426,7 @@ export class TerminalService {
         rows: opts.rows,
         onJumpShell: (stream) => {
           if (!this.alive(entry, gen)) return
-          entry.stream = stream
+          entry.channel = sshChannel(stream)
           this.sendStatus(opts.termId, session.id, 'connected')
           stream.on('data', (d: Buffer) => this.sendData(opts.termId, d))
           stream.stderr.on('data', (d: Buffer) => this.sendData(opts.termId, d))
@@ -476,7 +471,7 @@ export class TerminalService {
         hold.release()
         return
       }
-      entry.transport = hold.transport
+      entry.channel = transportChannel(hold.transport)
       entry.release = hold.release
       hold.transport.onData((data) => {
         if (this.alive(entry, gen)) this.sendData(opts.termId, data)
@@ -535,7 +530,7 @@ export class TerminalService {
         cwd: homedir(),
         env: process.env as Record<string, string>
       })
-      entry.ptyProc = proc
+      entry.channel = ptyChannel(proc)
       this.sendStatus(opts.termId, null, 'connected')
       proc.onData((d) => this.sendData(opts.termId, Buffer.from(d, 'utf-8')))
       const gen = this.arm(entry)
@@ -646,25 +641,19 @@ export class TerminalService {
 
   private releaseLive(term: TermEntry | undefined): void {
     if (!term) return
-    const stream = term.stream
+    const channel = term.channel
     const release = term.release
     const client = term.client
     const jump = term.jump
-    const ptyProc = term.ptyProc
-    const transport = term.transport
-    term.stream = undefined
+    term.channel = undefined
     term.release = undefined
     term.client = undefined
     term.jump = undefined
-    term.ptyProc = undefined
-    term.transport = undefined
     try {
-      stream?.close()
+      channel?.close()
       if (release) release()
       else client?.end()
-      if (!release) transport?.close()
       endJump(jump)
-      ptyProc?.kill()
     } catch {
       /* 断开阶段的异常忽略 */
     }
