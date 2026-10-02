@@ -5,7 +5,8 @@ export interface ExecResult {
   stdout: string
   stderr: string
   exitCode: number | null
-  durationMs: number
+  /** 花了多少秒。 */
+  duration: number
   timedOut: boolean
   /** stdout 或 stderr 因 maxBytes 被截断时为 true。截断保留开头和结尾。 */
   truncated: boolean
@@ -102,7 +103,7 @@ export class ExecService {
       stdout: out.text,
       stderr: err.text,
       exitCode: raw.exitCode,
-      durationMs: Date.now() - started,
+      duration: Math.round(Date.now() - started) / 1000,
       timedOut: raw.timedOut,
       truncated: out.truncated || err.truncated
     }

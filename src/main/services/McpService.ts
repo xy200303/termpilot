@@ -296,7 +296,7 @@ export class McpService {
           command,
           session: textArg(raw, 'session'),
           prelude: textArg(raw, 'prelude'),
-          timeoutMs: intArg(raw, 'timeoutMs') ?? 20_000,
+          timeoutMs: (intArg(raw, 'timeout') ?? 20) * 1000,
           maxBytes: intArg(raw, 'maxBytes') ?? 50_000
         })
         return JSON.stringify(run)
@@ -306,7 +306,7 @@ export class McpService {
         let command = need(raw, 'command')
         if (!command.endsWith('\n')) command += '\n'
         await this.guard(command)
-        const run = await this.terminal.execCommand(termId, command, intArg(raw, 'timeoutMs') ?? 20_000)
+        const run = await this.terminal.execCommand(termId, command, (intArg(raw, 'timeout') ?? 20) * 1000)
         const output = clipCommand(agentText(run.output))
         if (run.finished && run.exitCode !== null) return `${output}\n\nexit code: ${run.exitCode}`
         if (run.finished) return output
