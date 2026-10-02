@@ -524,7 +524,7 @@ export class McpService {
       const ok = await this.ask(`删除连接 ${session.name}`)
       if (!ok) throw new Error('已取消：删除未确认')
     }
-    this.disconnectSession(session.id)
+    this.disconnectById(session)
     if (session.mode === 'reverse') this.reverse.stop(session.id)
     this.storage.delete(session.id)
     this.publishSessions()
@@ -587,7 +587,10 @@ export class McpService {
   }
 
   private disconnectSession(key: string): string {
-    const session = this.findSession(key)
+    return this.disconnectById(this.findSession(key))
+  }
+
+  private disconnectById(session: SessionConfig): string {
     const terms = this.terminal.listTerms().filter((term) => term.sessionId === session.id)
     for (const term of terms) {
       this.terminal.close(term.id)
