@@ -10,6 +10,7 @@ import type { TermCreateOptions, TermDataEvent, TermMetaEvent, TermStatusEvent, 
 import { dialSsh, endJump } from '../ssh-config'
 import type { StorageService } from './StorageService'
 import type { SshHold, SshPool } from './SshPool'
+import { TransportPool, type ByteTransport } from './transport'
 
 /**
  * node-pty 是原生模块，且需要匹配 Electron ABI（electron-rebuild）。
@@ -36,6 +37,10 @@ interface TermEntry {
   /** 和文件树共用的那条 SSH 会话。最后一次引用才真正断开。 */
   release?: () => void
   stream?: ClientChannel
+  /** Telnet / 串口的字节流。和 stream 互斥。 */
+  transport?: ByteTransport
+  /** POSIX 退出码探针。SSH 和本机 POSIX 用；Telnet / 串口只靠提示符。 */
+  probePosix?: boolean
   ptyProc?: IPty
   title: string
   remark: string
@@ -61,6 +66,8 @@ export class TerminalService {
   private viewReady = new Set<string>()
   /** 正在退出。此时断开不要把窗口从库里删掉。 */
   private parking = false
+  /** Telnet / 串口的字节流池。同一设备只拨一次，多扇终端共享。 */
+  private streamPool = new TransportPool()
 
   constructor(
     private storage: StorageService,
@@ -72,20 +79,26 @@ export class TerminalService {
 
   async create(opts: TermCreateOptions): Promise<void> {
     const existing = this.terms.get(opts.termId)
-    if (existing?.stream || existing?.ptyProc) return
+    if (existing?.stream || existing?.ptyProc || existing?.transport) return
     if (existing && this.lastStatus.get(opts.termId)?.status === 'connecting') return
 
     if (opts.kind === 'local') {
       this.createLocal(opts)
-    } else {
-      await this.createSsh(opts)
+      return
     }
+    const session = this.storage.list().find((s) => s.id === opts.sessionId)
+    if (session && session.protocol !== 'ssh' && session.mode !== 'reverse') {
+      await this.createStream(opts, session)
+      return
+    }
+    await this.createSsh(opts)
   }
 
   input(termId: string, data: string): void {
     const t = this.terms.get(termId)
     if (!t) return
     if (t.stream) t.stream.write(data)
+    else if (t.transport) t.transport.write(data)
     else if (t.ptyProc) t.ptyProc.write(data)
   }
 
@@ -261,11 +274,12 @@ export class TerminalService {
     timeoutMs: number
   ): Promise<{ output: string; exitCode: number | null; finished: boolean }> {
     const term = this.terms.get(termId)
-    if (!term?.stream && !term?.ptyProc) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
+    if (!term?.stream && !term?.ptyProc && !term?.transport) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
     const origin = this.logicalEnd(termId)
     const promptBefore = lastScreenLine(this.readTail(termId, 4000))
     const body = command.endsWith('\n') ? command.slice(0, -1) : command
-    const posix = term.kind === 'ssh' || process.platform !== 'win32'
+    // Telnet / 串口那头可能是嵌入式 shell，不一定有 printf，只靠提示符判断
+    const posix = term.probePosix ?? (term.kind === 'ssh' || process.platform !== 'win32')
     const marker = `__TP_DONE_${Math.random().toString(36).slice(2, 10)}__`
     // 标记打印完立刻用光标回退抹掉，同一个数据块里写完就擦，屏幕上基本看不到
     const probe = posix ? `\nprintf '${marker}%s\\n\\033[2A\\033[2K\\033[1B\\033[2K\\033[1A' "$?"` : ''
@@ -435,6 +449,55 @@ export class TerminalService {
     }
   }
 
+  // ----------------------------------------------------- telnet / serial
+
+  /** Telnet / 串口：一条字节流就是全部。没有 exec 通道、没有 SFTP。 */
+  private async createStream(opts: TermCreateOptions, session: SessionConfig): Promise<void> {
+    const prior = this.terms.get(opts.termId)
+    const entry: TermEntry = prior ?? {
+      id: opts.termId,
+      sessionId: session.id,
+      kind: 'ssh',
+      title: opts.title?.trim() || '窗口',
+      remark: '',
+      liveGen: 0
+    }
+    if (!prior) {
+      this.terms.set(opts.termId, entry)
+      this.persist(entry)
+    }
+    entry.probePosix = false
+    const gen = this.arm(entry)
+    this.sendStatus(opts.termId, session.id, 'connecting')
+
+    try {
+      const hold = await this.streamPool.acquire(session)
+      if (!this.alive(entry, gen)) {
+        hold.release()
+        return
+      }
+      entry.transport = hold.transport
+      entry.release = hold.release
+      hold.transport.onData((data) => {
+        if (this.alive(entry, gen)) this.sendData(opts.termId, data)
+      })
+      hold.transport.onError((error) => {
+        if (!this.alive(entry, gen)) return
+        this.releaseLive(entry)
+        this.sendStatus(opts.termId, session.id, 'error', error.message)
+      })
+      hold.transport.onClose(() => {
+        if (!this.alive(entry, gen)) return
+        this.releaseLive(entry)
+        this.sendStatus(opts.termId, session.id, 'disconnected')
+      })
+      this.sendStatus(opts.termId, session.id, 'connected')
+    } catch (error) {
+      if (!this.alive(entry, gen)) return
+      this.sendStatus(opts.termId, session.id, 'error', error instanceof Error ? error.message : String(error))
+    }
+  }
+
   // -------------------------------------------------------------- local
 
   private createLocal(opts: TermCreateOptions): void {
@@ -588,15 +651,18 @@ export class TerminalService {
     const client = term.client
     const jump = term.jump
     const ptyProc = term.ptyProc
+    const transport = term.transport
     term.stream = undefined
     term.release = undefined
     term.client = undefined
     term.jump = undefined
     term.ptyProc = undefined
+    term.transport = undefined
     try {
       stream?.close()
       if (release) release()
       else client?.end()
+      if (!release) transport?.close()
       endJump(jump)
       ptyProc?.kill()
     } catch {
