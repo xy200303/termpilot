@@ -8,7 +8,7 @@ import { parseToolArgs, schemaText, TOOLS, toolsText } from './tool-catalog'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { IPC } from '../../shared/ipc-channels'
-import { encodeTermInput, TERM_KEYS } from '../../shared/term-keys'
+import { canonicalKey, encodeTermInput, TERM_KEYS } from '../../shared/term-keys'
 import type { CaptureReply, TermLinesReply, TermModeReply } from '../../shared/types'
 import {
   MCP_DEFAULT_PORT,
@@ -292,7 +292,7 @@ export class McpService {
         if (!command.endsWith('\n')) command += '\n'
         await this.guard(command)
         const output = await this.terminal.execCommand(termId, command, intArg(raw, 'timeoutMs') ?? 20_000)
-        return clip(stripAnsi(output))
+        return clipCommand(stripAnsi(output))
       }
       case 'term_write':
         return this.writeTerm(raw)
@@ -374,7 +374,7 @@ export class McpService {
     return [
       `已重新连接终端 ${id}。`,
       session ? `连接：${session.publicId}（${session.name}）` : '',
-      '编号没变，上次输出还在。'
+      '编号没变，接回一条新的 shell。'
     ]
       .filter(Boolean)
       .join('\n')
@@ -933,7 +933,7 @@ function keyArg(raw: Record<string, unknown>): Array<(typeof TERM_KEYS)[number]>
   const list = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : null
   if (!list) throw new Error('keys 必须是按键列表')
   const allowed = new Set<string>(TERM_KEYS)
-  const keys = list.map((item) => String(item).trim()).filter(Boolean)
+  const keys = list.map((item) => canonicalKey(String(item))).filter(Boolean)
   for (const key of keys) {
     if (!allowed.has(key)) throw new Error(`不认识的按键: ${key}`)
   }
@@ -968,4 +968,12 @@ function stripAnsi(text: string): string {
 function clip(text: string, max = 16_000): string {
   if (text.length <= max) return text
   return `${text.slice(-max)}\n…已截断，只保留最后 ${max} 个字符`
+}
+
+/** 只截这次命令自己的输出。头尾都留，避免只剩滚动缓冲末尾。 */
+function clipCommand(text: string, max = 16_000): string {
+  if (text.length <= max) return text
+  const head = Math.floor(max / 2)
+  const tail = max - head
+  return `${text.slice(0, head)}\n…中间已截断…\n${text.slice(-tail)}`
 }

@@ -92,6 +92,7 @@ export class StorageService {
     this.ensureColumn('sessions', 'ssh_options', 'TEXT')
     this.ensureColumn('sessions', 'public_id', 'TEXT')
     this.ensureColumn('sessions', 'config_host', 'TEXT')
+    this.db.exec(`UPDATE open_terms SET scrollback = '' WHERE scrollback != ''`)
     this.backfillPublicIds()
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sessions_public_id ON sessions(public_id)')
     this.db.exec(`
@@ -314,7 +315,6 @@ export class StorageService {
     kind: 'ssh' | 'local'
     title: string
     remark: string
-    scrollback: string
   }[] {
     const rows = this.db.prepare('SELECT * FROM open_terms ORDER BY sort_order ASC, rowid ASC').all()
     return rows.flatMap((row) => {
@@ -326,8 +326,7 @@ export class StorageService {
           sessionId: optionalText(row.session_id) ?? null,
           kind,
           title: text(row.title) || '窗口',
-          remark: text(row.remark),
-          scrollback: text(row.scrollback)
+          remark: text(row.remark)
         }
       ]
     })
@@ -353,10 +352,6 @@ export class StorageService {
            remark = excluded.remark`
       )
       .run(term.id, term.sessionId, term.kind, term.title, term.remark, next)
-  }
-
-  saveTermScrollback(id: string, scrollback: string): void {
-    this.db.prepare('UPDATE open_terms SET scrollback = ? WHERE id = ?').run(scrollback.slice(-32_000), id)
   }
 
   forgetOpenTerm(id: string): void {

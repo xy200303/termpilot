@@ -71,6 +71,13 @@ export function encodeTermInput(opts: {
   return out
 }
 
+/** 把 Ctrl+C、^C 收成 ctrl-c 这种名字。 */
+export function canonicalKey(name: string): string {
+  const key = name.trim().toLowerCase().replace(/\s+/g, '').replace(/\+/g, '-')
+  if (key.startsWith('^') && key.length === 2) return `ctrl-${key.slice(1)}`
+  return key
+}
+
 function encodeKey(key: string, applicationCursor: boolean): string {
   if (key in ARROW) {
     const letter = ARROW[key as keyof typeof ARROW]

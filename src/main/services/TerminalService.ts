@@ -50,12 +50,13 @@ interface TermEntry {
 export class TerminalService {
   private terms = new Map<string, TermEntry>()
   private output = new Map<string, string>()
+  /** 缓冲从头部丢掉的字节数。用来在裁短之后仍只切出本次新增。 */
+  private dropped = new Map<string, number>()
   private lastStatus = new Map<string, TermStatusEvent>()
   private statusListeners = new Set<(event: TermStatusEvent) => void>()
   private bindWaiters = new Map<string, () => void>()
   /** 界面已经订上输出。之前的内容先补一次，避免重启后的记录被新输出盖掉。 */
   private viewReady = new Set<string>()
-  private flushTimers = new Map<string, ReturnType<typeof setTimeout>>()
   /** 正在退出。此时断开不要把窗口从库里删掉。 */
   private parking = false
 
@@ -132,20 +133,18 @@ export class TerminalService {
     this.releaseLive(t)
     this.terms.delete(termId)
     this.output.delete(termId)
+    this.dropped.delete(termId)
     this.lastStatus.delete(termId)
     this.viewReady.delete(termId)
-    const timer = this.flushTimers.get(termId)
-    if (timer) clearTimeout(timer)
-    this.flushTimers.delete(termId)
     this.storage.forgetOpenTerm(termId)
   }
 
-  /** 界面订上之后，把已经记下的输出补到画面上。按完整行重放，避免回车和半截转义把后面的会话盖住。 */
+  /** 界面订上之后，把这次运行里已经到达、还没画上的输出补上。不回放上次退出前的记录。 */
   bindView(termId: string): void {
     const text = this.output.get(termId) ?? ''
     const first = !this.viewReady.has(termId)
     this.viewReady.add(termId)
-    if (first && text) this.push(termId, Buffer.from(replayText(text), 'utf8'))
+    if (first && text) this.push(termId, Buffer.from(text, 'utf8'))
   }
 
   saved(): { id: string; sessionId: string | null; kind: 'ssh' | 'local'; title: string; remark: string }[] {
@@ -239,10 +238,10 @@ export class TerminalService {
   async execCommand(termId: string, command: string, timeoutMs: number): Promise<string> {
     const term = this.terms.get(termId)
     if (!term?.stream && !term?.ptyProc) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
-    const before = this.output.get(termId) ?? ''
+    const origin = this.logicalEnd(termId)
     this.input(termId, command.endsWith('\n') ? command : `${command}\n`)
     const deadline = Date.now() + timeoutMs
-    let last = before
+    let last = this.output.get(termId) ?? ''
     let quietSince = Date.now()
     while (Date.now() < deadline) {
       await delay(80)
@@ -252,21 +251,14 @@ export class TerminalService {
         quietSince = Date.now()
         continue
       }
-      if (cur !== before && Date.now() - quietSince >= 800) break
+      if (this.logicalEnd(termId) > origin && Date.now() - quietSince >= 800) break
     }
-    const cur = this.output.get(termId) ?? ''
-    return cur.startsWith(before) ? cur.slice(before.length) : cur
+    return this.since(termId, origin)
   }
 
-  /** 退出时记下输出并断开。窗口编号、备注和记录留着，下次打开还在。 */
+  /** 退出时断开。窗口编号和备注留着，输出不写入磁盘。 */
   disposeAll(): void {
     this.parking = true
-    for (const id of [...this.flushTimers.keys()]) {
-      const timer = this.flushTimers.get(id)
-      if (timer) clearTimeout(timer)
-      this.flush(id)
-    }
-    this.flushTimers.clear()
     for (const term of this.terms.values()) this.releaseLive(term)
     this.terms.clear()
     this.viewReady.clear()
@@ -456,11 +448,28 @@ export class TerminalService {
     wc.send(IPC.termMeta, payload)
   }
 
+  private logicalEnd(termId: string): number {
+    return (this.dropped.get(termId) ?? 0) + (this.output.get(termId) ?? '').length
+  }
+
+  /** 只取 origin 之后新写入的输出。缓冲从头部裁短时也不把更早的记录算进去。 */
+  private since(termId: string, origin: number): string {
+    const text = this.output.get(termId) ?? ''
+    const from = origin - (this.dropped.get(termId) ?? 0)
+    if (from >= 0 && from <= text.length) return text.slice(from)
+    return text
+  }
+
   private sendData(termId: string, data: Buffer): void {
     const prev = this.output.get(termId) ?? ''
     const next = prev + data.toString('utf8')
-    this.output.set(termId, next.length > 100_000 ? next.slice(-100_000) : next)
-    this.scheduleFlush(termId)
+    if (next.length > 100_000) {
+      const drop = next.length - 100_000
+      this.dropped.set(termId, (this.dropped.get(termId) ?? 0) + drop)
+      this.output.set(termId, next.slice(drop))
+    } else {
+      this.output.set(termId, next)
+    }
     if (this.viewReady.has(termId)) this.push(termId, data)
   }
 
@@ -478,7 +487,6 @@ export class TerminalService {
         remark: saved.remark,
         liveGen: 0
       })
-      if (saved.scrollback) this.output.set(saved.id, saved.scrollback)
       this.lastStatus.set(saved.id, {
         termId: saved.id,
         sessionId: saved.sessionId,
@@ -495,23 +503,6 @@ export class TerminalService {
       title: term.title,
       remark: term.remark
     })
-  }
-
-  private scheduleFlush(termId: string): void {
-    if (this.flushTimers.has(termId)) return
-    this.flushTimers.set(
-      termId,
-      setTimeout(() => {
-        this.flushTimers.delete(termId)
-        this.flush(termId)
-      }, 800)
-    )
-  }
-
-  private flush(termId: string): void {
-    const text = this.output.get(termId)
-    if (text === undefined) return
-    this.storage.saveTermScrollback(termId, text)
   }
 
   private arm(entry: TermEntry): number {
@@ -589,24 +580,6 @@ export class TerminalService {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/** 记下的是原始流。重放前收成完整行，新会话从下一行开始。 */
-function replayText(raw: string): string {
-  let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  if (text.length >= 32_000) {
-    const cut = text.indexOf('\n')
-    if (cut >= 0) text = text.slice(cut + 1)
-  }
-  text = text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]?$/, '')
-  text = text.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)?$/, '')
-  text = text.replace(/\x1b\[([0-9;?]*)([ -/]*)([@-~])/g, (all, _params, inter, final) =>
-    final === 'm' && !inter ? all : ''
-  )
-  text = text.replace(/\x1b\][^\x07]*\x07/g, '')
-  text = text.replace(/\x1b[()][0-9A-Za-z]/g, '')
-  if (!text.endsWith('\n')) text += '\n'
-  return `\x1b[0m${text}`
 }
 
 function isForwardDenied(error: unknown): boolean {

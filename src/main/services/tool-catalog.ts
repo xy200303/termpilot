@@ -69,12 +69,13 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_list',
-    description: '列出打开过、还没关掉的终端。status 为 connected 表示还连着，disconnected 或 error 表示已经断开。重启之后编号、备注和上次输出还在。断开时用 term_reconnect 恢复同一扇，不要再 connection_open。termId 是 term- 编号。',
+    description: '列出打开过、还没关掉的终端。status 为 connected 表示还连着，disconnected 或 error 表示已经断开。重启之后编号、标题和备注还在，重新打开是一条新的 shell，不回放上次退出前的输出。断开时用 term_reconnect 恢复同一扇，不要再 connection_open。termId 是 term- 编号。',
     readOnly: true
   },
   {
     name: 'term_exec',
-    description: '在 shell 提示符下执行一条命令，等到输出安静后返回文本。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。',
+    description:
+      '把命令打进这扇已经打开的 shell，等到新输出安静后，只返回这次新出现的内容。不含更早的滚动缓冲，也没有退出码。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。停掉前台命令用 term_write，keys 填 ["ctrl-c"]。',
     input: {
       termId,
       command: z.string().describe('要执行的命令。末尾没有换行时会自动补上'),
@@ -104,7 +105,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_reconnect',
-    description: '把已经断开的终端重新连上。编号、标题、备注和上次输出都保留。已经连着时直接返回。不要为此再调用 connection_open。',
+    description: '把已经断开的终端重新连上。编号、标题和备注保留，接回一条新的 shell。已经连着时直接返回。不要为此再调用 connection_open。',
     input: { termId }
   },
   {
