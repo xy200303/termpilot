@@ -56,12 +56,14 @@ termpilot call term_exec --json-file args.json --json
 
 先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号。`term_exec` 打进当前 shell，等它跑完（提示符回到画面）后，只返回这次新出现的输出，不是整段滚动缓冲；POSIX shell 还会带回退出码。`timeoutMs` 是这次调用最多等多久，不是命令的时限。到点后还没跑完，就先把已经回来的内容交出去，命令还在远端跑。命令预计要跑很久时，把 `timeoutMs` 调大。前台命令停不下来时用 `term_write`，`keys` 填 `["ctrl-c"]`，不要再开一扇终端去结束它。
 
+`term_exec2` 走独立 exec 通道，不占终端画面，可以并发，也不需要先开终端。它返回原始 stdout（不折行、无回显、无 ANSI）、stderr 和退出码。输出要被程序解析（CSV、JSON、路径、逐行处理）时一律用它，不要用 `term_exec`——PTY 会按窗口宽度折行，解析就是数据损坏。命令原样交给远端 bash 执行，多行、heredoc、引号都直接写，不要自己转义。同名 `session` 之间自动承接 `cd` 和 `export`；每次都要的环境配置放 `prelude`。交互式操作、TUI、要看画面或截图时才用 `term_exec`。
+
 终端在关闭前保持存在。应用重启后，同一编号、标题和备注仍在，上次退出时已经画好的行会按行写回，新会话从下一行开始。`status` 不是 `connected` 时，用 `term_reconnect` 恢复这一扇，不要再 `connection_open`。先用 `term_read` 查看已有记录。没有这扇终端时，才用 `connection_open` 新开。`term_exec` 的命令以换行结束。修改远程文件前先确认目录。用户未明确要求删除时，不调用 `sftp_remove`，也不在命令中使用 `rm`。`sftp_download` 和 `sftp_upload` 只传 512MB 以内的文件。几个 GB 的文件留在远程机器上处理，不要下载到本机。危险操作在 TermPilot 窗口中等待用户确认。
 
-可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`。
+可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_exec2`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`。
 
 要截指定行时，先 `term_lines` 看行号（不填范围就是当前画面），再把 `startLine` 和 `endLine` 传给 `term_screenshot`。两端都包含，返回的是这一段已经裁好的一张图，不要自己按像素裁。整段历史才用 `term_screenshot_scrollback`。
 
-人和你看的是同一个终端。密码和验证码由用户在窗口里输入。菜单和 TUI 用 `term_write`：`keys` 取 `up`、`down`、`left`、`right`，文字放 `text`，回车用 `submit: true`。已经回到 shell 提示符时再用 `term_exec`。`term_exec` 只返回这次新出现的输出，不是整段滚动缓冲，也没有退出码。前台命令停不下来时用 `term_write`，`keys` 填 `["ctrl-c"]`，不要再开一扇终端去结束它。
+人和你看的是同一个终端。密码和验证码由用户在窗口里输入。菜单和 TUI 用 `term_write`：`keys` 取 `up`、`down`、`left`、`right`，文字放 `text`，回车用 `submit: true`。已经回到 shell 提示符时再用 `term_exec`。`term_exec` 只返回这次新出现的输出，不是整段滚动缓冲。前台命令停不下来时用 `term_write`，`keys` 填 `["ctrl-c"]`，不要再开一扇终端去结束它。
 
 新建或修改测试用的连接可以删掉。服务器上的已有文件不要删。需要试文件时，单独建一个测试目录。

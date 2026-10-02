@@ -19,6 +19,7 @@ import { StorageService } from './services/StorageService'
 import { TerminalService } from './services/TerminalService'
 import { ReverseListenerService } from './services/ReverseListenerService'
 import { SftpService } from './services/SftpService'
+import { ExecService } from './services/ExecService'
 import { SshPool } from './services/SshPool'
 import { McpService } from './services/McpService'
 import { registerIpc } from './ipc'
@@ -29,6 +30,7 @@ let storage: StorageService | null = null
 let terminal: TerminalService | null = null
 let reverse: ReverseListenerService | null = null
 let sftp: SftpService | null = null
+let exec2: ExecService | null = null
 let mcp: McpService | null = null
 
 function appIcon(): string {
@@ -139,7 +141,8 @@ function createWindow(storage: StorageService): void {
   terminal = new TerminalService(storage, sender, sshPool)
   reverse = new ReverseListenerService(sender)
   sftp = new SftpService(storage, sender, sshPool)
-  mcp = new McpService(storage, terminal, sftp, reverse, sender)
+  exec2 = new ExecService(storage, sshPool)
+  mcp = new McpService(storage, terminal, sftp, exec2, reverse, sender)
   registerIpc(storage, terminal, reverse, sftp, mcp)
   void mcp.apply(storage.getMcpSettings()).catch((error) => {
     console.error('[TermPilot] MCP start failed:', error)

@@ -89,6 +89,24 @@ export const TOOLS: readonly ToolDef[] = [
     }
   },
   {
+    name: 'term_exec2',
+    description:
+      '在独立 exec 通道上跑命令，不占任何终端画面，可以并发，也不需要先开终端。返回原始 stdout（不折行、无回显、无 ANSI）、stderr 和协议级退出码，输出要被程序解析时用它，不要用 term_exec。命令原样交给远端 bash（没有则 sh）执行，多行、heredoc、引号都支持。同名 session 之间自动承接 cd 和 export（存在远端 ~/.cache/termpilot/exec2/ 下）；prelude 可以在每次执行前注入固定的 source/export。交互式操作、TUI、要看终端画面或截图时用 term_exec。',
+    input: {
+      connection: connId,
+      command: z.string().describe('要执行的命令，原样嵌入远端脚本，不需要转义'),
+      session: z.string().optional().describe('环境会话名，默认 main。同名 session 之间承接 cd 和 export；不同名互不影响'),
+      prelude: z.string().optional().describe('每次执行前先注入的片段，比如 source 环境脚本。固定不变的环境配置放这里'),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(500)
+        .max(3_600_000)
+        .optional()
+        .describe('最多等多久，默认 20000。到点后断开通道并返回已经收到的内容，远端进程可能已被挂断。命令预计要跑很久时，把这个值调大。')
+    }
+  },
+  {
     name: 'term_write',
     description:
       '向当前终端发送按键或文字，用于上下左右选择、输入内容、回车确认和 TUI。keys 按顺序先发，然后输入 text，submit 为 true 时最后回车。发完返回当前画面。密码和验证码不要代填。',
