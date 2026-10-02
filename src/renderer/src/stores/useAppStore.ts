@@ -15,6 +15,7 @@ import {
   type Tab,
   type TermStatusEvent
 } from '../../../shared/types'
+import type { SessionProtocol } from '../../../shared/protocol'
 import { newTermId } from '../../../shared/ids'
 import { dropBuffer, editorKey } from '../editor/editorBuffers'
 import { terminalPool } from '../terminal/TerminalPool'
@@ -64,7 +65,7 @@ interface AppState {
   /** 会话编辑弹窗。host 表示在这台机器下再加一条连接 */
   editing:
     | null
-    | { action: 'create'; mode: ConnectMode; host?: string; port?: number }
+    | { action: 'create'; mode: ConnectMode; protocol?: SessionProtocol; host?: string; port?: number }
     | { action: 'edit'; session: SessionConfig }
   settingsOpen: boolean
   appearance: Appearance
@@ -118,7 +119,10 @@ interface AppState {
   pinEditorTab: (key: string) => void
   setSearch: (v: string) => void
   setEditing: (
-    v: null | { action: 'create'; mode: ConnectMode; host?: string; port?: number } | { action: 'edit'; session: SessionConfig }
+    v:
+      | null
+      | { action: 'create'; mode: ConnectMode; protocol?: SessionProtocol; host?: string; port?: number }
+      | { action: 'edit'; session: SessionConfig }
   ) => void
 }
 
@@ -349,12 +353,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     await window.api.sessions.update(session.id, {
       name: session.name,
       group: session.group,
+      protocol: session.protocol,
       mode: session.mode,
       host: session.host,
       port: session.port,
       username: session.username,
       authType: session.authType,
       keyPath: session.keyPath,
+      serialPath: session.serialPath,
+      baudRate: session.baudRate,
+      dataBits: session.dataBits,
+      stopBits: session.stopBits,
+      parity: session.parity,
       listenPort: session.listenPort,
       remark: text,
       jumpHost: session.jumpHost ?? '',

@@ -27,7 +27,8 @@ export function FileTree() {
     sessions.find((s) => s.id === selectedId) ??
     sessions.find((s) => s.id === active?.sessionId) ??
     null
-  const forward = session && (session.mode ?? 'forward') === 'forward' ? session : null
+  const forward =
+    session && (session.mode ?? 'forward') === 'forward' && (session.protocol ?? 'ssh') === 'ssh' ? session : null
 
   const [root, setRoot] = useState('.')
   const [entries, setEntries] = useState<RemoteFile[]>([])
@@ -144,7 +145,15 @@ export function FileTree() {
     return <Hint text="在「连接」里选一条正向 SSH，这里显示那台机器的文件。" />
   }
   if (!forward) {
-    return <Hint text="文件树跟随正向 SSH。反向监听进来的是 shell。" />
+    return (
+      <Hint
+        text={
+          (session.protocol ?? 'ssh') === 'ssh'
+            ? '文件树跟随正向 SSH。反向监听进来的是 shell。'
+            : 'Telnet 和串口只有终端字节流，没有文件通道。'
+        }
+      />
+    )
   }
 
   const unsupported = error === NO_SFTP

@@ -9,9 +9,18 @@ export function windowLabel(title: string, connectionName?: string | null): stri
 /** 右键一条连接。只写这条连接本身的事实。 */
 export function connectionAgentPrompt(session: SessionConfig): string {
   const lines = [`编号：${session.publicId}`, `名称：${session.name}`]
+  const protocol = session.protocol ?? 'ssh'
   if (session.mode === 'reverse') {
     lines.push('类型：反向监听')
     if (session.listenPort) lines.push(`本机端口：${session.listenPort}`)
+  } else if (protocol === 'serial') {
+    lines.push('类型：串口（只有终端字节流，没有 exec 通道和 SFTP）')
+    if (session.serialPath) lines.push(`串口：${session.serialPath}`)
+    if (session.baudRate) lines.push(`波特率：${session.baudRate}`)
+  } else if (protocol === 'telnet') {
+    lines.push('类型：Telnet（只有终端字节流，没有 exec 通道和 SFTP）')
+    if (session.host) lines.push(`主机：${session.host}`)
+    if (session.port) lines.push(`端口：${session.port}`)
   } else {
     if (session.host) lines.push(`主机：${session.host}`)
     if (session.username) lines.push(`用户：${session.username}`)

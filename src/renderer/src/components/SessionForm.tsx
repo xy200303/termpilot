@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '../stores/useAppStore'
 import { parseSshCommand } from '../../../shared/parse-ssh'
 import { sshOptionsForSession, type SshConnectOptions } from '../../../shared/ssh-options'
+import { SERIAL_DEFAULTS, TELNET_DEFAULT_PORT, type SessionProtocol } from '../../../shared/protocol'
 import type { AuthType, ConnectMode, SessionInput } from '../../../shared/types'
 
 /** 名字里 @ 后面的地址。空格或路径不当成主机。 */
@@ -56,15 +57,21 @@ function reconcileEditedAddress(
   return { name, host }
 }
 
-const empty = (mode: ConnectMode): SessionInput => ({
+const empty = (mode: ConnectMode, protocol: SessionProtocol = 'ssh'): SessionInput => ({
   name: '',
   group: '',
+  protocol,
   mode,
   host: '',
-  port: 22,
+  port: protocol === 'telnet' ? TELNET_DEFAULT_PORT : 22,
   username: '',
   authType: 'password',
   keyPath: '',
+  serialPath: '',
+  baudRate: SERIAL_DEFAULTS.baudRate,
+  dataBits: SERIAL_DEFAULTS.dataBits,
+  stopBits: SERIAL_DEFAULTS.stopBits,
+  parity: SERIAL_DEFAULTS.parity,
   listenPort: 4444,
   remark: '',
   secret: '',
@@ -97,12 +104,18 @@ export function SessionForm() {
       setForm({
         name: s.name,
         group: s.group,
+        protocol: s.protocol ?? 'ssh',
         mode: s.mode ?? 'forward',
         host: s.host,
         port: s.port,
         username: s.username,
         authType: s.authType,
         keyPath: s.keyPath ?? '',
+        serialPath: s.serialPath ?? '',
+        baudRate: s.baudRate ?? SERIAL_DEFAULTS.baudRate,
+        dataBits: s.dataBits ?? SERIAL_DEFAULTS.dataBits,
+        stopBits: s.stopBits ?? SERIAL_DEFAULTS.stopBits,
+        parity: s.parity ?? SERIAL_DEFAULTS.parity,
         listenPort: s.listenPort ?? 4444,
         remark: s.remark ?? '',
         secret: '',
@@ -114,9 +127,9 @@ export function SessionForm() {
       })
     } else {
       setForm({
-        ...empty(editing.mode),
+        ...empty(editing.mode, editing.protocol ?? 'ssh'),
         host: editing.host ?? '',
-        port: editing.port ?? 22
+        port: editing.port ?? (editing.protocol === 'telnet' ? TELNET_DEFAULT_PORT : 22)
       })
     }
     setCommand('')
@@ -126,6 +139,22 @@ export function SessionForm() {
 
   const set = <K extends keyof SessionInput>(k: K, v: SessionInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
+
+  const protocol: SessionProtocol = form.protocol ?? 'ssh'
+
+  const switchProtocol = (next: SessionProtocol) => {
+    setError('')
+    setForm((f) => ({
+      ...f,
+      protocol: next,
+      port:
+        next === 'telnet' && f.port === 22
+          ? TELNET_DEFAULT_PORT
+          : next === 'ssh' && f.port === TELNET_DEFAULT_PORT
+            ? 22
+            : f.port
+    }))
+  }
 
   const setOption = <K extends keyof SshConnectOptions>(key: K, value: SshConnectOptions[K] | undefined) => {
     setForm((current) => {
@@ -167,7 +196,7 @@ export function SessionForm() {
 
   const submit = async () => {
     let next = lockedHost ? { ...form, host: lockedHost } : form
-    if (mode === 'forward' && command.trim() && (!form.host.trim() || !form.username.trim())) {
+    if (mode === 'forward' && protocol === 'ssh' && command.trim() && (!form.host.trim() || !form.username.trim())) {
       const parsed = parseSshCommand(command)
       if (!parsed) {
         setError('认不出这条 SSH 命令')
@@ -190,7 +219,7 @@ export function SessionForm() {
       }
       setForm(next)
     }
-    if (session && mode === 'forward') {
+    if (session && mode === 'forward' && protocol === 'ssh') {
       const synced = reconcileEditedAddress(session, { name: next.name, host: next.host })
       next = { ...next, name: synced.name, host: synced.host }
     }
@@ -199,21 +228,30 @@ export function SessionForm() {
       return
     }
     if (mode === 'forward') {
-      if (!next.host.trim()) {
-        reject('主机不能为空', 'connect')
-        return
-      }
-      if (!next.username.trim()) {
-        reject('用户名不能为空', 'auth')
-        return
-      }
-      if (creating && next.authType === 'password' && !next.secret) {
-        reject('密码认证需要填写密码', 'auth')
-        return
-      }
-      if (next.jumpHost?.trim() && !next.jumpUsername?.trim()) {
-        reject('跳板需要用户名', 'jump')
-        return
+      if (protocol === 'serial') {
+        if (!next.serialPath?.trim()) {
+          reject('串口路径不能为空，例如 COM3 或 /dev/ttyUSB0', 'connect')
+          return
+        }
+      } else {
+        if (!next.host.trim()) {
+          reject('主机不能为空', 'connect')
+          return
+        }
+        if (protocol === 'ssh') {
+          if (!next.username.trim()) {
+            reject('用户名不能为空', 'auth')
+            return
+          }
+          if (creating && next.authType === 'password' && !next.secret) {
+            reject('密码认证需要填写密码', 'auth')
+            return
+          }
+          if (next.jumpHost?.trim() && !next.jumpUsername?.trim()) {
+            reject('跳板需要用户名', 'jump')
+            return
+          }
+        }
       }
     } else if (!next.listenPort || next.listenPort < 1 || next.listenPort > 65535) {
       setError('监听端口需要在 1–65535')
@@ -222,14 +260,16 @@ export function SessionForm() {
     try {
       await saveSession(creating ? null : session!.id, {
         ...next,
+        protocol,
+        serialPath: next.serialPath?.trim() ?? '',
         remark: next.remark?.trim() ?? '',
         group: '',
         mode,
         secret: next.secret ? next.secret : undefined,
-        jumpHost: next.jumpHost?.trim() ?? '',
+        jumpHost: protocol === 'ssh' ? (next.jumpHost?.trim() ?? '') : '',
         jumpPort: next.jumpPort ?? 22,
-        jumpUsername: next.jumpUsername?.trim() ?? '',
-        jumpSecret: next.jumpHost?.trim() ? (next.jumpSecret ? next.jumpSecret : undefined) : '',
+        jumpUsername: protocol === 'ssh' ? (next.jumpUsername?.trim() ?? '') : '',
+        jumpSecret: protocol === 'ssh' && next.jumpHost?.trim() ? (next.jumpSecret ? next.jumpSecret : undefined) : '',
         sshOptions: sshOptionsForSession(next.jumpHost, next.sshOptions) ?? null
       })
     } catch (e) {
@@ -248,18 +288,143 @@ export function SessionForm() {
         <DialogHeader>
           <DialogTitle>
             {lockedHost ? `在 ${lockedHost} 上新建连接` : creating ? '新建' : '编辑'}
-            {!lockedHost && (mode === 'forward' ? '正向 SSH' : '反向监听')}
+            {!lockedHost &&
+              (mode === 'forward'
+                ? protocol === 'ssh'
+                  ? '正向 SSH'
+                  : protocol === 'telnet'
+                    ? 'Telnet'
+                    : '串口'
+                : '反向监听')}
           </DialogTitle>
           <DialogDescription>
             {lockedHost
               ? '主机已经确定，只要填写这条连接的账号。'
               : mode === 'forward'
-                ? '本机作为客户端，主动 SSH 到有地址的服务器。'
+                ? protocol === 'ssh'
+                  ? '本机作为客户端，主动 SSH 到有地址的服务器。'
+                  : protocol === 'telnet'
+                    ? 'Telnet 是明文协议，只在内网或受信任链路使用。登录在打开的终端里完成。'
+                    : '直连本机串口设备。只有终端字节流，没有文件传输；波特率等参数要和设备一致。'
                 : '本机只在 127.0.0.1 上等待 shell 连入。公网地址用 cpolar 把这个端口映射出去。'}
           </DialogDescription>
         </DialogHeader>
 
         {mode === 'forward' ? (
+          <>
+            {!lockedHost && (
+              <Field label="协议">
+                <Select value={protocol} onValueChange={(v) => switchProtocol(v as SessionProtocol)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ssh">SSH</SelectItem>
+                    <SelectItem value="telnet">Telnet</SelectItem>
+                    <SelectItem value="serial">串口</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+            {protocol !== 'ssh' ? (
+              <div className="grid min-h-52 content-start gap-3">
+                <Field label="名称">
+                  <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
+                </Field>
+                <Field label="备注">
+                  <Input
+                    value={form.remark ?? ''}
+                    placeholder="这条连接是干什么的，仅自己看"
+                    onChange={(e) => set('remark', e.target.value)}
+                  />
+                </Field>
+                {protocol === 'telnet' ? (
+                  <div className="grid grid-cols-[1fr_6rem] gap-2">
+                    <Field label="主机">
+                      <Input
+                        value={form.host}
+                        placeholder="IP 或域名"
+                        onChange={(e) => set('host', e.target.value)}
+                      />
+                    </Field>
+                    <Field label="端口">
+                      <Input
+                        type="number"
+                        value={form.port}
+                        onChange={(e) => set('port', Number(e.target.value) || TELNET_DEFAULT_PORT)}
+                      />
+                    </Field>
+                  </div>
+                ) : (
+                  <>
+                    <Field label="串口路径">
+                      <Input
+                        value={form.serialPath ?? ''}
+                        placeholder="COM3 或 /dev/ttyUSB0"
+                        onChange={(e) => set('serialPath', e.target.value)}
+                      />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="波特率">
+                        <Input
+                          type="number"
+                          value={form.baudRate ?? SERIAL_DEFAULTS.baudRate}
+                          onChange={(e) => set('baudRate', Number(e.target.value) || SERIAL_DEFAULTS.baudRate)}
+                        />
+                      </Field>
+                      <Field label="数据位">
+                        <Select
+                          value={String(form.dataBits ?? SERIAL_DEFAULTS.dataBits)}
+                          onValueChange={(v) => set('dataBits', Number(v))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[8, 7, 6, 5].map((bits) => (
+                              <SelectItem key={bits} value={String(bits)}>
+                                {bits}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label="停止位">
+                        <Select
+                          value={String(form.stopBits ?? SERIAL_DEFAULTS.stopBits)}
+                          onValueChange={(v) => set('stopBits', Number(v))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">1</SelectItem>
+                            <SelectItem value="2">2</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label="校验">
+                        <Select
+                          value={form.parity ?? SERIAL_DEFAULTS.parity}
+                          onValueChange={(v) => set('parity', v as SessionInput['parity'])}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">无</SelectItem>
+                            <SelectItem value="even">偶校验</SelectItem>
+                            <SelectItem value="odd">奇校验</SelectItem>
+                            <SelectItem value="mark">Mark</SelectItem>
+                            <SelectItem value="space">Space</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
           <Tabs value={page} onValueChange={setPage}>
             <TabsList className="w-full">
               <TabsTrigger value="connect">连接</TabsTrigger>
@@ -473,6 +638,8 @@ export function SessionForm() {
               {recognized ? <p className="text-xs text-muted-foreground">{recognized}</p> : null}
             </TabsContent>
           </Tabs>
+            )}
+          </>
         ) : (
           <div className="grid gap-3">
             <Field label="名称">

@@ -1,5 +1,5 @@
 import { useState, type ComponentProps, CSSProperties, ReactNode } from 'react'
-import { ChevronRight, Folder, Monitor, PanelLeft, Plus, Radio, Search, Server, Settings, TerminalSquare } from 'lucide-react'
+import { ChevronRight, Cable, Folder, Monitor, Network, PanelLeft, Plus, Radio, Search, Server, Settings, TerminalSquare } from 'lucide-react'
 import {
   SidebarContent,
   SidebarGroup,
@@ -42,6 +42,7 @@ function GithubMark() {
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
 const noDrag = { WebkitAppRegion: 'no-drag' } as CSSProperties
 import type { ConnectMode, SessionConfig, Tab } from '../../../shared/types'
+import type { SessionProtocol } from '../../../shared/protocol'
 import { FileTree } from './FileTree'
 
 /**
@@ -167,7 +168,19 @@ function ConnectTree() {
       <ModeRoot
         mode="forward"
         title="正向 SSH"
-        sessions={filtered.filter((s) => (s.mode ?? 'forward') === 'forward')}
+        sessions={filtered.filter((s) => (s.mode ?? 'forward') === 'forward' && (s.protocol ?? 'ssh') === 'ssh')}
+      />
+      <ModeRoot
+        mode="forward"
+        protocol="telnet"
+        title="Telnet"
+        sessions={filtered.filter((s) => s.protocol === 'telnet')}
+      />
+      <ModeRoot
+        mode="forward"
+        protocol="serial"
+        title="串口"
+        sessions={filtered.filter((s) => s.protocol === 'serial')}
       />
       <ModeRoot
         mode="reverse"
@@ -179,24 +192,38 @@ function ConnectTree() {
   )
 }
 
-function ModeRoot(props: { mode: ConnectMode; title: string; sessions: SessionConfig[] }) {
-  const key = `root:${props.mode}`
+const PROTOCOL_ICONS: Record<SessionProtocol, ReactNode> = {
+  ssh: <Monitor />,
+  telnet: <Network />,
+  serial: <Cable />
+}
+
+const PROTOCOL_TITLES: Record<SessionProtocol, string> = {
+  ssh: '新建正向 SSH',
+  telnet: '新建 Telnet',
+  serial: '新建串口'
+}
+
+function ModeRoot(props: { mode: ConnectMode; protocol?: SessionProtocol; title: string; sessions: SessionConfig[] }) {
+  const key = `root:${props.protocol ?? props.mode}`
   const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
   const toggleGroup = useAppStore((s) => s.toggleGroup)
   const setEditing = useAppStore((s) => s.setEditing)
+  /** 字节流协议不按主机分组，平铺即可 */
+  const groupByHost = props.mode === 'forward' && !props.protocol
 
   return (
     <Collapsible className="min-w-0" open={open} onOpenChange={() => toggleGroup(key)}>
       <SidebarGroup className="px-2 py-0.5">
         <SectionHead
-          icon={props.mode === 'forward' ? <Monitor /> : <Radio />}
+          icon={props.protocol ? PROTOCOL_ICONS[props.protocol] : props.mode === 'forward' ? <Monitor /> : <Radio />}
           title={props.title}
-          actionTitle={props.mode === 'forward' ? '新建正向 SSH' : '新建反向监听'}
-          onAdd={() => setEditing({ action: 'create', mode: props.mode })}
+          actionTitle={props.protocol ? PROTOCOL_TITLES[props.protocol] : props.mode === 'forward' ? '新建正向 SSH' : '新建反向监听'}
+          onAdd={() => setEditing({ action: 'create', mode: props.mode, protocol: props.protocol })}
         />
         <CollapsibleContent className="min-w-0 overflow-hidden">
           <SidebarGroupContent className="grid min-w-0 gap-0.5">
-            {props.mode === 'forward'
+            {groupByHost
               ? machinesOf(props.sessions).map((machine) => (
                   <HostNode
                     key={machine.key}
@@ -336,15 +363,21 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   const toggleGroup = useAppStore((s) => s.toggleGroup)
 
   const nested = tabs.filter((tab) => tab.sessionId === session.id && tab.kind !== 'local')
+  const isSerial = session.protocol === 'serial'
+  const isTelnet = session.protocol === 'telnet'
   const account = isReverse
     ? session.listenPort
       ? `:${session.listenPort}`
       : ''
-    : session.port === 22
-      ? session.username
-      : `${session.username}:${session.port}`
+    : isSerial
+      ? [session.serialPath ?? '', session.baudRate ? String(session.baudRate) : ''].filter(Boolean).join(' ')
+      : isTelnet
+        ? `${session.host}:${session.port || 23}`
+        : session.port === 22
+          ? session.username
+          : `${session.username}:${session.port}`
   const remark = session.remark?.trim() ?? ''
-  const jump = !isReverse && session.jumpHost ? '经跳板' : ''
+  const jump = !isReverse && !isSerial && !isTelnet && session.jumpHost ? '经跳板' : ''
   const meta = [account, jump].filter(Boolean).join(' ')
   const active =
     tabs.some((tab) => tab.id === activeTabId && tab.sessionId === session.id && tab.kind === 'ssh') ||
