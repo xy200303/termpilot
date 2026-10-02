@@ -51,6 +51,51 @@ Agent 会安装使用说明并注册 TermPilot。之后直接说明目标主机�
 
 MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该命令会先启动 TermPilot。`tools` 列出工具，`schema` 查看参数，`call` 执行调用。优先读取文本；需要查看画面时再截图。已打开的终端继续使用，不为同一操作再打开一个。
 
+## Agent 工具
+
+一共 24 个工具，分五族。调用只认编号：`conn-` 是连接，`term-` 是终端；名称和备注只用来认出它。
+
+### 连接管理（6）
+
+| 工具 | 做什么 |
+| --- | --- |
+| `connection_create` | 新建并保存一条 SSH 连接（密码 / 私钥口令加密存本机），返回 `conn-` 编号 |
+| `connection_list` | 列出已保存的连接（不含密码） |
+| `connection_update` | 改连接参数、写备注 |
+| `connection_delete` | 删连接（连带关掉它的终端） |
+| `connection_open` | 按 `conn-` 编号打开 SSH 并新开一扇终端 |
+| `connection_close` | 关掉某条连接下所有终端和文件通道 |
+
+### 跑命令（2）
+
+- **`term_exec`**：自动化主力。SSH exec 通道独立执行，不占终端画面、可并发、不用先开终端。返回结构化 JSON：`stdout` / `stderr` 分流（原始字节流，不折行、无回显）、协议级 `exitCode`、`duration`（秒）、`timedOut`、`truncated`。同名 `session` 承接 `cd` / `export`；`prelude` 在每次执行前注入固定环境（例如 `source set_env.sh`）；`timeout` 最大 3600 秒；`maxBytes` 控制截断。
+- **`term_pty`**：把命令打进一扇已打开的共享终端，环境（cwd、已经 `source` 过的变量）在这扇终端里持续累积。输出是终端渲染结果（有回显、折行、颜色），适合交互和给人看，不适合程序解析。
+
+### 终端画面与标签（10，只作用于 PTY）
+
+- `term_write`：发按键（方向键、回车、`ctrl-c` 等）和文字——TUI、菜单、安装向导都靠它
+- `term_read`：读终端最近输出（去掉 ANSI）
+- `term_lines`：按行号读缓冲（定位截图范围用）
+- `term_screenshot`：截当前屏或指定行号区间
+- `term_screenshot_scrollback`：把整个缓冲拼成长图
+- `term_reconnect`：断线后重连同一扇终端（编号、备注、已绘制的行保留）
+- `term_list` / `term_update` / `term_close` / `term_open_local`：列终端、写备注、关标签、开本机终端
+
+### 文件传输（6，SFTP）
+
+`sftp_list` / `sftp_mkdir` / `sftp_upload` / `sftp_download` / `sftp_rename` / `sftp_remove`。单文件 512MB 上限，几个 GB 的文件留在远端处理。
+
+### 推荐用法
+
+| 场景 | 用哪个 |
+| --- | --- |
+| 编译、跑测试、采集日志、输出要进脚本逻辑 | `term_exec` |
+| 交互式操作、TUI、需要终端画面做材料 | `term_pty` + `term_screenshot` |
+| 上传代码、下载结果 | `sftp_upload` / `sftp_download` |
+| 服务器掉线恢复 | `term_list` 看状态 + `term_reconnect` |
+
+还没有的能力：命令历史记录（`term_exec` 的输出返回即焚，目前查不了旧账）。
+
 ## 功能
 
 - 支持密码或私钥登录。同一主机可保存多个账号，并按主机分组。无公网地址的主机可连回本机，且只接受本机连入。
