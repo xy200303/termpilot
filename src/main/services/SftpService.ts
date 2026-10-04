@@ -32,62 +32,68 @@ export class SftpService {
   ) {}
 
   async list(sessionId: string, dir: string): Promise<{ path: string; entries: RemoteFile[] }> {
-    const sftp = await this.sftpOf(sessionId)
-    const requested = dir && dir !== '' ? dir : '.'
-    return using(sftp, requested, async (target) => {
-      const path = await realpath(sftp, target).catch(() => target)
-      const entries = await withTimeout(readdir(sftp, path), 20_000, '读取目录超时')
-      return { path, entries }
+    return this.run(sessionId, async (sftp) => {
+      const requested = dir && dir !== '' ? dir : '.'
+      return using(sftp, requested, async (target) => {
+        // realpath 没有自己的超时：通道半死时不能卡在这里，超时后按原路径交给 readdir 的 20 秒兜底
+        const path = await withTimeout(realpath(sftp, target), 10_000, 'SFTP 没有响应').catch(() => target)
+        const entries = await withTimeout(readdir(sftp, path), 20_000, '读取目录超时')
+        return { path, entries }
+      })
     })
   }
 
   async mkdir(sessionId: string, dir: string, name: string): Promise<void> {
-    const sftp = await this.sftpOf(sessionId)
-    const target = posix.join(dir || '.', name)
-    await using(sftp, target, (path) => call((cb) => sftp.mkdir(path, cb)))
+    return this.run(sessionId, async (sftp) => {
+      const target = posix.join(dir || '.', name)
+      await using(sftp, target, (path) => call((cb) => sftp.mkdir(path, cb)))
+    })
   }
 
   async mkdirPath(sessionId: string, path: string): Promise<void> {
-    const sftp = await this.sftpOf(sessionId)
-    await using(sftp, path, (target) => call((cb) => sftp.mkdir(target, cb)))
+    return this.run(sessionId, (sftp) => using(sftp, path, (target) => call((cb) => sftp.mkdir(target, cb))))
   }
 
   async put(sessionId: string, localPath: string, remotePath: string): Promise<void> {
     assertLocal(localPath)
     if (!existsSync(localPath)) throw new Error('本地文件不存在')
     refuseHuge(statSync(localPath).size)
-    const sftp = await this.sftpOf(sessionId)
-    await using(sftp, remotePath, (target) => call((cb) => sftp.fastPut(localPath, target, XFER, cb)))
+    return this.run(sessionId, (sftp) =>
+      using(sftp, remotePath, (target) => call((cb) => sftp.fastPut(localPath, target, XFER, cb)))
+    )
   }
 
   async get(sessionId: string, remotePath: string, localPath: string): Promise<void> {
     assertLocal(localPath)
     if (!existsSync(dirname(localPath))) throw new Error('本地目录不存在')
-    const sftp = await this.sftpOf(sessionId)
-    await using(sftp, remotePath, async (target) => {
-      refuseHuge(await statSize(sftp, target))
-      await call((cb) => sftp.fastGet(target, localPath, XFER, cb))
-    })
+    return this.run(sessionId, (sftp) =>
+      using(sftp, remotePath, async (target) => {
+        refuseHuge(await statSize(sftp, target))
+        await call((cb) => sftp.fastGet(target, localPath, XFER, cb))
+      })
+    )
   }
 
   async rename(sessionId: string, from: string, to: string): Promise<void> {
-    const sftp = await this.sftpOf(sessionId)
-    try {
-      await call((cb) => sftp.rename(from, to, cb))
-    } catch (error) {
-      const nextFrom = (await loginRelative(sftp, from)) ?? from
-      const nextTo = (await loginRelative(sftp, to)) ?? to
-      if (!noSuchFile(error) || (nextFrom === from && nextTo === to)) throw error
-      await call((cb) => sftp.rename(nextFrom, nextTo, cb))
-    }
+    return this.run(sessionId, async (sftp) => {
+      try {
+        await call((cb) => sftp.rename(from, to, cb))
+      } catch (error) {
+        const nextFrom = (await loginRelative(sftp, from)) ?? from
+        const nextTo = (await loginRelative(sftp, to)) ?? to
+        if (!noSuchFile(error) || (nextFrom === from && nextTo === to)) throw error
+        await call((cb) => sftp.rename(nextFrom, nextTo, cb))
+      }
+    })
   }
 
   async remove(sessionId: string, path: string, kind: RemoteFile['kind']): Promise<void> {
-    const sftp = await this.sftpOf(sessionId)
-    await using(sftp, path, async (target) => {
-      if (kind === 'dir') await removeDir(sftp, target)
-      else await call((cb) => sftp.unlink(target, cb))
-    })
+    return this.run(sessionId, (sftp) =>
+      using(sftp, path, async (target) => {
+        if (kind === 'dir') await removeDir(sftp, target)
+        else await call((cb) => sftp.unlink(target, cb))
+      })
+    )
   }
 
   async upload(sessionId: string, dir: string): Promise<number> {
@@ -121,14 +127,12 @@ export class SftpService {
   }
 
   async readText(sessionId: string, path: string): Promise<string> {
-    const sftp = await this.sftpOf(sessionId)
-    return using(sftp, path, (target) => readTextAt(sftp, target))
+    return this.run(sessionId, (sftp) => using(sftp, path, (target) => readTextAt(sftp, target)))
   }
 
   async writeText(sessionId: string, path: string, text: string): Promise<void> {
-    const sftp = await this.sftpOf(sessionId)
     const data = Buffer.from(text, 'utf8')
-    await using(sftp, path, (target) => writeAll(sftp, target, data))
+    return this.run(sessionId, (sftp) => using(sftp, path, (target) => writeAll(sftp, target, data)))
   }
 
   close(sessionId: string): void {
@@ -139,6 +143,20 @@ export class SftpService {
 
   disposeAll(): void {
     for (const id of [...this.conns.keys()]) this.close(id)
+  }
+
+  /**
+   * 所有 SFTP 操作的入口。通道半死（对端没响应、连接已断）时把缓存的连接扔掉，
+   * 下次调用重新拨号——不然一次网络抖动之后文件面板会永远卡死。
+   */
+  private async run<T>(sessionId: string, op: (sftp: SFTPWrapper) => Promise<T>): Promise<T> {
+    const sftp = await this.sftpOf(sessionId)
+    try {
+      return await op(sftp)
+    } catch (error) {
+      if (isDeadChannel(error)) this.close(sessionId)
+      throw error
+    }
   }
 
   private async sftpOf(sessionId: string): Promise<SFTPWrapper> {
@@ -279,6 +297,12 @@ export class SftpService {
 function isMissingSftp(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
   return /exit code 127|establishing SFTP|sftp subsystem|sftp-server|没有响应|子系统超时/i.test(message)
+}
+
+/** 通道半死的特征：等对端响应超时、底层连接已断。这种错误要丢掉缓存连接重拨。 */
+function isDeadChannel(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /没有响应|超时|timed out|Not connected|通道已关闭|connection.*(closed|lost)|channel.*closed/i.test(message)
 }
 
 function armSftp(
@@ -571,7 +595,7 @@ async function loginRelative(sftp: SFTPWrapper, path: string): Promise<string | 
 function loginDir(sftp: SFTPWrapper): Promise<string> {
   const cached = loginDirs.get(sftp)
   if (cached) return cached
-  const pending = realpath(sftp, '.').catch(() => '')
+  const pending = withTimeout(realpath(sftp, '.'), 10_000, 'SFTP 没有响应').catch(() => '')
   loginDirs.set(sftp, pending)
   return pending
 }
