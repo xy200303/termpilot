@@ -503,11 +503,25 @@ export function SessionForm() {
               </Field>
               {form.authType === 'key' && (
                 <Field label="私钥">
-                  <Input
-                    value={form.keyPath}
-                    placeholder="C:\Users\...\.ssh\id_ed25519"
-                    onChange={(e) => set('keyPath', e.target.value)}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      value={form.keyPath}
+                      placeholder="C:\Users\...\.ssh\id_ed25519"
+                      onChange={(e) => set('keyPath', e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => {
+                        void window.api.app.pickKeyFile().then((file) => {
+                          if (file) set('keyPath', file)
+                        })
+                      }}
+                    >
+                      浏览
+                    </Button>
+                  </div>
                 </Field>
               )}
               <Field label={form.authType === 'key' ? '私钥口令' : '密码'}>

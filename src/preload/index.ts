@@ -214,7 +214,8 @@ const api = {
   app: {
     version: () => ipcRenderer.invoke(IPC.appVersion) as Promise<string>,
     checkUpdate: () => ipcRenderer.invoke(IPC.appCheckUpdate) as Promise<UpdateCheck>,
-    openRelease: (url: string) => ipcRenderer.invoke(IPC.appOpenRelease, url) as Promise<void>
+    openRelease: (url: string) => ipcRenderer.invoke(IPC.appOpenRelease, url) as Promise<void>,
+    pickKeyFile: () => ipcRenderer.invoke(IPC.appPickKeyFile) as Promise<string | null>
   }
 }
 

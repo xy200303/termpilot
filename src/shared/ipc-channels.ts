@@ -76,5 +76,7 @@ export const IPC = {
 
   appVersion: 'app:version',
   appCheckUpdate: 'app:check-update',
-  appOpenRelease: 'app:open-release'
+  appOpenRelease: 'app:open-release',
+  /** 表单里选私钥文件，返回绝对路径，取消返回 null */
+  appPickKeyFile: 'app:pick-key-file'
 } as const

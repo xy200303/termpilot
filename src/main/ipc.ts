@@ -1,6 +1,7 @@
-import { app, BrowserWindow, clipboard, ClipboardItem, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, shell } from 'electron'
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 import { IPC } from '../shared/ipc-channels'
 import {
@@ -215,6 +216,15 @@ export function registerIpc(
     const target = releaseUrl(url)
     if (!target) throw new Error('不是 TermPilot 的发布页')
     return shell.openExternal(target)
+  })
+
+  ipcMain.handle(IPC.appPickKeyFile, async () => {
+    const picked = await dialog.showOpenDialog({
+      title: '选择私钥文件',
+      defaultPath: join(homedir(), '.ssh'),
+      properties: ['openFile', 'showHiddenFiles']
+    })
+    return picked.canceled || picked.filePaths.length === 0 ? null : picked.filePaths[0]
   })
 }
 
