@@ -325,7 +325,7 @@ export class TerminalService {
 
   // ---------------------------------------------------------------- ssh
 
-  private async createSsh(opts: TermCreateOptions): Promise<void> {
+  private async createSsh(opts: TermCreateOptions, retried = false): Promise<void> {
     const session = this.storage.list().find((s) => s.id === opts.sessionId)
     if (!session) {
       this.sendStatus(opts.termId, opts.sessionId ?? null, 'error', '会话不存在')
@@ -356,7 +356,7 @@ export class TerminalService {
         hold.release()
         return
       }
-      this.bindShared(entry, hold, opts, gen)
+      this.bindShared(entry, hold, opts, gen, retried)
       return
     } catch (error) {
       if (!this.alive(entry, gen)) return
@@ -369,7 +369,7 @@ export class TerminalService {
   }
 
   /** 转发已经通了。shell 开在这条会话上，不再向跳板要一次连接。 */
-  private bindShared(entry: TermEntry, hold: SshHold, opts: TermCreateOptions, gen: number): void {
+  private bindShared(entry: TermEntry, hold: SshHold, opts: TermCreateOptions, gen: number, retried: boolean): void {
     const sessionId = entry.sessionId
     entry.release = hold.release
     hold.client.on('error', (err) => {
@@ -385,6 +385,14 @@ export class TerminalService {
     hold.client.shell({ term: 'xterm-256color', cols: opts.cols, rows: opts.rows }, (err, stream) => {
       if (!this.alive(entry, gen)) return
       if (err || !stream) {
+        // 池里拿到的是半死连接（心跳还没来得及判死）：清掉缓存重拨一次。
+        // shell 还没开出来，重试没有副作用
+        if (!retried && sessionId) {
+          this.releaseLive(entry)
+          this.sshPool.drop(sessionId)
+          void this.createSsh(opts, true)
+          return
+        }
         this.sendStatus(opts.termId, sessionId, 'error', `打开 shell 失败: ${err?.message ?? '未知原因'}`)
         return
       }

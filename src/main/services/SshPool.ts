@@ -125,6 +125,22 @@ export class SshPool {
     })
   }
 
+  /**
+   * 强制丢掉某条会话的缓存连接。池里的 client 半死但还没被心跳判死时，
+   * 上层（终端开 shell 失败等）用它来立刻清场，下次 acquire 重新拨号。
+   */
+  drop(sessionId: string): void {
+    const slot = this.slots.get(sessionId)
+    if (!slot) return
+    this.slots.delete(sessionId)
+    try {
+      slot.client.end()
+      endJump(slot.jump)
+    } catch {
+      /* 会话已经断了 */
+    }
+  }
+
   private hold(sessionId: string, slot: Slot): SshHold {
     let released = false
     return {

@@ -14,8 +14,11 @@ export function buildConnectConfig(session: SessionConfig, secret: string | null
     port: session.port,
     username: session.username,
     readyTimeout: 15000,
+    // 心跳保活：15 秒一个协议层心跳包，防 NAT / 防火墙 / 云主机空闲断连。
+    // 连续 4 个没回应（约 1 分钟）就判定死亡，让池尽快清掉僵尸重拨，
+    // 不要拖太久——拖久了 shell / exec / SFTP 会一直拿到死连接。
     keepaliveInterval: 15000,
-    keepaliveCountMax: 40
+    keepaliveCountMax: 4
   }
   const keyPath = resolveKeyPath(session)
   switch (session.authType) {
@@ -111,7 +114,7 @@ export function dialSsh(
       tryKeyboard: true,
       readyTimeout: 20000,
       keepaliveInterval: 15000,
-      keepaliveCountMax: 40
+      keepaliveCountMax: 4
     }
     applyDialOptions(cfg, options)
     if (sock) cfg.sock = sock
