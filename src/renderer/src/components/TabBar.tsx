@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
-import { Camera, GalleryVertical, TerminalSquare, X } from 'lucide-react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { Camera, ChevronLeft, ChevronRight, GalleryVertical, TerminalSquare, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
@@ -40,6 +40,38 @@ export function TabBar() {
   const [shotError, setShotError] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [remarkingId, setRemarkingId] = useState<string | null>(null)
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+  const [canLeft, setCanLeft] = useState(false)
+  const [canRight, setCanRight] = useState(false)
+
+  const updateArrows = () => {
+    const el = stripRef.current
+    if (!el) return
+    setOverflowing(el.scrollWidth > el.clientWidth + 1)
+    setCanLeft(el.scrollLeft > 1)
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+  }
+
+  useEffect(() => {
+    updateArrows()
+    const el = stripRef.current
+    if (!el) return
+    const observer = new ResizeObserver(updateArrows)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [tabs.length])
+
+  // 切标签时把它滚进视野
+  useEffect(() => {
+    stripRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+  }, [activeTabId])
+
+  const scrollStrip = (dir: -1 | 1) => {
+    stripRef.current?.scrollBy({ left: dir * 240, behavior: 'smooth' })
+  }
 
   const shoot = (mode: 'viewport' | 'scrollback') => {
     if (!activeTabId) return
@@ -63,17 +95,41 @@ export function TabBar() {
   return (
     <>
     <div className="flex h-10 shrink-0 items-center gap-1 border-b bg-background px-2">
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-        {tabs.map((t) => {
+      {overflowing && (
+        <Button variant="ghost" size="icon-sm" disabled={!canLeft} onClick={() => scrollStrip(-1)}>
+          <ChevronLeft />
+        </Button>
+      )}
+      <div
+        ref={stripRef}
+        onScroll={updateArrows}
+        onWheel={(e) => {
+          const el = stripRef.current
+          if (!el) return
+          el.scrollLeft += e.deltaY + e.deltaX
+        }}
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {tabs.map((t, i) => {
           const active = t.id === activeTabId
           const session = sessions.find((item) => item.id === t.sessionId) ?? null
           return (
-            <ContextMenu key={t.id}>
+            <Fragment key={t.id}>
+              {i > 0 && (
+                <div
+                  className={cn(
+                    'h-4 w-px shrink-0 bg-border',
+                    (active || tabs[i - 1].id === activeTabId) && 'opacity-0'
+                  )}
+                />
+              )}
+            <ContextMenu>
               <ContextMenuTrigger asChild>
                 <Button
                   variant={active ? 'secondary' : 'ghost'}
                   size="sm"
-                  className="max-w-48 min-w-0 overflow-hidden"
+                  data-active={active || undefined}
+                  className="max-w-48 min-w-0 shrink-0 overflow-hidden"
                   title={t.remark?.trim() || undefined}
                   onClick={() => setActiveTab(t.id)}
                   onDoubleClick={(event) => {
@@ -111,9 +167,15 @@ export function TabBar() {
                 <ContextMenuItem onClick={() => closeTab(t.id)}>关闭</ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
+            </Fragment>
           )
         })}
       </div>
+      {overflowing && (
+        <Button variant="ghost" size="icon-sm" disabled={!canRight} onClick={() => scrollStrip(1)}>
+          <ChevronRight />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon-sm"
