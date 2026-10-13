@@ -31,6 +31,12 @@ const sessionFields: ZodRawShape = {
   stopBits: z.number().int().min(1).max(2).optional().describe('串口停止位，默认 1'),
   parity: z.enum(['none', 'even', 'odd', 'mark', 'space']).optional().describe('串口校验，默认 none'),
   listenPort: z.number().int().min(1).max(65535).optional().describe('反向监听端口（仅 ssh）'),
+  sftpMode: z
+    .enum(['auto', 'shared', 'fresh'])
+    .optional()
+    .describe(
+      '仅正向 ssh：文件通道（sftp_*）走哪条 SSH。auto 默认（目标机缺 SFTP 子系统时自动改 internal-sftp 并单独拨号）；shared 只复用终端那条连接，不改 sshd 也不单独拨号（跳板只授权一次转发的机器选这个）；fresh 总是单独拨号'
+    ),
   group: z.string().optional().describe('侧边栏分组，留空归入未分组'),
   remark: z.string().optional().describe('备注')
 }

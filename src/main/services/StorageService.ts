@@ -98,6 +98,7 @@ export class StorageService {
     this.ensureColumn('sessions', 'data_bits', 'INTEGER')
     this.ensureColumn('sessions', 'stop_bits', 'INTEGER')
     this.ensureColumn('sessions', 'parity', 'TEXT')
+    this.ensureColumn('sessions', 'sftp_mode', 'TEXT')
     this.backfillPublicIds()
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sessions_public_id ON sessions(public_id)')
     this.db.exec(`
@@ -216,8 +217,8 @@ export class StorageService {
           id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
           jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options,
-          protocol, serial_path, baud_rate, data_bits, stop_bits, parity
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -245,7 +246,8 @@ export class StorageService {
         input.baudRate ?? null,
         input.dataBits ?? null,
         input.stopBits ?? null,
-        input.parity ?? null
+        input.parity ?? null,
+        input.sftpMode ?? null
       )
     const saved = this.require(id)
     this.publishSsh(id)
@@ -255,7 +257,7 @@ export class StorageService {
   update(id: string, patch: SessionInput): SessionConfig | null {
     const existing = this.db
       .prepare(
-        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options, protocol, serial_path, baud_rate, data_bits, stop_bits, parity FROM sessions WHERE id = ?'
+        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options, protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode FROM sessions WHERE id = ?'
       )
       .get(id)
     if (!existing) return null
@@ -278,6 +280,10 @@ export class StorageService {
     const dataBits = patch.dataBits ?? optionalInteger(existing.data_bits) ?? null
     const stopBits = patch.stopBits ?? optionalInteger(existing.stop_bits) ?? null
     const parity = patch.parity ?? optionalText(existing.parity) ?? null
+    const previousSftpMode = optionalText(existing.sftp_mode)
+    const sftpMode =
+      patch.sftpMode ??
+      (previousSftpMode === 'shared' || previousSftpMode === 'fresh' ? previousSftpMode : null)
     this.db
       .prepare(
         `UPDATE sessions SET
@@ -286,7 +292,7 @@ export class StorageService {
           secret_encrypted = ?, updated_at = ?,
           jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?,
           ssh_options = ?, protocol = ?, serial_path = ?, baud_rate = ?, data_bits = ?,
-          stop_bits = ?, parity = ?
+          stop_bits = ?, parity = ?, sftp_mode = ?
         WHERE id = ?`
       )
       .run(
@@ -313,6 +319,7 @@ export class StorageService {
         dataBits,
         stopBits,
         parity,
+        sftpMode,
         id
       )
     const saved = this.require(id)
@@ -402,8 +409,8 @@ export class StorageService {
           id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
           jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options,
-          protocol, serial_path, baud_rate, data_bits, stop_bits, parity
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         newId,
@@ -431,7 +438,8 @@ export class StorageService {
         optionalInteger(row.baud_rate) ?? null,
         optionalInteger(row.data_bits) ?? null,
         optionalInteger(row.stop_bits) ?? null,
-        optionalText(row.parity) ?? null
+        optionalText(row.parity) ?? null,
+        optionalText(row.sftp_mode) ?? null
       )
     const saved = this.require(newId)
     this.publishSsh(newId)
@@ -585,6 +593,7 @@ export class StorageService {
       jumpUsername: optionalText(row.jump_username),
       hasJumpSecret: typeof row.jump_secret_encrypted === 'string' && row.jump_secret_encrypted.length > 0,
       sshOptions: decodeOptions(row.ssh_options),
+      sftpMode: row.sftp_mode === 'shared' || row.sftp_mode === 'fresh' ? row.sftp_mode : undefined,
       createdAt: integer(row.created_at, 0),
       updatedAt: integer(row.updated_at, 0)
     }

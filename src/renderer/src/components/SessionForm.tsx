@@ -78,7 +78,8 @@ const empty = (mode: ConnectMode, protocol: SessionProtocol = 'ssh'): SessionInp
   jumpHost: '',
   jumpPort: 22,
   jumpUsername: '',
-  jumpSecret: ''
+  jumpSecret: '',
+  sftpMode: 'auto'
 })
 
 /** 新建 / 编辑连接。表单控件全部来自 shadcn。 */
@@ -123,7 +124,8 @@ export function SessionForm() {
         jumpPort: s.jumpPort ?? 22,
         jumpUsername: s.jumpUsername ?? '',
         jumpSecret: '',
-        sshOptions: s.sshOptions
+        sshOptions: s.sshOptions,
+        sftpMode: s.sftpMode ?? 'auto'
       })
     } else {
       setForm({
@@ -642,6 +644,24 @@ export function SessionForm() {
                   </Select>
                 </Field>
               </div>
+              <Field label="文件通道">
+                <Select
+                  value={form.sftpMode ?? 'auto'}
+                  onValueChange={(v) => set('sftpMode', v as SessionInput['sftpMode'])}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">自动（缺子系统时单独拨号）</SelectItem>
+                    <SelectItem value="shared">复用终端连接</SelectItem>
+                    <SelectItem value="fresh">总是单独拨号</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  跳板只授权一次转发的机器选「复用」，单独拨号会被跳板拒绝。
+                </p>
+              </Field>
               <Field label="ProxyCommand">
                 <Input
                   value={options?.proxyCommand ?? ''}

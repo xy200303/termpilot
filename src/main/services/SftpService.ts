@@ -3,7 +3,7 @@ import { basename, dirname, isAbsolute, join, posix } from 'node:path'
 import { app, dialog, type WebContents } from 'electron'
 import { Client, type OpenMode, type SFTPWrapper } from 'ssh2'
 import { IPC } from '../../shared/ipc-channels'
-import type { RemoteFile, SftpInstallEvent } from '../../shared/types'
+import type { RemoteFile, SftpInstallEvent, SftpMode } from '../../shared/types'
 import type { StorageService } from './StorageService'
 import type { SshHold, SshPool } from './SshPool'
 
@@ -167,10 +167,24 @@ export class SftpService {
         throw error
       })
     }
-    if (this.route.get(sessionId) === 'fresh') return this.openFresh(sessionId)
+    const mode = this.modeOf(sessionId)
+    if (mode === 'fresh' || (mode === 'auto' && this.route.get(sessionId) === 'fresh')) {
+      return this.openFresh(sessionId).catch((error: unknown) => this.refuseFresh(error))
+    }
     try {
       return await this.open(sessionId)
     } catch (error) {
+      if (mode !== 'auto') {
+        // 复用模式：绝不改 sshd、不单独拨号。一次性授权的跳板经不起第二次拨号。
+        if (isMissingSftp(error)) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new Error(
+            `${message}。这条连接的文件通道设置为复用终端连接，不会改 sshd 也不会单独拨号。` +
+              '要恢复文件功能：在高级设置里改回「自动」，或断开重连这条 SSH 后重试'
+          )
+        }
+        throw error
+      }
       if (this.route.has(sessionId) || !isMissingSftp(error)) throw error
       const kind = await this.choose(sessionId).catch((again: unknown) => {
         const note = again instanceof Error ? again.message : String(again)
@@ -189,8 +203,25 @@ export class SftpService {
         }
         throw error
       }
-      return this.openFresh(sessionId)
+      return this.openFresh(sessionId).catch((again: unknown) => this.refuseFresh(again))
     }
+  }
+
+  private modeOf(sessionId: string): SftpMode {
+    const session = this.storage.list().find((item) => item.id === sessionId)
+    return session?.sftpMode ?? 'auto'
+  }
+
+  /** 单独拨号失败的典型场景：跳板只授权了一次转发。给出能落地的下一步。 */
+  private refuseFresh(error: unknown): never {
+    const message = error instanceof Error ? error.message : String(error)
+    if (/Channel open failure|授权|authorization denied/i.test(message)) {
+      throw new Error(
+        `${message}。单独拨号被跳板拒绝（一次性授权）。` +
+          '在这条连接的高级设置里把文件通道改成「复用终端连接」；如果刚改过 internal-sftp，断开重连这条 SSH 后文件通道即可复用同一条连接'
+      )
+    }
+    throw error
   }
 
   /** 原来的通道打不开时才改。已经能列目录就不要动 sshd。 */

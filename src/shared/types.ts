@@ -5,6 +5,14 @@ import type { SerialParity, SessionProtocol } from './protocol'
 export type AuthType = 'password' | 'key'
 
 /**
+ * 文件通道走哪条 SSH（仅正向 SSH）：
+ * - auto：默认。复用终端那条连接；目标机缺 SFTP 子系统时自动改 sshd 再单独拨号
+ * - shared：只复用终端那条连接。跳板一次性授权、单独拨号必被拒的机器选这个
+ * - fresh：总是单独拨一条 SSH，不占用终端的连接
+ */
+export type SftpMode = 'auto' | 'shared' | 'fresh'
+
+/**
  * 连接方向：
  * - forward：本机作为 SSH 客户端，主动连到服务器
  * - reverse：本机在 127.0.0.1 监听 shell。公网暴露交给外部穿透（如 cpolar），
@@ -53,6 +61,8 @@ export interface SessionConfig {
   hasJumpSecret: boolean
   /** 命令里带的超时、算法、多跳、ProxyCommand。 */
   sshOptions?: SshConnectOptions
+  /** 文件通道走哪条 SSH。缺省 auto，旧配置没有这一列 */
+  sftpMode?: SftpMode
   createdAt: number
   updatedAt: number
 }
@@ -86,6 +96,8 @@ export interface SessionInput {
   jumpSecret?: string
   /** 连接选项。undefined 表示不修改，null 表示清掉。 */
   sshOptions?: SshConnectOptions | null
+  /** 文件通道走哪条 SSH。undefined 表示不修改，缺省 auto */
+  sftpMode?: SftpMode
 }
 
 export type SessionStatus = 'disconnected' | 'connecting' | 'connected'

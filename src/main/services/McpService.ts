@@ -18,7 +18,8 @@ import {
   type McpRuntime,
   type McpSettings,
   type SessionConfig,
-  type SessionInput
+  type SessionInput,
+  type SftpMode
 } from '../../shared/types'
 import type { ExecService } from './ExecService'
 import type { ReverseListenerService } from './ReverseListenerService'
@@ -54,6 +55,7 @@ type SessionPatch = {
   jumpUsername?: string
   jumpSecret?: string
   listenPort?: number
+  sftpMode?: SftpMode
   group?: string
   remark?: string
 }
@@ -553,6 +555,7 @@ export class McpService {
       stopBits: patch.stopBits ?? current?.stopBits,
       parity: patch.parity ?? current?.parity,
       listenPort: patch.listenPort ?? current?.listenPort,
+      sftpMode: patch.sftpMode ?? current?.sftpMode,
       remark: patch.remark ?? current?.remark,
       secret: patch.secret ? patch.secret : undefined,
       jumpHost: patch.jumpHost !== undefined ? patch.jumpHost.trim() : (current?.jumpHost ?? ''),
@@ -665,6 +668,7 @@ export class McpService {
       serialPath: session.serialPath ?? null,
       baudRate: session.baudRate ?? null,
       listenPort: session.listenPort ?? null,
+      sftpMode: session.sftpMode ?? 'auto',
       jump: Boolean(session.jumpHost)
     }
   }
@@ -1020,6 +1024,10 @@ function sessionPatch(raw: Record<string, unknown>): SessionPatch {
   if (parity && parity !== 'none' && parity !== 'even' && parity !== 'odd' && parity !== 'mark' && parity !== 'space') {
     throw new Error('parity 只能是 none、even、odd、mark 或 space')
   }
+  const sftpMode = textArg(raw, 'sftpMode')
+  if (sftpMode && sftpMode !== 'auto' && sftpMode !== 'shared' && sftpMode !== 'fresh') {
+    throw new Error('sftpMode 只能是 auto、shared 或 fresh')
+  }
   return {
     protocol: protocol as SessionPatch['protocol'],
     mode: mode === 'reverse' ? 'reverse' : mode === 'forward' ? 'forward' : undefined,
@@ -1035,6 +1043,7 @@ function sessionPatch(raw: Record<string, unknown>): SessionPatch {
     stopBits: intArg(raw, 'stopBits'),
     parity: parity as SessionPatch['parity'],
     listenPort: intArg(raw, 'listenPort'),
+    sftpMode: sftpMode as SessionPatch['sftpMode'],
     group: textArg(raw, 'group'),
     remark: textArg(raw, 'remark')
   }
