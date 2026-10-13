@@ -20,14 +20,9 @@ import { hostKeyOf } from '../../shared/host-key'
 import { newConnId } from '../../shared/ids'
 import { sanitizeSshOptions, type SshConnectOptions } from '../../shared/ssh-options'
 import {
-  homeRelative,
-  listConfigAliases,
   localUsername,
   readConcreteHosts,
-  removeSshHost,
   sshConfigPath,
-  suggestAlias,
-  upsertSshHost,
   type SshHostFields
 } from '../ssh-config-file'
 
@@ -35,12 +30,12 @@ import {
  * 会话存储：userData/termpilot.db（Node 内置 SQLite，WAL）+ safeStorage。
  * 密码和私钥口令只以密文写入 secret_encrypted，明文只活在单次连接的内存里。
  * 旧的 sessions.json 在第一次打开数据库时导入，然后改名为 sessions.json.migrated。
+ * ~/.ssh/config 只读不写：启动时把里面的具体主机导入为连接，
+ * 绝不回写——回写替换文件会让 ACL 继承目录权限，OpenSSH 拒绝权限过宽的 config。
  */
 export class StorageService {
   private db: DatabaseSync
   private closed = false
-  /** 从配置文件导入时先关掉写回，避免刚读进来又改文件。 */
-  private sshWrite = true
   private launchApp = ''
   private launchArgs: string[] = []
 
@@ -250,7 +245,6 @@ export class StorageService {
         input.sftpMode ?? null
       )
     const saved = this.require(id)
-    this.publishSsh(id)
     return saved
   }
 
@@ -323,21 +317,12 @@ export class StorageService {
         id
       )
     const saved = this.require(id)
-    this.publishSsh(id)
     return saved
   }
 
   delete(id: string): boolean {
-    const alias = this.configAlias(id)
     this.db.prepare('DELETE FROM open_terms WHERE session_id = ?').run(id)
     const result = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
-    if (result.changes > 0 && alias) {
-      try {
-        removeSshHost(alias)
-      } catch (error) {
-        console.error('[TermPilot] 从 SSH 配置移除主机失败', error)
-      }
-    }
     return result.changes > 0
   }
 
@@ -442,7 +427,6 @@ export class StorageService {
         optionalText(row.sftp_mode) ?? null
       )
     const saved = this.require(newId)
-    this.publishSsh(newId)
     return saved
   }
 
@@ -599,7 +583,7 @@ export class StorageService {
     }
   }
 
-  /** 启动时把 ~/.ssh/config 里的具体主机读进来。已关联的连接只更新 OpenSSH 字段。 */
+  /** 启动时把 ~/.ssh/config 里的具体主机读进来。只读不写；已关联的连接只更新 OpenSSH 字段。 */
   private importSshConfig(): void {
     const file = sshConfigPath()
     if (!existsSync(file)) return
@@ -610,7 +594,6 @@ export class StorageService {
       console.error('[TermPilot] 读取 SSH 配置失败', error)
       return
     }
-    this.sshWrite = false
     try {
       for (const host of hosts) {
         if (!host.fields.hostName.trim()) continue
@@ -638,8 +621,6 @@ export class StorageService {
       }
     } catch (error) {
       console.error('[TermPilot] 导入 SSH 配置失败', error)
-    } finally {
-      this.sshWrite = true
     }
   }
 
@@ -694,39 +675,6 @@ export class StorageService {
         Date.now(),
         id
       )
-  }
-
-  private publishSsh(id: string): void {
-    if (!this.sshWrite) return
-    try {
-      const session = this.require(id)
-      if (session.protocol !== 'ssh' || session.mode !== 'forward' || !session.host.trim()) {
-        this.dropSshAlias(id)
-        return
-      }
-      upsertSshHost(this.ensureAlias(session), fieldsFromSession(session))
-    } catch (error) {
-      console.error('[TermPilot] 写回 SSH 配置失败', error)
-    }
-  }
-
-  private ensureAlias(session: SessionConfig): string {
-    const current = this.configAlias(session.id)
-    if (current) return current
-    const taken = listConfigAliases()
-    for (const row of this.db.prepare('SELECT config_host FROM sessions WHERE config_host IS NOT NULL').all()) {
-      if (typeof row.config_host === 'string') taken.add(row.config_host)
-    }
-    const alias = suggestAlias(session.name, session.publicId, taken)
-    this.db.prepare('UPDATE sessions SET config_host = ? WHERE id = ?').run(alias, session.id)
-    return alias
-  }
-
-  private dropSshAlias(id: string): void {
-    const alias = this.configAlias(id)
-    if (!alias) return
-    this.db.prepare('UPDATE sessions SET config_host = NULL WHERE id = ?').run(id)
-    removeSshHost(alias)
   }
 
   private configAlias(id: string): string | null {
@@ -865,31 +813,6 @@ function optionalInteger(value: SQLOutputValue): number | undefined {
 
 function flag(value: SQLOutputValue): boolean {
   return value === 1 || value === 1n
-}
-
-function fieldsFromSession(session: SessionConfig): SshHostFields {
-  const files =
-    session.authType === 'key' && session.keyPath
-      ? [session.keyPath, ...(session.sshOptions?.keyPaths ?? [])].map(homeRelative)
-      : []
-  const jumps = session.jumpHost?.trim()
-    ? [
-        {
-          host: session.jumpHost.trim(),
-          port: session.jumpPort ?? 22,
-          username: session.jumpUsername?.trim() ?? ''
-        },
-        ...(session.sshOptions?.extraJumps ?? [])
-      ]
-    : []
-  return {
-    hostName: session.host.trim(),
-    port: session.port,
-    username: session.username.trim(),
-    identityFiles: files,
-    jumps,
-    proxyCommand: session.sshOptions?.proxyCommand
-  }
 }
 
 function configOptions(
