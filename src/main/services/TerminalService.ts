@@ -281,7 +281,9 @@ export class TerminalService {
     const marker = `__TP_DONE_${Math.random().toString(36).slice(2, 10)}__`
     // 标记打印完立刻用光标回退抹掉，同一个数据块里写完就擦，屏幕上基本看不到
     const probe = posix ? `\nprintf '${marker}%s\\n\\033[2A\\033[2K\\033[1B\\033[2K\\033[1A' "$?"` : ''
-    this.input(termId, `${body}${probe}\n`)
+    // 行尾用 CR：真终端的回车就是 CR，POSIX PTY（ICRNL）、Telnet、串口都认；
+    // Windows 本机 PSReadLine 只认 CR，单独的 LF 会被当成 Shift+Enter 续行，命令堆着不执行。
+    this.input(termId, `${body}${probe}\r`)
     const deadline = Date.now() + timeoutMs
     let exitCode: number | null = null
     let finished = false
