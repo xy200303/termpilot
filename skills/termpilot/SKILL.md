@@ -52,7 +52,7 @@ termpilot call term_exec --json-file args.json --json
 
 查找只使用编号。`conn-` 是连接，`term-` 是终端。名称和备注只用于识别，不能作为参数。确认用途后写入备注：连接使用 `connection_update` 的 `remark`，终端使用 `term_update`。
 
-启动时会把本机 `~/.ssh/config` 里的具体 `Host` 导入为连接；之后改了文件，下次启动会把主机、端口、用户、私钥和跳板字段同步进对应的连接。这个文件只读不写：在 TermPilot 里改连接不会动它。带通配符的 `Host` 和 `Match` 不会导入。
+`~/.ssh/config` 只读不写：新建连接的表单里有「从 ssh_config 导入」，选中一个 `Host` 会把主机、端口、用户、私钥和跳板填进表单，保存后就是一条普通连接。应用不会自动导入，也不会回写这个文件。带通配符的 `Host` 和 `Match` 不出现在导入列表里。
 
 先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete`、`term_exec` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_pty`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号。
 

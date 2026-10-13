@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, shell } from 'electron'
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 import { IPC } from '../shared/ipc-channels'
@@ -15,6 +15,7 @@ import {
   type McpSettingsInput,
   type RemoteFile,
   type SessionInput,
+  type SshConfigHost,
   type TermCreateOptions
 } from '../shared/types'
 import type { StorageService } from './services/StorageService'
@@ -25,6 +26,15 @@ import type { SftpService } from './services/SftpService'
 import { listAgentTargets, writeAgentTarget } from './services/AgentConfigService'
 import { checkUpdate, releaseUrl } from './update-check'
 import { paintFromContents } from './window-chrome'
+import { readConcreteHosts, sshConfigPath } from './ssh-config-file'
+
+/** ssh_config 里的 ~ 展开成本机绝对路径，私钥字段才能直接用 */
+function expandHome(path: string): string {
+  const norm = path.replace(/\\/g, '/')
+  if (norm === '~') return homedir()
+  if (norm.startsWith('~/')) return join(homedir(), norm.slice(2))
+  return path
+}
 
 /** 注册主进程 IPC handler（白名单，渲染进程只能调这些） */
 export function registerIpc(
@@ -50,6 +60,26 @@ export function registerIpc(
   })
 
   ipcMain.handle(IPC.sessionDuplicate, (_e, id: string) => storage.duplicate(id))
+
+  // 手动导入：读取 ~/.ssh/config 里的具体 Host。只读不写。
+  ipcMain.handle(IPC.sessionSshConfigHosts, (): SshConfigHost[] => {
+    const file = sshConfigPath()
+    if (!existsSync(file)) return []
+    try {
+      return readConcreteHosts(readFileSync(file, 'utf8')).map((host) => ({
+        alias: host.alias,
+        hostName: host.fields.hostName,
+        port: host.fields.port,
+        username: host.fields.username,
+        identityFiles: host.fields.identityFiles.map(expandHome),
+        jumps: host.fields.jumps,
+        proxyCommand: host.fields.proxyCommand
+      }))
+    } catch (error) {
+      console.error('[TermPilot] 读取 SSH 配置失败', error)
+      return []
+    }
+  })
 
   ipcMain.handle(IPC.hostNoteList, () => storage.listHostNotes())
 

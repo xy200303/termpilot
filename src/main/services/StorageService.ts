@@ -19,19 +19,13 @@ import {
 import { hostKeyOf } from '../../shared/host-key'
 import { newConnId } from '../../shared/ids'
 import { sanitizeSshOptions, type SshConnectOptions } from '../../shared/ssh-options'
-import {
-  localUsername,
-  readConcreteHosts,
-  sshConfigPath,
-  type SshHostFields
-} from '../ssh-config-file'
 
 /**
  * 会话存储：userData/termpilot.db（Node 内置 SQLite，WAL）+ safeStorage。
  * 密码和私钥口令只以密文写入 secret_encrypted，明文只活在单次连接的内存里。
  * 旧的 sessions.json 在第一次打开数据库时导入，然后改名为 sessions.json.migrated。
- * ~/.ssh/config 只读不写：启动时把里面的具体主机导入为连接，
- * 绝不回写——回写替换文件会让 ACL 继承目录权限，OpenSSH 拒绝权限过宽的 config。
+ * ~/.ssh/config 只在创建连接时按需读取（手动导入），这里不回写也不同步——
+ * 回写替换文件会让 ACL 继承目录权限，OpenSSH 拒绝权限过宽的 config。
  */
 export class StorageService {
   private db: DatabaseSync
@@ -126,7 +120,6 @@ export class StorageService {
       'CREATE UNIQUE INDEX IF NOT EXISTS sessions_config_host ON sessions(config_host) WHERE config_host IS NOT NULL'
     )
     this.importLegacyJson(join(dir, 'sessions.json'))
-    this.importSshConfig()
   }
 
   private backfillPublicIds(): void {
@@ -583,113 +576,6 @@ export class StorageService {
     }
   }
 
-  /** 启动时把 ~/.ssh/config 里的具体主机读进来。只读不写；已关联的连接只更新 OpenSSH 字段。 */
-  private importSshConfig(): void {
-    const file = sshConfigPath()
-    if (!existsSync(file)) return
-    let hosts: { alias: string; fields: SshHostFields }[]
-    try {
-      hosts = readConcreteHosts(readFileSync(file, 'utf8'))
-    } catch (error) {
-      console.error('[TermPilot] 读取 SSH 配置失败', error)
-      return
-    }
-    try {
-      for (const host of hosts) {
-        if (!host.fields.hostName.trim()) continue
-        const row = this.db.prepare('SELECT id FROM sessions WHERE config_host = ?').get(host.alias)
-        if (row && typeof row.id === 'string') {
-          this.applyConfig(row.id, host.fields)
-          continue
-        }
-        const same = this
-          .list()
-          .filter(
-            (session) =>
-              session.mode === 'forward' &&
-              !this.configAlias(session.id) &&
-              session.host === host.fields.hostName &&
-              session.port === host.fields.port &&
-              session.username === (host.fields.username || localUsername())
-          )
-        if (same.length === 1) {
-          this.db.prepare('UPDATE sessions SET config_host = ? WHERE id = ?').run(host.alias, same[0]!.id)
-          this.applyConfig(same[0]!.id, host.fields)
-        } else {
-          this.insertConfig(host.alias, host.fields)
-        }
-      }
-    } catch (error) {
-      console.error('[TermPilot] 导入 SSH 配置失败', error)
-    }
-  }
-
-  private insertConfig(alias: string, fields: SshHostFields): void {
-    const [keyPath, ...rest] = fields.identityFiles
-    const [jump, ...extra] = fields.jumps
-    const session = this.create({
-      name: this.uniqueName(alias),
-      group: '',
-      mode: 'forward',
-      host: fields.hostName,
-      port: fields.port,
-      username: fields.username || localUsername(),
-      authType: keyPath ? 'key' : 'password',
-      keyPath,
-      remark: '',
-      jumpHost: jump?.host ?? '',
-      jumpPort: jump?.port,
-      jumpUsername: jump?.username,
-      sshOptions: configOptions(rest, extra, fields.proxyCommand)
-    })
-    this.db.prepare('UPDATE sessions SET config_host = ? WHERE id = ?').run(alias, session.id)
-  }
-
-  private applyConfig(id: string, fields: SshHostFields): void {
-    const row = this.db.prepare('SELECT ssh_options, jump_host, jump_secret_encrypted FROM sessions WHERE id = ?').get(id)
-    if (!row) return
-    const [keyPath, ...rest] = fields.identityFiles
-    const [jump, ...extra] = fields.jumps
-    const previousJump = optionalText(row.jump_host) ?? ''
-    const jumpHost = jump?.host ?? ''
-    const keepSecret = jumpHost !== '' && jumpHost === previousJump
-    this.db
-      .prepare(
-        `UPDATE sessions SET
-          host = ?, port = ?, username = ?, auth_type = ?, key_path = ?,
-          jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?,
-          ssh_options = ?, updated_at = ?
-        WHERE id = ?`
-      )
-      .run(
-        fields.hostName,
-        fields.port,
-        fields.username || localUsername(),
-        keyPath ? 'key' : 'password',
-        keyPath ?? null,
-        jumpHost || null,
-        jumpHost ? (jump?.port ?? 22) : null,
-        jumpHost ? jump?.username || null : null,
-        keepSecret ? (row.jump_secret_encrypted ?? null) : null,
-        encodeOptions(configOptions(rest, extra, fields.proxyCommand, decodeOptions(row.ssh_options))),
-        Date.now(),
-        id
-      )
-  }
-
-  private configAlias(id: string): string | null {
-    const row = this.db.prepare('SELECT config_host FROM sessions WHERE id = ?').get(id)
-    return row && typeof row.config_host === 'string' && row.config_host ? row.config_host : null
-  }
-
-  private uniqueName(base: string): string {
-    const taken = new Set(this.list().map((session) => session.name))
-    if (!taken.has(base)) return base
-    let n = 2
-    while (taken.has(`${base} ${n}`)) n += 1
-    return `${base} ${n}`
-  }
-
   private importLegacyJson(file: string): void {
     if (!existsSync(file)) return
     let parsed: unknown
@@ -813,22 +699,6 @@ function optionalInteger(value: SQLOutputValue): number | undefined {
 
 function flag(value: SQLOutputValue): boolean {
   return value === 1 || value === 1n
-}
-
-function configOptions(
-  keyPaths: string[],
-  extraJumps: SshHostFields['jumps'],
-  proxyCommand: string | undefined,
-  previous?: SshConnectOptions
-): SshConnectOptions | undefined {
-  const options: SshConnectOptions = { ...(previous ?? {}) }
-  if (keyPaths.length > 0) options.keyPaths = keyPaths
-  else delete options.keyPaths
-  if (extraJumps.length > 0) options.extraJumps = extraJumps
-  else delete options.extraJumps
-  if (proxyCommand) options.proxyCommand = proxyCommand
-  else delete options.proxyCommand
-  return sanitizeSshOptions(options)
 }
 
 function encodeOptions(value: SessionInput['sshOptions']): string | null {

@@ -18,6 +18,7 @@ import type {
   McpSettingsInput,
   SessionConfig,
   SessionInput,
+  SshConfigHost,
   SavedTerm,
   TermCreateOptions,
   TermDataEvent,
@@ -42,6 +43,7 @@ const api = {
     update: (id: string, patch: SessionInput) => ipcRenderer.invoke(IPC.sessionUpdate, id, patch),
     delete: (id: string) => ipcRenderer.invoke(IPC.sessionDelete, id),
     duplicate: (id: string) => ipcRenderer.invoke(IPC.sessionDuplicate, id) as Promise<SessionConfig | null>,
+    sshConfigHosts: () => ipcRenderer.invoke(IPC.sessionSshConfigHosts) as Promise<SshConfigHost[]>,
     onChanged: (cb: (sessions: SessionConfig[]) => void) => {
       const listener = (_e: Electron.IpcRendererEvent, sessions: SessionConfig[]) => cb(sessions)
       ipcRenderer.on(IPC.sessionChanged, listener)

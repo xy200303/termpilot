@@ -20,9 +20,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '../stores/useAppStore'
 import { parseSshCommand } from '../../../shared/parse-ssh'
-import { sshOptionsForSession, type SshConnectOptions } from '../../../shared/ssh-options'
+import { sshOptionsForSession, sanitizeSshOptions, type SshConnectOptions } from '../../../shared/ssh-options'
 import { SERIAL_DEFAULTS, TELNET_DEFAULT_PORT, type SessionProtocol } from '../../../shared/protocol'
-import type { AuthType, ConnectMode, SessionInput } from '../../../shared/types'
+import type { AuthType, ConnectMode, SessionInput, SshConfigHost } from '../../../shared/types'
 
 /** 名字里 @ 后面的地址。空格或路径不当成主机。 */
 function addressInName(name: string): string | null {
@@ -95,6 +95,7 @@ export function SessionForm() {
 
   const [form, setForm] = useState<SessionInput>(empty('forward'))
   const [command, setCommand] = useState('')
+  const [configHosts, setConfigHosts] = useState<SshConfigHost[]>([])
   const [error, setError] = useState('')
   const [page, setPage] = useState('connect')
 
@@ -137,6 +138,11 @@ export function SessionForm() {
     setCommand('')
     setError('')
     setPage('connect')
+    if (editing.action === 'create') {
+      void window.api.sessions.sshConfigHosts().then(setConfigHosts)
+    } else {
+      setConfigHosts([])
+    }
   }, [editing])
 
   const set = <K extends keyof SessionInput>(k: K, v: SessionInput[K]) =>
@@ -193,6 +199,32 @@ export function SessionForm() {
       jumpUsername: parsed.jump?.username ?? '',
       jumpSecret: parsed.jump?.secret ?? '',
       sshOptions: parsed.options ?? null
+    }))
+  }
+
+  const applyImport = (alias: string) => {
+    const host = configHosts.find((item) => item.alias === alias)
+    if (!host) return
+    const [keyPath, ...restKeys] = host.identityFiles
+    const [jump, ...extraJumps] = host.jumps
+    setError('')
+    setForm((current) => ({
+      ...current,
+      name: current.name.trim() ? current.name : host.alias,
+      host: host.hostName,
+      port: host.port,
+      username: host.username || current.username,
+      authType: keyPath ? 'key' : current.authType,
+      keyPath: keyPath ?? current.keyPath,
+      jumpHost: jump?.host ?? '',
+      jumpPort: jump?.port ?? 22,
+      jumpUsername: jump?.username ?? '',
+      sshOptions:
+        sanitizeSshOptions({
+          ...(restKeys.length > 0 ? { keyPaths: restKeys } : {}),
+          ...(extraJumps.length > 0 ? { extraJumps } : {}),
+          ...(host.proxyCommand ? { proxyCommand: host.proxyCommand } : {})
+        }) ?? null
     }))
   }
 
@@ -435,6 +467,22 @@ export function SessionForm() {
               <TabsTrigger value="advanced">高级</TabsTrigger>
             </TabsList>
             <TabsContent value="connect" className="grid min-h-52 gap-3">
+              {creating && configHosts.length > 0 && (
+                <Field label="从 ssh_config 导入">
+                  <Select value="" onValueChange={applyImport}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="选择 ~/.ssh/config 里的 Host，自动填表" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {configHosts.map((host) => (
+                        <SelectItem key={host.alias} value={host.alias}>
+                          {host.alias}（{host.username ? `${host.username}@` : ''}{host.hostName}）
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
               {!lockedHost && (
                 <Field label="粘贴命令">
                   <Input

@@ -5,6 +5,8 @@ export const IPC = {
   sessionUpdate: 'session:update',
   sessionDelete: 'session:delete',
   sessionDuplicate: 'session:duplicate',
+  /** 读取 ~/.ssh/config 里的具体 Host，给创建连接手动导入用 */
+  sessionSshConfigHosts: 'session:ssh-config-hosts',
   /** main → renderer，Agent 改了会话列表 */
   sessionChanged: 'session:changed',
   hostNoteList: 'host:note-list',

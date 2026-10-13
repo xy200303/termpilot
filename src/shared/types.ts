@@ -102,6 +102,18 @@ export interface SessionInput {
 
 export type SessionStatus = 'disconnected' | 'connecting' | 'connected'
 
+/** ~/.ssh/config 里一个具体 Host 的导入视图（创建连接时手动导入用） */
+export interface SshConfigHost {
+  alias: string
+  hostName: string
+  port: number
+  username: string
+  /** 私钥路径，已展开为本机绝对路径 */
+  identityFiles: string[]
+  jumps: { host: string; port: number; username: string }[]
+  proxyCommand?: string
+}
+
 export type TabKind = 'ssh' | 'local' | 'reverse'
 
 export interface Tab {
