@@ -125,7 +125,9 @@
   #root {
     height: 100%;
     margin: 0;
-    overflow: hidden;
+    /* 必须是 clip 不是 hidden：hidden 仍可被 scrollIntoView 程序滚动，
+       IME 组字时浏览器为露出光标处的隐藏输入框会把整页往左推，左边内容被裁掉 */
+    overflow: clip;
   }
   #root {
     position: relative;

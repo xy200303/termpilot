@@ -65,7 +65,8 @@ class TerminalPool {
     const host = document.createElement('div')
     host.style.width = '100%'
     host.style.height = '100%'
-    host.style.overflow = 'hidden'
+    // clip 不是滚动容器，IME 组字触发的 scrollIntoView 不会把这个容器推开
+    host.style.overflow = 'clip'
     term.open(host)
     host.style.background = this.palette.background ?? ''
     bindClipboardKeys(term)
