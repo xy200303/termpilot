@@ -36,6 +36,23 @@
   --yc-radius-m: 10px;
   --yc-radius-l: 14px;
 
+  /* 动效体系（YunCast 同款）需要的 token，映射到上面的色板 */
+  --yc-accent: var(--yc-blue-600);
+  --yc-btn: #1f1e1c;
+  --yc-line: rgba(0, 0, 0, 0.1);
+  --yc-line-soft: rgba(0, 0, 0, 0.055);
+  --yc-line-strong: rgba(0, 0, 0, 0.16);
+  --yc-gray-50: #f9f9f8;
+  --yc-gray-100: #f4f4f3;
+  --yc-radius-xs: 4px;
+  --yc-radius: 8px;
+  --yc-radius-lg: 10px;
+  --yc-shadow-lg:
+    0 0 0 1px rgba(0, 0, 0, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 24px 48px -28px rgba(0, 0, 0, 0.12);
+  --font-display: var(--vp-font-family-base);
+
   /* 阴影：只表达「浮在页面上」 */
   --yc-shadow:
     0 0 0 1px rgba(31, 30, 28, 0.06),

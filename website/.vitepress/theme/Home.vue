@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { withBase } from 'vitepress'
+import DotField from './components/DotField.vue'
+import SignalStrip from './components/SignalStrip.vue'
+import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
 const VERSION = '0.7.7'
 const REPO = 'https://github.com/xy200303/termpilot'
@@ -17,6 +21,13 @@ const announcement = {
   text: '文件通道可按连接配置复用或独立拨号；~/.ssh/config 改为创建时手动导入',
   link: RELEASE_TAG
 }
+
+/* Hero 大标题：两行，第二行用强调色。逐字进场是纯 CSS（.hero-title .ch），
+   脚本没加载完也不会留白。 */
+const heroLines = ['你的终端，', '助手可以接着用。']
+const heroOffset = heroLines[0].length
+const heroEl = ref<HTMLElement | null>(null)
+const shotEl = ref<HTMLElement | null>(null)
 
 const stats = [
   { value: '3', label: '类连接协议', note: 'SSH / Telnet / 串口' },
@@ -176,8 +187,9 @@ const faqs = [
 ]
 
 let observer: IntersectionObserver | null = null
+const teardowns: Array<() => void> = []
 
-onMounted(() => {
+onMounted(async () => {
   const ld = document.createElement('script')
   ld.type = 'application/ld+json'
   ld.id = 'faq-jsonld'
@@ -204,11 +216,57 @@ onMounted(() => {
     { rootMargin: '0px 0px -8% 0px', threshold: 0.05 }
   )
   document.querySelectorAll('.reveal').forEach((el) => observer?.observe(el))
+
+  const reduced = prefersReduced()
+
+  /* 平滑滚动：仅精确指针 + 未开启减少动效 */
+  if (!reduced) teardowns.push(await initSmoothScroll())
+
+  const { animate, scroll } = await loadMotion()
+
+  /* 首屏点阵随滚动缓慢上移：做出前后景的深度差 */
+  const hero = heroEl.value
+  const field = hero?.querySelector<HTMLElement>('.dot-field')
+  if (hero && field && !reduced) {
+    teardowns.push(
+      scroll(animate(field, { y: [0, -64] }, { ease: 'linear' }), {
+        target: hero,
+        offset: ['start start', 'end start']
+      })
+    )
+  }
+
+  /* 产品窗：指针倾斜（幅度很小、弹簧跟随，回到 0 时也走弹簧） */
+  const frame = shotEl.value
+  if (frame && !reduced && hasFinePointer()) {
+    let ctrl: { stop: () => void } | null = null
+    const aim = (rx: number, ry: number, stiffness = 150) => {
+      ctrl?.stop()
+      ctrl = animate(frame, { rotateX: rx, rotateY: ry }, { type: 'spring', stiffness, damping: 22 })
+    }
+    const onMove = (e: PointerEvent) => {
+      const r = frame.getBoundingClientRect()
+      const nx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2)
+      const ny = (e.clientY - (r.top + r.height / 2)) / (r.height / 2)
+      const cx = Math.max(-1, Math.min(1, nx))
+      const cy = Math.max(-1, Math.min(1, ny))
+      aim(-cy * 2.4, cx * 3.2)
+    }
+    const reset = () => aim(0, 0, 190)
+    window.addEventListener('pointermove', onMove, { passive: true })
+    frame.addEventListener('pointerleave', reset)
+    teardowns.push(() => {
+      ctrl?.stop()
+      window.removeEventListener('pointermove', onMove)
+      frame.removeEventListener('pointerleave', reset)
+    })
+  }
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
   document.getElementById('faq-jsonld')?.remove()
+  for (const t of teardowns) t()
 })
 </script>
 
@@ -218,32 +276,54 @@ onBeforeUnmount(() => {
     <div class="topline" />
 
     <!-- Hero -->
-    <header class="hero">
-      <div class="wrap">
-        <a class="announce reveal" :href="announcement.link" target="_blank" rel="noopener">
-          <span class="tag">{{ announcement.version }}</span>
-          <span>{{ announcement.text }}</span>
-          <span class="arrow">→</span>
+    <header ref="heroEl" class="hero">
+      <DotField class="hero-field" :gap="22" :radius="140" :push="34" />
+      <div class="hero-inner">
+        <a class="notice" :href="announcement.link" target="_blank" rel="noopener">
+          <span class="notice-tag tnum">{{ announcement.version }}</span>
+          <span class="notice-text">{{ announcement.text }}</span>
+          <span class="notice-arrow">→</span>
         </a>
-        <div class="hero-grid">
-          <div class="hero-copy">
-            <h1 class="reveal">你的终端，<br />助手可以接着用。</h1>
-            <p class="sub reveal">
-              TermPilot 是本机 SSH 终端：连接、终端、文件一体。你在窗口里登录后，
-              AI 助手通过内置 MCP Server 接着同一条会话继续操作——口令不出本机。
-            </p>
-            <div class="cta reveal">
-              <a class="btn primary" href="/download">下载</a>
-              <a class="btn ghost" href="/guide/quickstart">看文档</a>
-              <a class="btn text" :href="REPO" target="_blank" rel="noopener">GitHub ↗</a>
+        <h1 class="hero-title">
+          <span v-for="(line, li) in heroLines" :key="li" class="line">
+            <span
+              v-for="(ch, ci) in [...line]"
+              :key="ci"
+              class="ch"
+              :style="{ '--ci': (li ? heroOffset : 0) + ci }"
+              >{{ ch }}</span
+            >
+          </span>
+        </h1>
+        <p class="hero-sub">
+          TermPilot 是本机 SSH 终端：连接、终端、文件一体。你在窗口里登录后，
+          AI 助手通过内置 MCP Server 接着同一条会话继续操作——口令不出本机。
+        </p>
+        <div class="hero-cta">
+          <a v-press class="btn primary" :href="withBase('/download')">
+            下载安装包
+            <span class="arw">→</span>
+          </a>
+          <a v-press class="btn ghost" :href="withBase('/guide/quickstart')">使用文档</a>
+          <a v-press class="btn text" :href="REPO" target="_blank" rel="noopener">GitHub ↗</a>
+        </div>
+        <p class="plat">Windows · macOS · Linux，MIT 开源</p>
+
+        <div class="hero-shot">
+          <div ref="shotEl" class="shot-frame">
+            <div class="window">
+              <div class="window-bar"><i /><i /><i /><span class="window-url">TermPilot</span></div>
+              <img
+                src="/shots/hero.png"
+                alt="TermPilot 主窗口：左侧连接列表，右侧多标签终端"
+                width="1280"
+                height="800"
+              />
             </div>
-            <p class="plat reveal">Windows · macOS · Linux，MIT 开源</p>
           </div>
-          <figure class="hero-shot reveal">
-            <img src="/shots/hero.png" alt="TermPilot 主窗口：左侧连接列表，右侧多标签终端" width="1280" height="800" />
-          </figure>
         </div>
       </div>
+      <SignalStrip class="hero-signal" :height="72" :lines="3" />
     </header>
 
     <!-- 数字条 -->
@@ -305,7 +385,7 @@ onBeforeUnmount(() => {
       <div class="wrap">
         <h2 class="reveal">界面</h2>
         <div class="shots">
-          <figure v-for="s in shots" :key="s.src" class="shot reveal">
+          <figure v-for="s in shots" :key="s.src" v-lift="3" v-spot class="shot reveal">
             <img :src="s.src" :alt="s.title" width="1280" height="800" loading="lazy" />
             <figcaption>
               <b>{{ s.title }}</b>
@@ -405,10 +485,10 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
       <div class="wrap">
         <h2 class="reveal">下载 TermPilot，把终端交给助手接着用</h2>
         <div class="cta reveal">
-          <a class="btn primary" :href="DOWNLOADS.win">Windows 版</a>
-          <a class="btn primary" :href="DOWNLOADS.mac">macOS 版</a>
-          <a class="btn primary" :href="DOWNLOADS.linux">Linux 版</a>
-          <a class="btn text" href="/download">全部下载</a>
+          <a v-press class="btn primary" :href="DOWNLOADS.win">Windows 版</a>
+          <a v-press class="btn primary" :href="DOWNLOADS.mac">macOS 版</a>
+          <a v-press class="btn primary" :href="DOWNLOADS.linux">Linux 版</a>
+          <a v-press class="btn text" href="/download">全部下载</a>
         </div>
         <p class="fine reveal">MIT 协议 · Copyright © 2026 xy200303</p>
       </div>
@@ -429,61 +509,211 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
 }
 
 /* ---------------------------------------------------------------- Hero */
+/* 版面靠留白和字号跨度撑；背景是一层可交互的点阵（DotField），不是光效 */
 .hero {
   position: relative;
-  padding: 40px 0 calc(var(--yc-section-y) * 0.8);
-  background-image: radial-gradient(circle, rgba(31, 30, 28, 0.09) 1px, transparent 1px);
-  background-size: 26px 26px;
+  overflow: hidden;
+  padding: 96px 24px 0;
 }
-.announce {
-  display: inline-flex;
+.hero-field {
+  /* 只在上半屏露面，往下淡出，避免和正文抢注意力 */
+  mask-image: linear-gradient(#000 0 42%, transparent 88%);
+}
+.hero-inner {
+  position: relative;
+  max-width: 1020px;
+  margin: 0 auto;
+  text-align: center;
+}
+/* 首屏信号带：出血到两侧，做 hero 的收口 */
+.hero-signal {
+  margin: 56px -24px 0;
+  width: calc(100% + 48px);
+}
+
+/* 顶部公告条 */
+.notice {
+  position: relative;
+  z-index: 2;
+  display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13.5px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 28px;
+  padding: 6px 12px 6px 7px;
+  border-radius: var(--yc-radius-xs);
+  font-size: 13px;
   color: var(--yc-ink-600);
-  border: 1px solid var(--yc-hairline-strong);
-  border-radius: 999px;
-  padding: 5px 14px 5px 6px;
+  background: #fff;
+  border: 1px solid var(--yc-line);
   text-decoration: none;
-  background: var(--yc-paper);
+  transition: border-color 0.2s, color 0.2s;
 }
-.announce:hover {
+.notice:hover {
+  border-color: var(--yc-line-strong);
   color: var(--yc-ink-900);
-  border-color: var(--yc-ink-400);
 }
-.announce .tag {
-  background: var(--yc-ink-900);
-  color: var(--yc-paper);
-  border-radius: 999px;
-  padding: 2px 9px;
-  font-size: 12.5px;
+.notice-tag {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: var(--yc-radius-xs);
+  font-size: 11.5px;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: var(--yc-accent);
 }
-.announce .arrow {
+.notice-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notice-arrow {
+  flex: none;
+  color: var(--yc-ink-400);
+  transition: transform 0.2s, color 0.2s;
+}
+.notice:hover .notice-arrow {
+  transform: translateX(2px);
+  color: var(--yc-ink-900);
+}
+
+.hero-title {
+  font-size: clamp(32px, 5.2vw, 60px);
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  color: var(--yc-ink-900);
+  margin: 10px 0 0;
+}
+/* 每行一个裁切盒：字从下方升上来，被行盒切住 */
+.hero-title .line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+.hero-title .ch {
+  display: inline-block;
+  animation: tp-rise 0.92s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--ci, 0) * 45ms + 0.12s);
+  will-change: transform;
+}
+/* 第一行铺垫、第二行主张：主张那句用品牌色点出来 */
+.hero-title .line:last-child .ch {
+  color: var(--yc-accent);
+}
+@keyframes tp-rise {
+  from {
+    transform: translate3d(0, 108%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+.hero-sub {
+  margin: 24px auto 0;
+  max-width: 620px;
+  font-size: 17px;
+  line-height: 1.8;
+  color: var(--yc-ink-600);
+  text-wrap: pretty;
+  animation: tp-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.62s;
+}
+@keyframes tp-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 34px;
+  animation: tp-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.74s;
+}
+.plat {
+  margin-top: 18px;
+  font-size: 13.5px;
+  color: var(--yc-ink-400);
+  animation: tp-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.8s;
+}
+
+/* 窗口 / 截图框：细边 + 收紧的投影，像真的应用窗口 */
+.hero-shot {
+  position: relative;
+  margin-top: 56px;
+  perspective: 1600px;
+  animation: tp-window-in 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.86s;
+}
+@keyframes tp-window-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0) scale(0.986);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.shot-frame {
+  position: relative;
+}
+.window {
+  position: relative;
+  border-radius: var(--yc-radius-lg);
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--yc-line);
+  box-shadow: var(--yc-shadow-lg);
+}
+.window-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #fbfbfa;
+  border-bottom: 1px solid var(--yc-line-soft);
+}
+.window-bar i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e4e4e7;
+}
+.window-bar i:nth-child(1) {
+  background: #ff5f57;
+}
+.window-bar i:nth-child(2) {
+  background: #febc2e;
+}
+.window-bar i:nth-child(3) {
+  background: #28c840;
+}
+.window-url {
+  margin-left: 8px;
+  font-size: 12px;
   color: var(--yc-ink-400);
 }
-.hero-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 56px;
-  align-items: center;
-  margin-top: 48px;
+.window img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
-.hero h1 {
-  font-size: 64px;
-  line-height: 1.08;
-  letter-spacing: -0.025em;
-  font-weight: 800;
-  color: var(--yc-ink-900);
-  margin: 0;
-}
-.sub {
-  margin-top: 24px;
-  font-size: 18.5px;
-  line-height: 1.65;
-  color: var(--yc-ink-600);
-  max-width: 30em;
-}
+
 .cta {
   display: flex;
   flex-wrap: wrap;
@@ -495,6 +725,7 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   border-radius: var(--yc-radius-s);
   font-size: 15px;
   font-weight: 600;
@@ -503,16 +734,17 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .btn.primary {
-  background: var(--yc-ink-900);
+  background: var(--yc-btn);
   color: var(--yc-paper);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 .btn.primary:hover {
-  background: #353330;
+  background: #000;
 }
 .btn.ghost {
   border: 1px solid var(--yc-hairline-strong);
   color: var(--yc-ink-900);
-  background: var(--yc-paper);
+  background: #fff;
 }
 .btn.ghost:hover {
   border-color: var(--yc-ink-400);
@@ -524,20 +756,13 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
 .btn.text:hover {
   color: var(--yc-blue-600);
 }
-.plat {
-  margin-top: 18px;
-  font-size: 13.5px;
-  color: var(--yc-ink-400);
+/* 尾部箭头随 hover 右移 */
+.btn .arw {
+  display: inline-flex;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.hero-shot {
-  margin: 0;
-}
-.hero-shot img {
-  width: 100%;
-  height: auto;
-  border-radius: var(--yc-radius-l);
-  box-shadow: var(--yc-shadow);
-  display: block;
+.btn:hover .arw {
+  transform: translateX(3px);
 }
 
 /* ---------------------------------------------------------------- 数字条 */
@@ -700,6 +925,28 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
 }
 .shot {
   margin: 0;
+  position: relative;
+  border-radius: var(--yc-radius-m);
+}
+/* 指针跟随高光：位置由 v-spot 写进 --mx / --my，CSS 只画一层极淡的品牌色光 */
+.shot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    220px circle at var(--mx, 50%) var(--my, 0%),
+    rgba(29, 78, 216, 0.07),
+    transparent 68%
+  );
+  opacity: 0;
+  transition: opacity 0.24s;
+  pointer-events: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .shot:hover::after {
+    opacity: 1;
+  }
 }
 .shot img {
   width: 100%;
@@ -900,15 +1147,11 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
 
 /* ---------------------------------------------------------------- 移动端 */
 @media (max-width: 960px) {
-  .hero-grid {
-    grid-template-columns: 1fr;
-    gap: 40px;
+  .hero {
+    padding-top: 68px;
   }
-  .hero h1 {
-    font-size: 42px;
-  }
-  .sub {
-    font-size: 16.5px;
+  .notice-text {
+    white-space: normal;
   }
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -942,8 +1185,23 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
     font-size: 29px;
   }
   .cta .btn.primary,
-  .cta .btn.ghost {
+  .cta .btn.ghost,
+  .hero-cta .btn.primary,
+  .hero-cta .btn.ghost {
     flex: 1 1 auto;
+  }
+}
+
+/* 减少动效：逐字进场与窗口进场都停，内容保持完整 */
+@media (prefers-reduced-motion: reduce) {
+  .hero-title .ch,
+  .hero-sub,
+  .hero-cta,
+  .plat,
+  .hero-shot {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
 }
 </style>
