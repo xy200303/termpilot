@@ -1,0 +1,145 @@
+/* ---------------------------------------------------------------------------
+ * TermPilot 官网设计系统
+ * 近单色暖灰阶 + 一个实色强调（#1D4ED8）。层级靠排版，不靠卡片堆叠。
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* 色板 */
+  --yc-ink-900: #1f1e1c;
+  --yc-ink-600: #55534e;
+  --yc-ink-400: #8d8b86;
+  --yc-paper: #f9f9f8;
+  --yc-paper-dim: #f1f0ee;
+  --yc-hairline: #e8e7e5;
+  --yc-hairline-strong: #d9d7d4;
+  --yc-blue-600: #1d4ed8;
+  --yc-blue-700: #1e40af;
+  --yc-blue-50: #eff4ff;
+
+  /* VitePress 外壳覆写 */
+  --vp-c-bg: var(--yc-paper);
+  --vp-c-bg-alt: var(--yc-paper);
+  --vp-c-bg-soft: var(--yc-paper-dim);
+  --vp-c-divider: var(--yc-hairline);
+  --vp-c-text-1: var(--yc-ink-900);
+  --vp-c-text-2: var(--yc-ink-600);
+  --vp-c-text-3: var(--yc-ink-400);
+  --vp-c-brand-1: var(--yc-blue-600);
+  --vp-c-brand-2: var(--yc-blue-700);
+  --vp-c-brand-3: var(--yc-blue-600);
+  --vp-font-family-base:
+    'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+
+  /* 圆角三档 */
+  --yc-radius-s: 6px;
+  --yc-radius-m: 10px;
+  --yc-radius-l: 14px;
+
+  /* 阴影：只表达「浮在页面上」 */
+  --yc-shadow:
+    0 0 0 1px rgba(31, 30, 28, 0.06),
+    0 12px 32px -12px rgba(31, 30, 28, 0.18);
+
+  --yc-section-y: 108px;
+  --yc-container: 1180px;
+}
+
+html {
+  font-synthesis: none;
+}
+
+body {
+  background: var(--yc-paper);
+}
+
+/* 落地页占满全宽 */
+body:has(.landing) .VPLocalNav {
+  display: none;
+}
+body:has(.landing) .VPPage {
+  max-width: none !important;
+  padding: 0 !important;
+}
+body:has(.landing) .VPContent .VPDoc {
+  padding: 0 !important;
+}
+body:has(.landing) .VPContent .VPDoc .container,
+body:has(.landing) .VPContent .VPDoc .content {
+  max-width: none !important;
+  padding: 0 !important;
+}
+
+/* 文档排版 */
+.vp-doc h1 {
+  font-size: 32px;
+  letter-spacing: -0.01em;
+}
+
+/* 窄屏下导航标题可收缩，避免撑出横向滚动 */
+.VPNavBarTitle .title {
+  min-width: 0;
+}
+.VPNavBarTitle .title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-doc h2 {
+  font-size: 24px;
+  border-top: none;
+  padding-top: 0;
+  margin-top: 48px;
+}
+.vp-doc h2::before {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--yc-blue-600);
+  margin-bottom: 12px;
+}
+.vp-doc p,
+.vp-doc li {
+  font-size: 15.5px;
+  line-height: 1.78;
+}
+.vp-doc table {
+  font-size: 14.5px;
+}
+
+/* 数字用等宽变体，表格和数字条对齐 */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 进入动效：淡入上移，IntersectionObserver 在 Home.vue 里加类 */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(10px);
+    transition:
+      opacity 0.55s ease,
+      transform 0.55s ease;
+  }
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --yc-section-y: 64px;
+  }
+  .vp-doc h1 {
+    font-size: 27px;
+  }
+}
