@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>TermPilot OG image</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+        margin: 0;
+        overflow: hidden;
+        background: #f9f9f8;
+        color: #1f1e1c;
+        font-family: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+      }
+
+      .dots {
+        position: absolute;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='1' cy='1' r='1' fill='%231f1e1c' fill-opacity='.05'/%3E%3C/svg%3E");
+        background-size: 28px 28px;
+      }
+
+      .frame {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 58px 72px 52px;
+      }
+
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .logo {
+        width: 58px;
+        height: 58px;
+        border-radius: 14px;
+      }
+
+      .brand {
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .version {
+        margin-left: auto;
+        padding: 5px 10px;
+        border: 1px solid #d9d7d4;
+        border-radius: 6px;
+        background: #fff;
+        font-size: 15px;
+        color: #55534e;
+      }
+
+      .middle {
+        max-width: 640px;
+        margin-top: -18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 62px;
+        font-weight: 700;
+        line-height: 1.08;
+        letter-spacing: -0.045em;
+      }
+
+      .sub {
+        max-width: 590px;
+        margin: 20px 0 0;
+        font-size: 21px;
+        line-height: 1.6;
+        color: #55534e;
+      }
+
+      .chips {
+        display: flex;
+        gap: 8px;
+        margin-top: 26px;
+      }
+
+      .chips span {
+        padding: 6px 11px;
+        border: 1px solid #d9d7d4;
+        border-radius: 6px;
+        background: #fff;
+        font-size: 14px;
+        color: #55534e;
+      }
+
+      .shot {
+        position: absolute;
+        right: 60px;
+        bottom: 104px;
+        width: 438px;
+        border: 1px solid #d9d7d4;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 24px 56px -36px rgba(31, 30, 28, 0.35);
+      }
+
+      .bottom {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        font-size: 15px;
+        color: #8d8b86;
+      }
+
+      .bottom b {
+        font-weight: 600;
+        color: #55534e;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dots"></div>
+    <div class="frame">
+      <div class="top">
+        <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+          <rect width="64" height="64" rx="16" fill="#243044" />
+          <path
+            d="M20 24.5 31 32 20 39.5"
+            fill="none"
+            stroke="#E6EDF5"
+            stroke-width="2.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <rect x="35" y="36.2" width="8" height="3.2" rx="0.6" fill="#C4A574" />
+        </svg>
+        <div class="brand">TermPilot</div>
+        <div class="version">v0.7.7</div>
+      </div>
+
+      <div class="middle">
+        <h1>你的终端，<br />助手可以接着用。</h1>
+        <p class="sub">
+          本机 SSH / Telnet / 串口终端。你在窗口登录，AI 助手通过 MCP 在同一条会话继续操作。
+        </p>
+        <div class="chips">
+          <span>3 类协议</span>
+          <span>25 个 Agent 工具</span>
+          <span>SFTP</span>
+          <span>凭据存本机</span>
+        </div>
+      </div>
+
+      <div class="bottom">
+        <div><b>term.xyun.dev</b> · MIT · Windows / macOS / Linux</div>
+        <div>SSH · Telnet · 串口</div>
+      </div>
+    </div>
+    <img class="shot" src="public/shots/hero.png" alt="" />
+  </body>
+</html>

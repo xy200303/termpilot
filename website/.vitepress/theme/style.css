@@ -1,6 +1,7 @@
 /* ---------------------------------------------------------------------------
  * TermPilot 官网设计系统
- * 近单色暖灰阶 + 一个实色强调（#1D4ED8）。层级靠排版，不靠卡片堆叠。
+ * 暖中性灰阶 + 一个实色强调（#1D4ED8）。层级靠排版和留白，
+ * 不用渐变、光斑、玻璃拟态或多层卡片阴影。
  * ------------------------------------------------------------------------- */
 
 :root {
@@ -9,7 +10,7 @@
   --yc-ink-600: #55534e;
   --yc-ink-400: #8d8b86;
   --yc-paper: #f9f9f8;
-  --yc-paper-dim: #f1f0ee;
+  --yc-paper-dim: #f3f2ef;
   --yc-hairline: #e8e7e5;
   --yc-hairline-strong: #d9d7d4;
   --yc-blue-600: #1d4ed8;
@@ -28,7 +29,7 @@
   --vp-c-brand-2: var(--yc-blue-700);
   --vp-c-brand-3: var(--yc-blue-600);
   --vp-font-family-base:
-    'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+    'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
   --vp-font-family-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
 
   /* 圆角三档 */
@@ -36,51 +37,72 @@
   --yc-radius-m: 10px;
   --yc-radius-l: 14px;
 
-  /* 动效体系（YunCast 同款）需要的 token，映射到上面的色板 */
-  --yc-accent: var(--yc-blue-600);
-  --yc-btn: #1f1e1c;
-  --yc-line: rgba(0, 0, 0, 0.1);
-  --yc-line-soft: rgba(0, 0, 0, 0.055);
-  --yc-line-strong: rgba(0, 0, 0, 0.16);
-  --yc-gray-50: #f9f9f8;
-  --yc-gray-100: #f4f4f3;
-  --yc-radius-xs: 4px;
-  --yc-radius: 8px;
-  --yc-radius-lg: 10px;
-  --yc-shadow-lg:
-    0 0 0 1px rgba(0, 0, 0, 0.05),
-    0 2px 4px rgba(0, 0, 0, 0.04),
-    0 24px 48px -28px rgba(0, 0, 0, 0.12);
-  --font-display: var(--vp-font-family-base);
-
-  /* 阴影：只表达「浮在页面上」 */
   --yc-shadow:
-    0 0 0 1px rgba(31, 30, 28, 0.06),
-    0 12px 32px -12px rgba(31, 30, 28, 0.18);
+    0 0 0 1px rgba(31, 30, 28, 0.04),
+    0 16px 40px -28px rgba(31, 30, 28, 0.28);
 
-  --yc-section-y: 108px;
-  --yc-container: 1180px;
+  --yc-section-y: 104px;
+  --yc-container: 1120px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html {
   font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background: var(--yc-paper);
+  overflow-x: clip;
 }
 
-/* 落地页占满全宽 */
-body:has(.landing) .VPLocalNav {
+::selection {
+  background: #dbe5ff;
+  color: var(--yc-ink-900);
+}
+
+:focus-visible {
+  outline: 2px solid var(--yc-blue-600);
+  outline-offset: 2px;
+}
+
+img,
+video {
+  max-width: 100%;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 落地页占满全宽，不套文档容器 */
+body:has(.landing) .VPLocalNav,
+body:has(.landing) .VPFooter {
   display: none;
 }
+
 body:has(.landing) .VPPage {
   max-width: none !important;
   padding: 0 !important;
 }
+
 body:has(.landing) .VPContent .VPDoc {
   padding: 0 !important;
 }
+
 body:has(.landing) .VPContent .VPDoc .container,
 body:has(.landing) .VPContent .VPDoc .content {
   max-width: none !important;
@@ -89,41 +111,65 @@ body:has(.landing) .VPContent .VPDoc .content {
 
 /* 文档排版 */
 .vp-doc h1 {
-  font-size: 32px;
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.vp-doc h2 {
+  margin-top: 48px;
+  padding-top: 0;
+  border-top: none;
+  font-size: 24px;
+  letter-spacing: -0.015em;
+}
+
+.vp-doc h2::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 3px;
+  margin-bottom: 12px;
+  border-radius: 1px;
+  background: var(--yc-blue-600);
+}
+
+.vp-doc h3 {
+  font-size: 18px;
   letter-spacing: -0.01em;
 }
 
-/* 窄屏下导航标题可收缩，避免撑出横向滚动 */
+.vp-doc p,
+.vp-doc li {
+  font-size: 15.5px;
+  line-height: 1.8;
+}
+
+.vp-doc table {
+  font-size: 14.5px;
+}
+
+.vp-doc a {
+  text-underline-offset: 3px;
+}
+
+.vp-doc .custom-block {
+  border-radius: var(--yc-radius-m);
+}
+
+.vp-doc code {
+  font-size: 0.9em;
+}
+
+/* 导航标题在窄屏可收缩，避免撑出横向滚动 */
 .VPNavBarTitle .title {
   min-width: 0;
 }
+
 .VPNavBarTitle .title span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.vp-doc h2 {
-  font-size: 24px;
-  border-top: none;
-  padding-top: 0;
-  margin-top: 48px;
-}
-.vp-doc h2::before {
-  content: '';
-  display: block;
-  width: 32px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--yc-blue-600);
-  margin-bottom: 12px;
-}
-.vp-doc p,
-.vp-doc li {
-  font-size: 15.5px;
-  line-height: 1.78;
-}
-.vp-doc table {
-  font-size: 14.5px;
 }
 
 /* 数字用等宽变体，表格和数字条对齐 */
@@ -131,7 +177,7 @@ body:has(.landing) .VPContent .VPDoc .content {
   font-variant-numeric: tabular-nums;
 }
 
-/* 进入动效：淡入上移，IntersectionObserver 在 Home.vue 里加类 */
+/* 进入动效：淡入上移 10px，IntersectionObserver 在 Home.vue 里加类 */
 @media (prefers-reduced-motion: no-preference) {
   .reveal {
     opacity: 0;
@@ -140,11 +186,13 @@ body:has(.landing) .VPContent .VPDoc .content {
       opacity 0.55s ease,
       transform 0.55s ease;
   }
+
   .reveal.is-in {
     opacity: 1;
     transform: none;
   }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .reveal {
     opacity: 1;
@@ -156,7 +204,8 @@ body:has(.landing) .VPContent .VPDoc .content {
   :root {
     --yc-section-y: 64px;
   }
+
   .vp-doc h1 {
-    font-size: 27px;
+    font-size: 28px;
   }
 }
