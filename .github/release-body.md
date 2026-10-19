@@ -1,6 +1,9 @@
-## 0.7.7
+## 0.7.8
 
-- 修复使用 TermPilot 后本机 `ssh` 命令全部失效（`Bad owner or permissions on ~/.ssh/config`）的问题：写回配置时用临时文件替换，新文件继承目录 ACL、混进其他账号的修改权，OpenSSH 拒绝权限过宽的 config。现在 TermPilot 完全不再写 `~/.ssh/config`，也不再有启动时的自动导入——改为新建连接时在表单里手动「从 ssh_config 导入」，选中一个 `Host` 自动填好主机、端口、用户、私钥和跳板。已被写坏的 config 请修复权限：对该文件执行 `icacls <路径> /inheritance:r`，再 `icacls <路径> /grant:r "<用户名>:(F)" "NT AUTHORITY\SYSTEM:(F)" "BUILTIN\Administrators:(F)"`。
-- 注意：升级前在旧版本里编辑或新建连接会再次触发写回、重新破坏权限，请尽快升级。
+- 侧边栏顶部改为品牌头：应用图标、TermPilot 字标和协议副标题，收纳按钮移到右侧。
+- 新建 / 编辑串口连接时自动扫描本机串口，串口路径可以直接从下拉里选（显示路径和厂商 / 设备名）；右侧按钮重新扫描；没检测到设备或枚举不到时可切「手动输入」。
+- 连接的右键菜单新增「关闭全部窗口」，一次关掉这条连接下挂着的所有终端；没有窗口时不显示该项。
+- MCP 新增 `app_screenshot`：截取整个应用窗口（侧边栏、标签栏、终端一起），保存 PNG 并返回路径，图片同时附在结果里。
+- MCP 新增 `app_record`：录制应用窗口画面为 WebM，`action=start` 开始、`action=stop` 结束并保存；`fps` 默认 15，`maxSeconds` 默认 120（最长 600），到点自动停止并保存。工具总数 25 → 27。
 
 安装包没有代码签名。
