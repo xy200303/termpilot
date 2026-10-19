@@ -122,7 +122,7 @@ const specs = [
   ['凭据存储', 'safeStorage 加密 → 本机 SQLite，不出本机'],
   ['Agent 接口', '内置 MCP Server（27 个工具，只绑 127.0.0.1 + 令牌）；Go 写的本机 CLI'],
   ['平台', 'Windows x64 / macOS（Apple Silicon）/ Linux x64'],
-  ['安装包', 'Windows Setup 143MB · macOS dmg 164MB · AppImage 163MB · deb 126MB'],
+  ['安装包', 'Windows Setup 150MB · macOS dmg 172MB · AppImage 171MB · deb 132MB'],
   ['许可证', 'MIT']
 ]
 
