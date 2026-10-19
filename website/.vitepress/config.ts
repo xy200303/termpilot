@@ -7,7 +7,7 @@ const SITE_DESC =
   '本机 SSH 终端：SSH / Telnet / 串口三协议，多标签终端与 SFTP 文件传输，凭据加密存本机。内置 MCP Server，AI 助手接着你登录好的会话继续操作。'
 const OG_IMAGE = `${SITE_URL}/og-image.png`
 const REPO = 'https://github.com/xy200303/termpilot'
-const VERSION = '0.7.7'
+const VERSION = '0.7.8'
 
 const softwareJsonLd = {
   '@context': 'https://schema.org',

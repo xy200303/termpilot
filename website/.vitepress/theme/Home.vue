@@ -5,7 +5,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.7.7'
+const VERSION = '0.7.8'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
@@ -31,7 +31,7 @@ const shotEl = ref<HTMLElement | null>(null)
 
 const stats = [
   { value: '3', label: '类连接协议', note: 'SSH / Telnet / 串口' },
-  { value: '25', label: '个 Agent 工具', note: '连接 / 终端 / exec / 屏幕 / 文件五族' },
+  { value: '27', label: '个 Agent 工具', note: '连接 / 终端 / exec / 屏幕 / 文件 / 应用' },
   { value: '0', label: '遥测上报', note: '没有统计、没有 crash 上报通道' },
   { value: '6', label: '个安装包', note: 'Windows · macOS · Linux 各两种' }
 ]
@@ -109,7 +109,7 @@ const compare = {
     ['登录', '每次敲完整命令，密码靠 ssh-agent 兜底', '保存会话，双击连接', '保存连接，双击或由助手代开'],
     ['中途交互', '菜单、向导、sudo 都要本人', '本人操作', '本人或助手代按，画面实时可见'],
     ['继续下一步', '同一窗口继续', '同一窗口继续，助手进不来', '同一条会话助手接着做，不重连'],
-    ['批量与脚本', '自己写 shell 脚本', '基本靠手动', '25 个 MCP 工具 + 本机 CLI'],
+    ['批量与脚本', '自己写 shell 脚本', '基本靠手动', '27 个 MCP 工具 + 本机 CLI'],
     ['凭据', 'ssh_config / ssh-agent', '软件内保存', '系统钥匙串加密，只存本机']
   ]
 }
@@ -120,13 +120,20 @@ const specs = [
   ['通道', 'shell / exec（stdout、stderr 分流，协议级退出码）/ SFTP，同一条 SSH 复用'],
   ['文件传输', '上传、下载、新建目录、改名、删除；单文件 512MB 以内；文本在线编辑'],
   ['凭据存储', 'safeStorage 加密 → 本机 SQLite，不出本机'],
-  ['Agent 接口', '内置 MCP Server（25 个工具，只绑 127.0.0.1 + 令牌）；Go 写的本机 CLI'],
+  ['Agent 接口', '内置 MCP Server（27 个工具，只绑 127.0.0.1 + 令牌）；Go 写的本机 CLI'],
   ['平台', 'Windows x64 / macOS（Apple Silicon）/ Linux x64'],
   ['安装包', 'Windows Setup 143MB · macOS dmg 164MB · AppImage 163MB · deb 126MB'],
   ['许可证', 'MIT']
 ]
 
 const changelog = [
+  {
+    version: '0.7.8',
+    items: [
+      '侧边栏品牌头；串口路径可从检测到的设备里直接选；连接右键可关闭全部窗口',
+      'MCP 新增 app_screenshot（截应用窗口）和 app_record（录屏 WebM），工具总数 27'
+    ]
+  },
   {
     version: '0.7.7',
     items: [
@@ -140,13 +147,6 @@ const changelog = [
       '每条连接新增「文件通道」设置：自动 / 复用终端连接 / 总是单独拨号',
       '一次性授权的跳板机（第二跳会被拒）改复用后，SFTP 走已授权的同一条连接',
       'MCP connection_create / update 新增 sftpMode 参数，connection_list 输出带上'
-    ]
-  },
-  {
-    version: '0.7.5',
-    items: [
-      '修复 term_pty 在本机 Windows 终端命令不执行：行尾 LF 被 PSReadLine 当续行，改发 CR',
-      '修复中文输入法组字时终端内容左移被裁：根容器改用 overflow: clip'
     ]
   }
 ]
