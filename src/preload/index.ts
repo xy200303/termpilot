@@ -10,6 +10,9 @@ import type {
   McpConfirmRequest,
   McpOpenTab,
   McpRuntime,
+  RecordReply,
+  RecordStart,
+  RecordStop,
   RemoteFile,
   SftpInstallEvent,
   ReverseIncoming,
@@ -19,6 +22,7 @@ import type {
   SessionConfig,
   SessionInput,
   SshConfigHost,
+  SerialPortInfo,
   SavedTerm,
   TermCreateOptions,
   TermDataEvent,
@@ -56,6 +60,9 @@ const api = {
     list: () => ipcRenderer.invoke(IPC.hostNoteList) as Promise<Record<string, string>>,
     setNote: (hostKey: string, remark: string) =>
       ipcRenderer.invoke(IPC.hostNoteSet, hostKey, remark) as Promise<Record<string, string>>
+  },
+  serial: {
+    list: () => ipcRenderer.invoke(IPC.serialList) as Promise<SerialPortInfo[]>
   },
   term: {
     saved: () => ipcRenderer.invoke(IPC.termSaved) as Promise<SavedTerm[]>,
@@ -194,6 +201,23 @@ const api = {
         ipcRenderer.removeListener(IPC.captureRun, listener)
       }
     }
+  },
+  record: {
+    onStart: (cb: (job: RecordStart) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, job: RecordStart) => cb(job)
+      ipcRenderer.on(IPC.recordStart, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.recordStart, listener)
+      }
+    },
+    onStop: (cb: (job: RecordStop) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, job: RecordStop) => cb(job)
+      ipcRenderer.on(IPC.recordStop, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.recordStop, listener)
+      }
+    },
+    reply: (reply: RecordReply) => ipcRenderer.send(IPC.recordReply, reply)
   },
   reverse: {
     start: (sessionId: string) => ipcRenderer.invoke(IPC.reverseStart, sessionId),

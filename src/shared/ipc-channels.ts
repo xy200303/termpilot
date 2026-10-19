@@ -7,6 +7,8 @@ export const IPC = {
   sessionDuplicate: 'session:duplicate',
   /** 读取 ~/.ssh/config 里的具体 Host，给创建连接手动导入用 */
   sessionSshConfigHosts: 'session:ssh-config-hosts',
+  /** 本机可用串口，连接表单下拉选择用 */
+  serialList: 'serial:list',
   /** main → renderer，Agent 改了会话列表 */
   sessionChanged: 'session:changed',
   hostNoteList: 'host:note-list',
@@ -70,6 +72,11 @@ export const IPC = {
   termLinesReply: 'term:lines-reply',
   termMode: 'term:mode',
   termModeReply: 'term:mode-reply',
+
+  /** 应用窗口录屏：main → renderer 开始/结束，renderer → main 回传数据 */
+  recordStart: 'record:start',
+  recordStop: 'record:stop',
+  recordReply: 'record:reply',
 
   reverseStart: 'reverse:start',
   reverseStop: 'reverse:stop',

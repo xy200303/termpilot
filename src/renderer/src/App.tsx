@@ -15,6 +15,7 @@ import { EmptyState } from './components/EmptyState'
 import { useAppStore } from './stores/useAppStore'
 import { runCapture } from './terminal/captureView'
 import { terminalPool } from './terminal/TerminalPool'
+import { startRecording, stopRecording } from './terminal/windowRecorder'
 
 export default function App() {
   const loadSessions = useAppStore((s) => s.loadSessions)
@@ -36,6 +37,23 @@ export default function App() {
   const editorTabs = useAppStore((s) => s.editorTabs)
 
   useEffect(() => window.api.capture.onRun((job) => void runCapture(job)), [])
+
+  useEffect(() => {
+    const offStart = window.api.record.onStart((job) => {
+      void startRecording(job).catch((error) => {
+        window.api.record.reply({
+          id: job.id,
+          phase: 'error',
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+    })
+    const offStop = window.api.record.onStop(() => stopRecording())
+    return () => {
+      offStart()
+      offStop()
+    }
+  }, [])
 
   useEffect(
     () =>

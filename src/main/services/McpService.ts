@@ -1,6 +1,8 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { isConnId, isTermId, newTermId } from '../../shared/ids'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { app } from 'electron'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { WebContents } from 'electron'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -9,7 +11,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { IPC } from '../../shared/ipc-channels'
 import { canonicalKey, encodeTermInput, TERM_KEYS } from '../../shared/term-keys'
-import type { CaptureReply, TermLinesReply, TermModeReply } from '../../shared/types'
+import type { CaptureReply, RecordReply, TermLinesReply, TermModeReply } from '../../shared/types'
 import {
   MCP_DEFAULT_PORT,
   MCP_HOST,
@@ -69,6 +71,14 @@ export class McpService {
   private transports = new Map<string, StreamableHTTPServerTransport>()
   private confirms = new Map<string, (ok: boolean) => void>()
   private captures = new Map<string, (result: CaptureReply) => void>()
+  private recordStarts = new Map<string, { resolve: () => void; reject: (error: Error) => void }>()
+  private recording: {
+    id: string
+    startedAt: number
+    endedAt?: number
+    saved?: string
+    pendingStop?: { resolve: (file: string) => void; reject: (error: Error) => void }
+  } | null = null
   private lineReads = new Map<string, (result: TermLinesReply) => void>()
   private modeReads = new Map<string, (result: TermModeReply) => void>()
   private token = ''
@@ -138,6 +148,46 @@ export class McpService {
     if (!settle) return
     this.captures.delete(result.id)
     settle(result)
+  }
+
+  resolveRecord(reply: RecordReply): void {
+    if (reply.phase === 'started') {
+      const start = this.recordStarts.get(reply.id)
+      this.recordStarts.delete(reply.id)
+      start?.resolve()
+      return
+    }
+    if (reply.phase === 'error') {
+      const start = this.recordStarts.get(reply.id)
+      if (start) {
+        this.recordStarts.delete(reply.id)
+        this.recording = null
+        start.reject(new Error(reply.error))
+        return
+      }
+      const rec = this.recording
+      if (rec?.id === reply.id) {
+        this.recording = null
+        rec.pendingStop?.reject(new Error(reply.error))
+      }
+      return
+    }
+    const rec = this.recording
+    if (!rec || rec.id !== reply.id) return
+    rec.endedAt = Date.now()
+    try {
+      rec.saved = saveRecording(reply.data, reply.mime)
+      if (rec.pendingStop) {
+        const pending = rec.pendingStop
+        rec.pendingStop = undefined
+        this.recording = null
+        pending.resolve(rec.saved)
+      }
+    } catch (error) {
+      const pending = rec.pendingStop
+      this.recording = null
+      pending?.reject(error instanceof Error ? error : new Error(String(error)))
+    }
   }
 
   resolveLines(result: TermLinesReply): void {
@@ -390,6 +440,16 @@ export class McpService {
         await this.guard(`rm ${path}`)
         await this.sftp.remove(found.id, path, kind)
         return `已删除 ${path}`
+      }
+      case 'app_screenshot':
+        return this.appShot()
+      case 'app_record': {
+        const action = textArg(raw, 'action') || 'start'
+        if (action === 'start') {
+          return this.startRecording(intArg(raw, 'fps') ?? 15, intArg(raw, 'maxSeconds') ?? 120)
+        }
+        if (action === 'stop') return this.stopRecording()
+        throw new Error('action 只能是 start 或 stop')
       }
       default:
         throw new Error(`未知命令: ${tool}`)
@@ -757,6 +817,83 @@ export class McpService {
     })
   }
 
+  private async appShot(): Promise<string> {
+    const wc = this.getSender()
+    if (!wc || wc.isDestroyed()) throw new Error('窗口不可用，无法截图')
+    const image = await wc.capturePage()
+    const png = image.toPNG()
+    if (png.length === 0) throw new Error('窗口没有可截取的内容（可能已最小化）')
+    const dir = join(app.getPath('userData'), 'screenshots')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, `app-${stamp()}.png`)
+    writeFileSync(file, png)
+    return `已保存应用窗口截图：\n${file}`
+  }
+
+  private startRecording(fps: number, maxSeconds: number): Promise<string> {
+    const wc = this.getSender()
+    if (!wc || wc.isDestroyed()) return Promise.reject(new Error('窗口不可用，无法录屏'))
+    if (this.recording) return Promise.reject(new Error('已经在录屏，先调 app_record action=stop'))
+    const id = randomUUID()
+    this.recording = { id, startedAt: Date.now() }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.recordStarts.delete(id)
+        this.recording = null
+        reject(new Error('开始录屏超时'))
+      }, 15_000)
+      this.recordStarts.set(id, {
+        resolve: () => {
+          clearTimeout(timer)
+          resolve(`开始录屏（${fps} fps，最长 ${maxSeconds} 秒）。结束时调 app_record action=stop。`)
+        },
+        reject: (error) => {
+          clearTimeout(timer)
+          reject(error)
+        }
+      })
+      wc.send(IPC.recordStart, {
+        id,
+        sourceId: wc.getMediaSourceId(wc),
+        fps,
+        maxSeconds
+      })
+    })
+  }
+
+  private stopRecording(): Promise<string> {
+    const rec = this.recording
+    if (!rec) return Promise.reject(new Error('当前没有在录屏'))
+    const seconds = Math.max(1, Math.round(((rec.endedAt ?? Date.now()) - rec.startedAt) / 1000))
+    if (rec.saved) {
+      const file = rec.saved
+      this.recording = null
+      return Promise.resolve(`录屏已自动停止并保存：${file}\n时长约 ${seconds} 秒`)
+    }
+    const wc = this.getSender()
+    if (!wc || wc.isDestroyed()) {
+      this.recording = null
+      return Promise.reject(new Error('窗口不可用，录屏数据没有拿到'))
+    }
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.recording?.id === rec.id) this.recording = null
+        reject(new Error('结束录屏超时'))
+      }, 20_000)
+      rec.pendingStop = {
+        resolve: (file) => {
+          clearTimeout(timer)
+          resolve(`录屏已保存：${file}\n时长约 ${seconds} 秒`)
+        },
+        reject: (error) => {
+          clearTimeout(timer)
+          reject(error)
+        }
+      }
+      wc.send(IPC.recordStop, { id: rec.id })
+    })
+  }
+
   private cursorMode(termId: string): Promise<boolean> {
     const wc = this.getSender()
     if (!wc || wc.isDestroyed()) return Promise.resolve(false)
@@ -857,6 +994,20 @@ export class McpService {
 }
 
 const MOVES = new Set(['up', 'down', 'left', 'right', 'home', 'end'])
+
+function stamp(): string {
+  return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, '').replace('T', '-')
+}
+
+/** 录屏落在 userData/recordings/，和终端截图分开存放。 */
+function saveRecording(data: Uint8Array, mime: string): string {
+  const dir = join(app.getPath('userData'), 'recordings')
+  mkdirSync(dir, { recursive: true })
+  const ext = mime.includes('mp4') ? 'mp4' : 'webm'
+  const file = join(dir, `record-${stamp()}-${randomUUID().slice(0, 4)}.${ext}`)
+  writeFileSync(file, data)
+  return file
+}
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))

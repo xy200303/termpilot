@@ -29,6 +29,56 @@ function openRepo() {
   window.open(REPO_URL, '_blank')
 }
 
+function BrandMark(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={props.className} aria-hidden>
+      <rect width="64" height="64" rx="16" fill="#243044" />
+      <path
+        d="M20 24.5 31 32 20 39.5"
+        fill="none"
+        stroke="#E6EDF5"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="35" y="36.2" width="8" height="3.2" rx="0.6" fill="#C4A574" />
+    </svg>
+  )
+}
+
+/** 侧边栏顶部：品牌 + 子标题 + 收纳按钮。整行是窗口拖拽区。 */
+function SidebarBrand(props: { collapsed: boolean; onToggle: () => void }) {
+  return (
+    <div
+      className={cn(
+        'flex h-12 shrink-0 items-center gap-2.5 border-b',
+        props.collapsed ? 'justify-center px-2' : 'px-3'
+      )}
+      style={drag}
+    >
+      {!props.collapsed && <BrandMark className="size-6 shrink-0 rounded-[6px]" />}
+      {!props.collapsed && (
+        <div className="min-w-0 leading-tight">
+          <div className="truncate text-[13.5px] font-semibold tracking-tight text-sidebar-foreground">
+            TermPilot
+          </div>
+          <div className="truncate text-[10.5px] text-muted-foreground">SSH · Telnet · 串口</div>
+        </div>
+      )}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className={props.collapsed ? '' : 'ml-auto'}
+        title={props.collapsed ? '展开侧边栏' : '收纳侧边栏'}
+        style={noDrag}
+        onClick={props.onToggle}
+      >
+        <PanelLeft />
+      </Button>
+    </div>
+  )
+}
+
 function GithubMark() {
   return (
     <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
@@ -64,14 +114,7 @@ export function AppSidebar() {
         collapsed ? 'w-12 min-w-12 max-w-12' : 'w-64 min-w-64 max-w-64'
       )}
     >
-      <div
-        className={cn('flex h-10 shrink-0 items-center border-b', collapsed ? 'justify-center' : 'px-2')}
-        style={drag}
-      >
-        <Button variant="ghost" size="icon-sm" title="收纳侧边栏" style={noDrag} onClick={toggleSidebar}>
-          <PanelLeft />
-        </Button>
-      </div>
+      <SidebarBrand collapsed={collapsed} onToggle={toggleSidebar} />
       <SidebarHeader>
         {!collapsed && (
           <Tabs value={pane} onValueChange={(v) => setPane(v as 'connect' | 'files')}>
@@ -350,6 +393,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   const activeTabId = useAppStore((s) => s.activeTabId)
   const selectedId = useAppStore((s) => s.selectedSessionId)
   const openSessionTab = useAppStore((s) => s.openSessionTab)
+  const closeTab = useAppStore((s) => s.closeTab)
   const setEditing = useAppStore((s) => s.setEditing)
   const deleteSession = useAppStore((s) => s.deleteSession)
   const duplicateSessions = useAppStore((s) => s.duplicateSessions)
@@ -416,6 +460,11 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           >
             {isReverse ? '复制这条连接' : '新开一扇终端'}
           </ContextMenuItem>
+          {nested.length > 0 && (
+            <ContextMenuItem onClick={() => nested.forEach((tab) => closeTab(tab.id))}>
+              关闭全部窗口
+            </ContextMenuItem>
+          )}
           <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>备注</ContextMenuItem>
           <ContextMenuItem onClick={() => setEditing({ action: 'edit', session })}>编辑</ContextMenuItem>
           <ContextMenuSeparator />

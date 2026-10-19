@@ -53,7 +53,7 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 
 ## Agent 工具
 
-一共 25 个工具，分五族。调用只认编号：`conn-` 是连接，`term-` 是终端；名称和备注只用来认出它。连接有三种协议：SSH（全能：终端、exec 通道、SFTP、并发通道）、Telnet 和串口（只有终端字节流，`term_exec` 和 `sftp_*` 会返回能力说明，屏幕族工具三种协议行为一致）。
+一共 27 个工具，分六族。调用只认编号：`conn-` 是连接，`term-` 是终端；名称和备注只用来认出它。连接有三种协议：SSH（全能：终端、exec 通道、SFTP、并发通道）、Telnet 和串口（只有终端字节流，`term_exec` 和 `sftp_*` 会返回能力说明，屏幕族工具三种协议行为一致）。
 
 ### 连接管理（6）
 
@@ -89,6 +89,11 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 
 `sftp_list` / `sftp_mkdir` / `sftp_upload` / `sftp_download` / `sftp_rename` / `sftp_remove`。单文件 512MB 上限，几个 GB 的文件留在远端处理。
 
+### 应用界面（2）
+
+- `app_screenshot`：截取整个应用窗口（侧边栏、标签栏、终端一起），保存为 PNG 并返回路径，图片同时附在结果里
+- `app_record`：录制应用窗口画面，`action` 取 `start` / `stop`；`fps` 默认 15，`maxSeconds` 默认 120（最长 600），到点自动停止并保存为 WebM
+
 ### 推荐用法
 
 | 场景 | 用哪个 |
@@ -97,6 +102,7 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 | 交互式操作、TUI、需要终端画面做材料 | `term_pty` + `term_screenshot` |
 | 上传代码、下载结果 | `sftp_upload` / `sftp_download` |
 | 服务器掉线恢复 | `term_list` 看状态 + `term_reconnect` |
+| 录一段操作演示 | `app_record` 开始，操作完 stop |
 
 ## 功能
 

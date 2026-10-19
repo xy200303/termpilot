@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type { ByteTransport } from './index'
 import { SERIAL_DEFAULTS, type ProtocolCapabilities, type SerialParity } from '../../../shared/protocol'
+import type { SerialPortInfo } from '../../../shared/types'
 
 /**
  * serialport 是原生模块（@serialport/bindings-cpp，N-API prebuilds 覆盖
@@ -18,14 +19,7 @@ try {
   console.error('[TermPilot] serialport 加载失败（串口不可用）:', serialportLoadError)
 }
 
-/** 本机可用串口，给 MCP 的 serial_list 探路用。 */
-export interface SerialPortInfo {
-  path: string
-  manufacturer?: string
-  serialNumber?: string
-  friendlyName?: string
-}
-
+/** 本机可用串口，给 GUI 连接表单和 MCP 的 serial_list 探路用。 */
 export async function listSerialPorts(): Promise<SerialPortInfo[]> {
   if (!serialport) throw new Error(`串口功能不可用: ${serialportLoadError ?? 'serialport 未安装'}`)
   const ports = await serialport.SerialPort.list()

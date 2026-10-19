@@ -9,6 +9,7 @@ import {
   type AgentId,
   type CaptureRect,
   type CaptureReply,
+  type RecordReply,
   type TermLinesReply,
   type TermModeReply,
   type Appearance,
@@ -24,6 +25,7 @@ import type { ReverseListenerService } from './services/ReverseListenerService'
 import type { McpService } from './services/McpService'
 import type { SftpService } from './services/SftpService'
 import { listAgentTargets, writeAgentTarget } from './services/AgentConfigService'
+import { listSerialPorts } from './services/transport/serial'
 import { checkUpdate, releaseUrl } from './update-check'
 import { paintFromContents } from './window-chrome'
 import { readConcreteHosts, sshConfigPath } from './ssh-config-file'
@@ -80,6 +82,9 @@ export function registerIpc(
       return []
     }
   })
+
+  // 本机串口：连接表单下拉选择用
+  ipcMain.handle(IPC.serialList, () => listSerialPorts())
 
   ipcMain.handle(IPC.hostNoteList, () => storage.listHostNotes())
 
@@ -226,6 +231,7 @@ export function registerIpc(
   })
 
   ipcMain.on(IPC.captureReply, (_event, result: CaptureReply) => mcp.resolveCapture(result))
+  ipcMain.on(IPC.recordReply, (_event, result: RecordReply) => mcp.resolveRecord(result))
   ipcMain.on(IPC.termLinesReply, (_event, result: TermLinesReply) => mcp.resolveLines(result))
   ipcMain.on(IPC.termModeReply, (_event, result: TermModeReply) => mcp.resolveMode(result))
 

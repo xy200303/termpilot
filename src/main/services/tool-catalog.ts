@@ -247,6 +247,28 @@ export const TOOLS: readonly ToolDef[] = [
       path: z.string().describe('远端路径'),
       kind: z.enum(['file', 'dir', 'link']).describe('file、dir 或 link')
     }
+  },
+  {
+    name: 'app_screenshot',
+    description:
+      '截取整个 TermPilot 应用窗口：侧边栏、标签栏、终端画面一起，保存为 PNG 并返回路径，图片同时附在结果里。确认界面状态或录演示素材时用。窗口最小化时截不到内容。只截应用自己的窗口，不截系统其他窗口。',
+    images: 'always'
+  },
+  {
+    name: 'app_record',
+    description:
+      '录制 TermPilot 应用窗口画面，保存为 WebM。action=start 开始，fps 默认 15，maxSeconds 默认 120、最长 600；action=stop 结束并返回文件路径。同一时间只能录一个。到 maxSeconds 会自动停止并保存，之后 stop 返回已保存的文件。录操作演示时用，录的是应用窗口本身，不含系统其他窗口和声音。',
+    input: {
+      action: z.enum(['start', 'stop']).describe('start 开始录制，stop 结束并保存'),
+      fps: z.number().int().min(5).max(30).optional().describe('帧率，默认 15'),
+      maxSeconds: z
+        .number()
+        .int()
+        .min(5)
+        .max(600)
+        .optional()
+        .describe('最长录制秒数，默认 120，超过自动停止并保存')
+    }
   }
 ]
 

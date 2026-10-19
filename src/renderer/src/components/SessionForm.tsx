@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,7 +23,7 @@ import { useAppStore } from '../stores/useAppStore'
 import { parseSshCommand } from '../../../shared/parse-ssh'
 import { sshOptionsForSession, sanitizeSshOptions, type SshConnectOptions } from '../../../shared/ssh-options'
 import { SERIAL_DEFAULTS, TELNET_DEFAULT_PORT, type SessionProtocol } from '../../../shared/protocol'
-import type { AuthType, ConnectMode, SessionInput, SshConfigHost } from '../../../shared/types'
+import type { AuthType, ConnectMode, SessionInput, SshConfigHost, SerialPortInfo } from '../../../shared/types'
 
 /** 名字里 @ 后面的地址。空格或路径不当成主机。 */
 function addressInName(name: string): string | null {
@@ -56,6 +57,9 @@ function reconcileEditedAddress(
   }
   return { name, host }
 }
+
+/** 「手动输入」在串口下拉里的哨兵值，不能和真实设备路径冲突。 */
+const MANUAL_SERIAL = '__manual__'
 
 const empty = (mode: ConnectMode, protocol: SessionProtocol = 'ssh'): SessionInput => ({
   name: '',
@@ -96,6 +100,8 @@ export function SessionForm() {
   const [form, setForm] = useState<SessionInput>(empty('forward'))
   const [command, setCommand] = useState('')
   const [configHosts, setConfigHosts] = useState<SshConfigHost[]>([])
+  const [serialPorts, setSerialPorts] = useState<SerialPortInfo[] | null>(null)
+  const [manualPath, setManualPath] = useState(false)
   const [error, setError] = useState('')
   const [page, setPage] = useState('connect')
 
@@ -138,6 +144,18 @@ export function SessionForm() {
     setCommand('')
     setError('')
     setPage('connect')
+    setManualPath(false)
+    setSerialPorts(null)
+    void window.api.serial
+      .list()
+      .then((ports) => {
+        setSerialPorts(ports)
+        if (ports.length === 0) setManualPath(true)
+      })
+      .catch(() => {
+        setSerialPorts([])
+        setManualPath(true)
+      })
     if (editing.action === 'create') {
       void window.api.sessions.sshConfigHosts().then(setConfigHosts)
     } else {
@@ -147,6 +165,14 @@ export function SessionForm() {
 
   const set = <K extends keyof SessionInput>(k: K, v: SessionInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }))
+
+  const scanSerial = () => {
+    setSerialPorts(null)
+    void window.api.serial
+      .list()
+      .then(setSerialPorts)
+      .catch(() => setSerialPorts([]))
+  }
 
   const protocol: SessionProtocol = form.protocol ?? 'ssh'
 
@@ -392,11 +418,74 @@ export function SessionForm() {
                 ) : (
                   <>
                     <Field label="串口路径">
-                      <Input
-                        value={form.serialPath ?? ''}
-                        placeholder="COM3 或 /dev/ttyUSB0"
-                        onChange={(e) => set('serialPath', e.target.value)}
-                      />
+                      {manualPath ? (
+                        <div className="flex gap-2">
+                          <Input
+                            value={form.serialPath ?? ''}
+                            placeholder="COM3 或 /dev/ttyUSB0"
+                            onChange={(e) => set('serialPath', e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            title="重新扫描并选择串口"
+                            onClick={() => {
+                              scanSerial()
+                              setManualPath(false)
+                            }}
+                          >
+                            <RefreshCw />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Select
+                            value={form.serialPath || undefined}
+                            onValueChange={(value) =>
+                              value === MANUAL_SERIAL ? setManualPath(true) : set('serialPath', value)
+                            }
+                          >
+                            <SelectTrigger className="min-w-0 flex-1">
+                              <SelectValue
+                                placeholder={
+                                  serialPorts === null
+                                    ? '正在扫描串口…'
+                                    : serialPorts.length
+                                      ? '选择串口'
+                                      : '没有检测到串口'
+                                }
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(serialPorts ?? []).map((port) => (
+                                <SelectItem key={port.path} value={port.path}>
+                                  {port.path}
+                                  {port.friendlyName || port.manufacturer
+                                    ? ` · ${port.friendlyName ?? port.manufacturer}`
+                                    : ''}
+                                </SelectItem>
+                              ))}
+                              {form.serialPath &&
+                                !(serialPorts ?? []).some((port) => port.path === form.serialPath) && (
+                                  <SelectItem value={form.serialPath}>
+                                    {form.serialPath}（当前未检测到）
+                                  </SelectItem>
+                                )}
+                              <SelectItem value={MANUAL_SERIAL}>手动输入…</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            title="重新扫描串口"
+                            onClick={scanSerial}
+                          >
+                            <RefreshCw />
+                          </Button>
+                        </div>
+                      )}
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="波特率">

@@ -114,6 +114,14 @@ export interface SshConfigHost {
   proxyCommand?: string
 }
 
+/** 本机可用串口。MCP 的 serial_list 与连接表单共用。 */
+export interface SerialPortInfo {
+  path: string
+  manufacturer?: string
+  serialNumber?: string
+  friendlyName?: string
+}
+
 export type TabKind = 'ssh' | 'local' | 'reverse'
 
 export interface Tab {
@@ -319,6 +327,24 @@ export interface CaptureReply {
   note?: string
   error?: string
 }
+
+/** 录屏：main 通知 renderer 开始，带 webContents 的 media source id。 */
+export interface RecordStart {
+  id: string
+  sourceId: string
+  fps: number
+  maxSeconds: number
+}
+
+/** 录屏：main 通知 renderer 结束并回传数据。 */
+export interface RecordStop {
+  id: string
+}
+
+export type RecordReply =
+  | { id: string; phase: 'started' }
+  | { id: string; phase: 'data'; data: Uint8Array; mime: string; auto: boolean }
+  | { id: string; phase: 'error'; error: string }
 
 export interface McpSettingsInput {
   enabled: boolean
