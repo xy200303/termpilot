@@ -13,9 +13,9 @@ description: TermPilot 常见问题：连不上、跳板拒绝、SFTP 打不开�
 
 按顺序查：网络能不能通（本机 `ping` / `telnet 主机 端口`）、端口对不对、跳板每一跳的账号对不对。连接超时默认 15 秒，编辑连接 →「高级」可以调大。
 
-**提示认证失败，但密码是对的**
+**私钥登录失败**
 
-TermPilot 不会在终端里临时向你索要密码。编辑这条连接 →「认证」，把密码或私钥口令填进去再保存。私钥登录还要确认三处：私钥路径是本机绝对路径、服务器 `authorized_keys` 里有对应公钥、私钥本身没有损坏。
+确认三处：私钥路径是不是本机绝对路径（表单里有「浏览」按钮直接选）；私钥有口令的话口令填了没有；服务器 `authorized_keys` 里是不是这把公钥。支持 RSA 和 ed25519。
 
 **跳板报 `Channel open failure: platform authorization denied`**
 
@@ -23,7 +23,7 @@ TermPilot 不会在终端里临时向你索要密码。编辑这条连接 →「
 
 **无公网 IP 的机器怎么连**
 
-用反向监听：新建「反向监听」连接，本机只在 `127.0.0.1` 监听，公网地址用你自己的端口映射工具暴露出去，目标机主动连回来。反向 shell 只接受本机连入。
+用反向监听：新建「反向监听」连接，本机只在 `127.0.0.1` 监听，公网地址用 cpolar 把端口映射出去，目标机主动连回来。反向 shell 只接受本机连入。
 
 ## 文件面板（SFTP）
 
@@ -33,15 +33,11 @@ TermPilot 不会在终端里临时向你索要密码。编辑这条连接 →「
 
 **传输中途卡住**
 
-跳板上 SSH 通道窗口被打满时，大文件传输会停住。TermPilot 把传输并发压到 4 路缓解；仍然卡就先断连重开，传输会重新拨号。
+跳板上 SSH 通道窗口被打满时，大文件传输会停住。TermPilot 已把传输并发压到 4 路缓解；仍然卡就先断连重开，传输会重新拨号。
 
 **双击文件不进编辑器**
 
 两种可能：文件超过 1.5MB，或检测到是二进制（内容里有 NUL）。这两类都不在内置编辑器里打开，请下载后本地处理。
-
-**上传被拒绝**
-
-单文件上限 512MB。几个 GB 的文件请在远端机器上直接处理。
 
 ## 终端
 
@@ -61,11 +57,7 @@ Windows 上确认设备管理器里能看到 COM 口、驱动已装；Linux 上�
 
 **Agent 连不上 MCP**
 
-查三项：设置 →「MCP 服务」的开关是否打开；端口（默认 `3927`）有没有被占；请求头里的 Bearer 令牌和 `%APPDATA%\TermPilot\mcp.json` 里的是否一致。MCP 只绑 `127.0.0.1`，从别的机器连不进来是设计如此。
-
-**Agent 能跑命令，但工作目录和窗口里不一样**
-
-这是正常的。终端里的 shell 和 `term_exec` 是两条通道，只共用同一条 SSH 会话，不共享 cwd。需要接着窗口里的画面操作时，让 Agent 用 `term_pty`；需要固定目录时，在命令前显式 `cd`，或使用同名 `session` 让 `term_exec` 自己承接。
+查三项：设置 →「MCP 服务」的开关是否打开；端口（默认 3927）有没有被占；请求头里的 Bearer 令牌和 `%APPDATA%\TermPilot\mcp.json` 里的是否一致。MCP 只绑 `127.0.0.1`，从别的机器连不进来是设计如此。
 
 **某次调用失败想查原因**
 
@@ -77,10 +69,8 @@ Windows 上确认设备管理器里能看到 COM 口、驱动已装；Linux 上�
 | --- | --- |
 | 连接、终端布局、设置、凭据密文 | `%APPDATA%\TermPilot\termpilot.db` |
 | MCP 令牌与注册信息 | `%APPDATA%\TermPilot\mcp.json` |
-| 终端截图 | `%APPDATA%\TermPilot\screenshots\` |
+| 截图 / 录屏产物 | `%APPDATA%\TermPilot\screenshots\` |
 
-macOS 是 `~/Library/Application Support/TermPilot/`，Linux 是 `~/.config/TermPilot/`。Windows 卸载程序默认保留这些数据（NSIS 配置 `deleteAppDataOnUninstall: false`），要彻底清理需要手动删目录。
-
-口令密文由本机系统钥匙串加密，换机器或换系统账号后解不开，需要重新输入；连接参数本身不受影响。
+macOS 是 `~/Library/Application Support/TermPilot/`，Linux 是 `~/.config/TermPilot/`。卸载不会删这些数据（NSIS 配置 `deleteAppDataOnUninstall: false`），要彻底清理手动删目录。
 
 都没有解决？到 [GitHub Issues](https://github.com/xy200303/termpilot/issues) 提问题，附上版本号（设置 → 关于）和「调用记录」里相关的失败条目。
