@@ -4,8 +4,9 @@ import type {
   CaptureRect,
   CaptureReply,
   CaptureRun,
-  AgentId,
-  AgentTarget,
+  DesktopMetrics,
+  DesktopOpenResult,
+  DesktopStatusEvent,
   McpAuditEntry,
   McpConfirmRequest,
   McpOpenTab,
@@ -34,6 +35,7 @@ import type {
   TermStatusEvent,
   UpdateCheck
 } from '../shared/types'
+import type { DesktopAgentInput, DesktopAgentReply } from '../shared/desktop-agent'
 
 /**
  * 渲染进程唯一可见的 API 白名单。
@@ -152,8 +154,7 @@ const api = {
   mcp: {
     get: () => ipcRenderer.invoke(IPC.mcpGet),
     audit: () => ipcRenderer.invoke(IPC.mcpAudit) as Promise<McpAuditEntry[]>,
-    agents: () => ipcRenderer.invoke(IPC.mcpAgents) as Promise<AgentTarget[]>,
-    applyAgent: (id: AgentId) => ipcRenderer.invoke(IPC.mcpApplyAgent, id) as Promise<AgentTarget>,
+    guide: (input?: McpSettingsInput) => ipcRenderer.invoke(IPC.mcpAgentGuide, input) as Promise<string>,
     save: (input: McpSettingsInput) => ipcRenderer.invoke(IPC.mcpSave, input),
     state: () => ipcRenderer.invoke(IPC.mcpState) as Promise<McpRuntime>,
     bound: (termId: string) => ipcRenderer.send(IPC.mcpBound, termId),
@@ -218,6 +219,35 @@ const api = {
       }
     },
     reply: (reply: RecordReply) => ipcRenderer.send(IPC.recordReply, reply)
+  },
+  desktop: {
+    open: (viewId: string, sessionId: string) =>
+      ipcRenderer.invoke(IPC.desktopOpen, viewId, sessionId) as Promise<DesktopOpenResult>,
+    close: (viewId: string) => ipcRenderer.invoke(IPC.desktopClose, viewId) as Promise<void>,
+    clipboard: {
+      read: () => ipcRenderer.invoke(IPC.desktopClipboardRead) as Promise<string>,
+      write: (text: string) => ipcRenderer.invoke(IPC.desktopClipboardWrite, text) as Promise<void>
+    },
+    metrics: (viewId: string) => ipcRenderer.invoke(IPC.desktopMetrics, viewId) as Promise<DesktopMetrics | null>,
+    agent: {
+      run: (viewId: string, input: DesktopAgentInput) =>
+        ipcRenderer.invoke(IPC.desktopAgent, viewId, input) as Promise<string>,
+      reply: (reply: DesktopAgentReply) => ipcRenderer.send(IPC.desktopAgentReply, reply),
+      onRun: (cb: (job: { id: string; viewId: string; input: DesktopAgentInput; protocol: string }) => void) => {
+        const listener = (_e: Electron.IpcRendererEvent, job: { id: string; viewId: string; input: DesktopAgentInput; protocol: string }) => cb(job)
+        ipcRenderer.on(IPC.desktopAgentRun, listener)
+        return () => {
+          ipcRenderer.removeListener(IPC.desktopAgentRun, listener)
+        }
+      }
+    },
+    onStatus: (cb: (event: DesktopStatusEvent) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, event: DesktopStatusEvent) => cb(event)
+      ipcRenderer.on(IPC.desktopStatus, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.desktopStatus, listener)
+      }
+    }
   },
   reverse: {
     start: (sessionId: string) => ipcRenderer.invoke(IPC.reverseStart, sessionId),

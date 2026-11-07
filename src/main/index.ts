@@ -22,6 +22,8 @@ import { SftpService } from './services/SftpService'
 import { ExecService } from './services/ExecService'
 import { SshPool } from './services/SshPool'
 import { McpService } from './services/McpService'
+import { DesktopService } from './services/desktop/DesktopService'
+import { DesktopAgentService } from './services/desktop/DesktopAgentService'
 import { registerIpc } from './ipc'
 import { installCli } from './install-cli'
 
@@ -32,11 +34,16 @@ let reverse: ReverseListenerService | null = null
 let sftp: SftpService | null = null
 let exec2: ExecService | null = null
 let mcp: McpService | null = null
+let desktop: DesktopService | null = null
 
 function appIcon(): string {
   const packaged = join(process.resourcesPath, 'icon.png')
   if (app.isPackaged && existsSync(packaged)) return packaged
   return join(app.getAppPath(), 'resources', 'icon.png')
+}
+
+async function appPainted(win: BrowserWindow): Promise<boolean> {
+  return await win.webContents.executeJavaScript("document.documentElement.dataset.appReady === 'true'", true)
 }
 
 /** Windows 上标题栏覆盖层偶发把第一帧停在白底。显示后改一次尺寸让系统重画；画面仍是空的就重新加载。 */
@@ -74,22 +81,29 @@ function recoverBlankWindow(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', () => {
     loaded = true
     show()
-    setTimeout(() => {
-      if (win.isDestroyed()) return
-      void win.webContents
-        .executeJavaScript(
-          'Boolean(document.getElementById("root") && document.getElementById("root").childElementCount > 0)',
-          true
-        )
-        .then((painted) => {
-          if (!painted) reload('画面是空的')
-        })
-        .catch(() => reload('画面检查失败'))
-    }, 400)
+    let attempts = 0
+    const verify = () => {
+      setTimeout(() => {
+        if (win.isDestroyed()) return
+        void appPainted(win)
+          .then((painted) => {
+            if (painted) return
+            attempts += 1
+            if (attempts < 3) verify()
+            else reload('画面是空的')
+          })
+          .catch(() => reload('画面检查失败'))
+      }, attempts === 0 ? 600 : 800)
+    }
+    verify()
   })
 
   win.webContents.on('preload-error', (_event, _path, error) => {
     reload(error instanceof Error ? error.message : 'preload')
+  })
+
+  win.webContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => {
+    if (isMainFrame && loaded) desktop?.dispose()
   })
 
   win.webContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
@@ -142,8 +156,10 @@ function createWindow(storage: StorageService): void {
   reverse = new ReverseListenerService(terminal, sender)
   sftp = new SftpService(storage, sender, sshPool)
   exec2 = new ExecService(storage, sshPool)
-  mcp = new McpService(storage, terminal, sftp, exec2, reverse, sender)
-  registerIpc(storage, terminal, reverse, sftp, mcp)
+  desktop = new DesktopService(storage, sender)
+  const desktopAgent = new DesktopAgentService(desktop, sender)
+  mcp = new McpService(storage, terminal, sftp, exec2, reverse, sender, desktop, desktopAgent)
+  registerIpc(storage, terminal, reverse, sftp, mcp, desktop, desktopAgent)
   void mcp.apply(storage.getMcpSettings()).catch((error) => {
     console.error('[TermPilot] MCP start failed:', error)
   })
@@ -173,6 +189,9 @@ if (!single) {
     if (win.isMinimized()) win.restore()
     win.show()
     win.focus()
+    void appPainted(win).then((painted) => {
+      if (!painted && !win.isDestroyed()) win.webContents.reload()
+    })
   })
 
   app.whenReady().then(() => {
@@ -194,6 +213,7 @@ app.on('window-all-closed', () => {
   terminal?.disposeAll()
   reverse?.disposeAll()
   sftp?.disposeAll()
+  desktop?.dispose()
   if (process.platform !== 'darwin') app.quit()
 })
 
@@ -205,6 +225,7 @@ app.on('before-quit', (event) => {
   terminal?.disposeAll()
   reverse?.disposeAll()
   sftp?.disposeAll()
+  desktop?.dispose()
   void (mcp?.stop() ?? Promise.resolve()).finally(() => {
     storage?.close()
     app.quit()

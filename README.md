@@ -41,19 +41,15 @@ Windows · macOS · Linux
 
 ## 交给 Agent
 
-先打开 TermPilot，在设置中启用 Agent 连接。然后将下面这段话发给 Claude Code、Kimi Code、Codex、Cursor、WorkBuddy 或 CodeBuddy：
+先打开 TermPilot，在设置中启用 MCP 服务，再进入“Agent 接入”点击“复制接入指引”。把复制的完整指引发给 Claude Code、Kimi Code、Codex、Cursor、WorkBuddy 或 CodeBuddy。指引里包含 MCP 地址、Bearer 令牌、本机各客户端配置路径和 Skill 文件位置，由 Agent 自己完成 MCP 注册和 Skill 安装。
 
-```text
-请安装 TermPilot 配套 skill：读取 https://raw.githubusercontent.com/xy200303/termpilot/main/skills/termpilot/SKILL.md 并安装到你的用户级 skills 目录，再读取本机 TermPilot 的 mcp.json（Windows 是 %APPDATA%\TermPilot\mcp.json），只把名为 termpilot 的 MCP 注册到你自己的配置里，其它服务器不要动；完成后用这个 skill 操作 TermPilot。
-```
-
-Agent 会安装使用说明并注册 TermPilot。之后直接说明目标主机和操作。连接口令写在本机 `mcp.json` 中，不进入代码仓库。
+指引含本机令牌，只发给本机可信 Agent，不要发到仓库、公开聊天或截图里。Agent 完成接入后，直接说明目标主机和操作。
 
 MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该命令会先启动 TermPilot。`tools` 列出工具，`schema` 查看参数，`call` 执行调用。优先读取文本；需要查看画面时再截图。已打开的终端继续使用，不为同一操作再打开一个。
 
 ## Agent 工具
 
-一共 27 个工具，分六族。调用只认编号：`conn-` 是连接，`term-` 是终端；名称和备注只用来认出它。连接有三种协议：SSH（全能：终端、exec 通道、SFTP、并发通道）、Telnet 和串口（只有终端字节流，`term_exec` 和 `sftp_*` 会返回能力说明，屏幕族工具三种协议行为一致）。
+一共 37 个工具，分七族。调用只认编号：`conn-` 是连接，`term-` 是终端，`view-` 是图形桌面；名称和备注只用来认出它。连接有三种协议：SSH（全能：终端、exec 通道、SFTP、并发通道）、Telnet 和串口（只有终端字节流，`term_exec` 和 `sftp_*` 会返回能力说明，屏幕族工具三种协议行为一致）。
 
 ### 连接管理（6）
 
@@ -89,6 +85,19 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 
 `sftp_list` / `sftp_mkdir` / `sftp_upload` / `sftp_download` / `sftp_rename` / `sftp_remove`。单文件 512MB 上限，几个 GB 的文件留在远端处理。
 
+### 图形桌面（10）
+
+- `desktop_list`：列出打开的桌面，返回 `viewId`
+- `desktop_screenshot`：截取 VNC / 内嵌 RDP 画布或 Windows 原生客户端窗口；`grid` 可叠加图片坐标网格
+- `desktop_click`：按截图图片像素坐标点击，支持左右键和双击
+- `desktop_key`：发送方向键、回车、`ctrl-c` 等组合键
+- `desktop_type`：逐字输入文字，VNC 和内嵌 RDP 支持标点、中文和 Emoji
+- `desktop_scroll`：滚动桌面
+- `desktop_wait`：等待固定时间或等待画面稳定
+- `desktop_actions`：按顺序批量执行点击、输入、按键、滚动、等待和截图
+- `desktop_a11y`：通过同主机 SSH 读取 Linux AT-SPI 控件树，并按控件路径点击；没有无障碍服务时返回明确提示
+- `desktop_perf`：读取桌面分辨率、性能模式、累计流量和实时上下行速率
+
 ### 应用界面（2）
 
 - `app_screenshot`：截取整个应用窗口（侧边栏、标签栏、终端一起），保存为 PNG 并返回路径，图片同时附在结果里
@@ -108,6 +117,8 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 
 - 支持密码或私钥登录。同一主机可保存多个账号，并按主机分组。无公网地址的主机可连回本机，且只接受本机连入。
 - 除 SSH 外还支持 Telnet 和串口连接（串口波特率、数据位、停止位、校验可配）。这两种协议只有终端字节流，没有 exec 通道和文件传输。
+- 支持两种独立图形桌面协议：VNC 使用内嵌 noVNC；RDP 默认内嵌 IronRDP（WASM），也可切换 FreeRDP 原生窗口。内嵌桌面可与本机双向共享文本剪贴板，也可在连接表单里关闭。桌面连接没有 exec / SFTP，也不支持 `term_*`。
+- 桌面提供自动、画质、平衡、流畅四种性能模式；顶栏仪表按钮显示实时上下行流量、包速率和累计流量。VNC 连接成功后才同步剪贴板，窗口缩放使用防抖，后台标签自动降低画质，自动模式会按实时流量升降画质。
 - 本机终端与远程终端使用同一行标签。右键可复制、截图和粘贴。有选中文本时 `Ctrl+C` 为复制，无选中时为中断；`Ctrl+V` 为粘贴。
 - 远程文件按目录展开。双击文本文件进行编辑，`Ctrl+S` 写回服务器。
 - 可截取当前画面、指定行，或将滚动内容合成为长图。截图内容为窗口中已经显示的画面。
@@ -145,3 +156,7 @@ npm run build
 ## 许可
 
 本软件以 [MIT 协议](LICENSE) 授权。参与开发请阅读 [贡献说明](CONTRIBUTING.md)。
+
+VNC 画面使用 [noVNC](https://github.com/novnc/noVNC)（MPL 2.0）。安装包在 `resources/licenses/novnc/` 附带其许可证及所用字体、依赖的许可文本。
+
+RDP 内嵌客户端使用 [IronRDP](https://github.com/electerm/ironrdp-wasm)（MIT），许可证位于 `resources/licenses/ironrdp-wasm/`。

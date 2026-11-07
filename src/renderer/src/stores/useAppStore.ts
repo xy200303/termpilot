@@ -3,6 +3,7 @@ import {
   MCP_DEFAULT_PORT,
   type Appearance,
   type ConnectMode,
+  type DesktopStatusEvent,
   type McpOpenTab,
   type McpRuntime,
   type McpSettings,
@@ -15,10 +16,11 @@ import {
   type Tab,
   type TermStatusEvent
 } from '../../../shared/types'
-import type { SessionProtocol } from '../../../shared/protocol'
-import { newTermId } from '../../../shared/ids'
+import { isDesktopProtocol, type SessionProtocol } from '../../../shared/protocol'
+import { newTermId, newViewId } from '../../../shared/ids'
 import { dropBuffer, editorKey } from '../editor/editorBuffers'
 import { terminalPool } from '../terminal/TerminalPool'
+import { unregisterRdp } from '../desktop/rdpAgent'
 import { applyAppearance, readCachedAppearance, resolveAppTheme, type ResolvedAppTheme } from '../theme/applyAppearance'
 
 export interface EditorTab {
@@ -43,11 +45,15 @@ interface AppState {
   sessionStatus: Record<string, SessionStatus>
   /** 每个终端（标签）的连接状态 */
   termState: Record<string, TermState>
+  /** 图形桌面标签状态 */
+  desktopState: Record<string, TermState>
   tabs: Tab[]
   activeTabId: string | null
 
   /** 侧边栏整体收纳（收成图标栏） */
   sidebarCollapsed: boolean
+  /** 桌面性能浮层 */
+  desktopPerformance: boolean
   /** 侧边栏页：连接树 / 远程文件树 */
   sidebarPane: 'connect' | 'files'
   /** 树节点折叠，key 为 forward / reverse / 分组名 */
@@ -104,11 +110,13 @@ interface AppState {
   toggleListen: (session: SessionConfig) => Promise<void>
   /** 主进程终端状态事件入口（App 中订阅一次） */
   onTermStatus: (e: TermStatusEvent) => void
+  onDesktopStatus: (e: DesktopStatusEvent) => void
   onTermMeta: (e: { termId: string; title: string; remark: string }) => void
   onReverseState: (e: ReverseListenState) => void
   onReverseIncoming: (e: ReverseIncoming) => void
 
   toggleSidebar: () => void
+  toggleDesktopPerformance: () => void
   setSidebarPane: (pane: 'connect' | 'files') => void
   toggleGroup: (group: string) => void
   selectSession: (id: string) => void
@@ -135,9 +143,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   hostNotes: {},
   sessionStatus: {},
   termState: {},
+  desktopState: {},
   tabs: [],
   activeTabId: null,
   sidebarCollapsed: false,
+  desktopPerformance: false,
   sidebarPane: 'connect',
   collapsedGroups: {},
   search: '',
@@ -226,8 +236,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   onMcpState: (mcpRuntime) => set({ mcpRuntime }),
 
   onMcpOpenTab: (tab) => {
-    terminalPool.ensure(tab.termId)
-    window.api.mcp.bound(tab.termId)
+    if (!isDesktopProtocol(tab.kind)) {
+      terminalPool.ensure(tab.termId)
+      window.api.mcp.bound(tab.termId)
+    } else {
+      const existing = get().tabs.find((item) => item.sessionId === tab.sessionId && item.kind === tab.kind)
+      if (existing?.id === tab.termId) {
+        set({ activeTabId: existing.id, selectedSessionId: tab.sessionId })
+        return
+      }
+      if (existing) {
+        set({
+          tabs: [
+            ...get().tabs.filter((item) => item.id !== existing.id),
+            { id: tab.termId, sessionId: tab.sessionId, kind: tab.kind, title: tab.title }
+          ],
+          activeTabId: tab.termId,
+          selectedSessionId: tab.sessionId ?? get().selectedSessionId
+        })
+        return
+      }
+    }
     if (get().tabs.some((item) => item.id === tab.termId)) {
       set({ activeTabId: tab.termId, selectedSessionId: tab.sessionId })
       return
@@ -295,6 +324,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ selectedSessionId: session.id })
     if ((session.mode ?? 'forward') === 'reverse') {
       void get().toggleListen(session)
+      return
+    }
+    if (isDesktopProtocol(session.protocol)) {
+      const kind = session.protocol
+      const existing = get().tabs.find((t) => t.sessionId === session.id && t.kind === kind)
+      if (existing) {
+        set({ activeTabId: existing.id })
+        return
+      }
+      const tab: Tab = { id: newViewId(), sessionId: session.id, kind, title: '桌面' }
+      set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
+      void window.api.desktop.open(tab.id, session.id).catch((error) => {
+        get().onDesktopStatus({
+          viewId: tab.id,
+          sessionId: session.id,
+          status: 'error',
+          message: error instanceof Error ? error.message : String(error)
+        })
+      })
       return
     }
     if (!fresh) {
@@ -378,13 +426,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   reconnectTab: (tabId) => {
     const tab = get().tabs.find((item) => item.id === tabId)
     if (!tab || tab.kind === 'reverse') return
-    const status = get().termState[tabId]?.status
-    if (status === 'connected' || status === 'connecting') return
     set({
       activeTabId: tabId,
       selectedSessionId: tab.sessionId ?? get().selectedSessionId,
       activeEditorKey: null
     })
+    if (isDesktopProtocol(tab.kind)) {
+      if (!tab.sessionId) return
+      void window.api.desktop.open(tab.id, tab.sessionId).catch((error) => {
+        get().onDesktopStatus({
+          viewId: tab.id,
+          sessionId: tab.sessionId!,
+          status: 'error',
+          message: error instanceof Error ? error.message : String(error)
+        })
+      })
+      return
+    }
+    const status = get().termState[tabId]?.status
+    if (status === 'connected' || status === 'connecting') return
     window.api.term.create({
       termId: tab.id,
       kind: tab.kind,
@@ -396,14 +456,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   closeTab: (tabId) => {
+    const tab = get().tabs.find((item) => item.id === tabId)
     const tabs = get().tabs.filter((t) => t.id !== tabId)
     const activeTabId =
       get().activeTabId === tabId ? (tabs[tabs.length - 1]?.id ?? null) : get().activeTabId
     const termState = { ...get().termState }
     delete termState[tabId]
-    set({ tabs, activeTabId, termState })
-    // 先断主进程连接，再销毁 xterm 实例
-    window.api.term.close(tabId)
+    const desktopState = { ...get().desktopState }
+    delete desktopState[tabId]
+    set({ tabs, activeTabId, termState, desktopState })
+    if (tab?.kind === 'rdp') unregisterRdp(tabId)
+    if (tab && isDesktopProtocol(tab.kind)) window.api.desktop.close(tabId)
+    else window.api.term.close(tabId)
     terminalPool.dispose(tabId)
   },
 
@@ -452,6 +516,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  onDesktopStatus: (e) => {
+    const desktopState = { ...get().desktopState, [e.viewId]: { status: e.status, error: e.message } }
+    const sessionStatus = { ...get().sessionStatus }
+    if (e.status !== 'connecting') sessionStatus[e.sessionId] = e.status === 'error' ? 'disconnected' : e.status
+    set({ desktopState, sessionStatus })
+  },
+
   onTermMeta: (e) => {
     set({
       tabs: get().tabs.map((tab) => (tab.id === e.termId ? { ...tab, title: e.title || tab.title, remark: e.remark } : tab))
@@ -484,6 +555,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
+  toggleDesktopPerformance: () => set({ desktopPerformance: !get().desktopPerformance }),
   setSidebarPane: (pane) => set({ sidebarPane: pane }),
   toggleGroup: (group) =>
     set({ collapsedGroups: { ...get().collapsedGroups, [group]: !get().collapsedGroups[group] } }),

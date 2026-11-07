@@ -12,12 +12,12 @@ export interface ToolDef {
 
 const sessionFields: ZodRawShape = {
   protocol: z
-    .enum(['ssh', 'telnet', 'serial'])
+    .enum(['ssh', 'telnet', 'serial', 'rdp', 'vnc'])
     .optional()
-    .describe('连接协议，默认 ssh。telnet 走 host/port；serial 走 serialPath。telnet 和 serial 只有终端字节流，没有 exec 通道和 SFTP'),
+    .describe('连接协议，默认 ssh。telnet/serial 只有终端字节流；rdp/vnc 是独立图形桌面，没有 exec 和 SFTP'),
   mode: z.enum(['forward', 'reverse']).optional().describe('仅 ssh 有效：forward 主动连服务器；reverse 只在 127.0.0.1 监听'),
-  host: z.string().optional().describe('正向 SSH / Telnet 的主机'),
-  port: z.number().int().min(1).max(65535).optional().describe('SSH 默认 22，Telnet 默认 23'),
+  host: z.string().optional().describe('正向 SSH / Telnet / RDP / VNC 的主机'),
+  port: z.number().int().min(1).max(65535).optional().describe('SSH 22，Telnet 23，RDP 3389，VNC 5900'),
   username: z.string().optional().describe('SSH 登录用户'),
   authType: z.enum(['password', 'key']).optional().describe('password 或 key'),
   keyPath: z.string().optional().describe('私钥文件的本机绝对路径'),
@@ -37,12 +37,19 @@ const sessionFields: ZodRawShape = {
     .describe(
       '仅正向 ssh：文件通道（sftp_*）走哪条 SSH。auto 默认（目标机缺 SFTP 子系统时自动改 internal-sftp 并单独拨号）；shared 只复用终端那条连接，不改 sshd 也不单独拨号（跳板只授权一次转发的机器选这个）；fresh 总是单独拨号'
     ),
+  viewOnly: z.boolean().optional().describe('仅 VNC：只观看，不发送鼠标键盘'),
+  width: z.number().int().min(320).max(7680).optional().describe('RDP / VNC 桌面宽度，留空跟随窗口'),
+  height: z.number().int().min(240).max(4320).optional().describe('RDP / VNC 桌面高度，留空跟随窗口'),
+  nativeClient: z.boolean().optional().describe('仅 RDP：true 使用 FreeRDP 原生窗口；默认 false，内嵌 IronRDP'),
+  clipboard: z.boolean().optional().describe('仅 VNC / 内嵌 RDP：是否与本机双向共享文本剪贴板，默认 true'),
+  performance: z.enum(['auto', 'quality', 'balanced', 'speed']).optional().describe('仅 VNC / RDP：自动、画质优先、平衡或流畅优先，默认 balanced'),
   group: z.string().optional().describe('侧边栏分组，留空归入未分组'),
   remark: z.string().optional().describe('备注')
 }
 
 const connId = z.string().describe('连接编号，conn- 开头。不要填名称或备注，也不要填 term- 开头的终端编号')
 const termId = z.string().describe('终端编号，term- 开头')
+const viewId = z.string().describe('图形桌面编号，view- 开头。先 desktop_list 或 connection_open 获取')
 
 const lineFields: ZodRawShape = {
   termId,
@@ -60,18 +67,18 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'connection_open',
-    description: '按 conn- 编号打开一条连接（SSH / Telnet / 串口），并新开一扇终端。返回的 termId 只属于这扇终端。',
+    description: '按 conn- 编号打开连接。SSH / Telnet / 串口新开终端并返回 termId；RDP / VNC 每个连接只保留一个桌面标签，已打开时直接复用并返回现有 viewId。',
     input: { connection: connId }
   },
   {
     name: 'connection_close',
-    description: '关掉某条连接下的全部终端，并断开它的文件通道。',
+    description: '关掉某条连接下的全部终端或桌面窗口，并断开它的文件通道。',
     input: { connection: connId }
   },
   {
     name: 'connection_create',
     description:
-      '新建并保存一条连接，返回 conn- 编号。protocol 选 ssh（默认）、telnet 或 serial：ssh 要 host/username/secret；telnet 要 host（port 默认 23），登录在终端里交互完成；serial 要 serialPath（先 serial_list 探路），波特率默认 115200。密码和私钥口令加密存在本机。弄清它是干什么的之后，用 connection_update 写上 remark。',
+      '新建并保存一条连接，返回 conn- 编号。protocol 选 ssh（默认）、telnet、serial、rdp 或 vnc。ssh 要 host/username/secret；telnet 要 host（默认 23）；serial 要 serialPath；rdp 默认 3389，vnc 默认 5900。桌面协议只有图形画面，没有 exec/SFTP；RDP 默认内嵌 IronRDP，nativeClient=true 才需要 FreeRDP。密码和私钥口令加密存在本机。',
     input: { name: z.string().describe('显示名称，不能和已有连接重名'), ...sessionFields }
   },
   {
@@ -246,6 +253,91 @@ export const TOOLS: readonly ToolDef[] = [
       connection: connId,
       path: z.string().describe('远端路径'),
       kind: z.enum(['file', 'dir', 'link']).describe('file、dir 或 link')
+    }
+  },
+  {
+    name: 'desktop_list',
+    description: '列出当前打开的图形桌面（viewId、连接、协议、内嵌或原生窗口）。每个 VNC / RDP 连接最多一个桌面窗口。操作桌面前先调用它获取 viewId。',
+    readOnly: true
+  },
+  {
+    name: 'desktop_screenshot',
+    description:
+      '截取一个图形桌面并返回 PNG。grid=true 叠加 100px 坐标网格，也可填 20–500 的网格间距；网格坐标就是图片像素坐标，便于后续点击。原生 RDP 不支持网格。',
+    images: 'always',
+    input: {
+      viewId,
+      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('true 为 100px 网格，或自定义间距')
+    }
+  },
+  {
+    name: 'desktop_click',
+    description:
+      '点击图形桌面。VNC / 内嵌 RDP 的 x/y 统一使用 desktop_screenshot 返回图片的像素坐标；原生窗口使用客户区像素。button 默认 left，double=true 表示双击。只读 VNC 会拒绝输入。',
+    input: {
+      viewId,
+      x: z.number().int().min(0).describe('图片横坐标'),
+      y: z.number().int().min(0).describe('图片纵坐标'),
+      button: z.enum(['left', 'middle', 'right']).optional().describe('默认 left'),
+      double: z.boolean().optional().describe('是否双击')
+    }
+  },
+  {
+    name: 'desktop_key',
+    description:
+      '发送按键或组合键，例如 enter、tab、esc、up/down/left/right、ctrl-c、ctrl-shift-t、alt-tab。标点可用 minus、slash、comma、period 等名称。',
+    input: { viewId, keys: z.string().describe('按键组合，用 - 连接') }
+  },
+  {
+    name: 'desktop_type',
+    description:
+      '向图形桌面逐字输入文字。VNC 发送 Unicode keysym，内嵌 RDP 发送 Unicode 按键，支持标点、中文和 Emoji，不再只是写剪贴板。原生 Windows 窗口仍通过本机剪贴板粘贴。输入密码等敏感文本前先征得用户同意。',
+    input: { viewId, text: z.string().describe('要输入的文字') }
+  },
+  {
+    name: 'desktop_scroll',
+    description: '滚动图形桌面。deltaY 正数向下、负数向上；x/y 可选，坐标与截图图片一致。',
+    input: {
+      viewId,
+      x: z.number().int().min(0).optional(),
+      y: z.number().int().min(0).optional(),
+      deltaY: z.number().int().describe('滚动量，正负均可')
+    }
+  },
+  {
+    name: 'desktop_wait',
+    description: '等待固定时间，或等待画面连续稳定。ms 默认 500；stableMs 大于 0 时检测画面稳定，timeoutMs 默认 10000。原生窗口只支持固定等待。',
+    input: {
+      viewId,
+      ms: z.number().int().min(0).max(60000).optional().describe('固定等待毫秒'),
+      stableMs: z.number().int().min(0).max(60000).optional().describe('连续稳定多少毫秒后返回'),
+      timeoutMs: z.number().int().min(100).max(60000).optional().describe('稳定检测超时时间')
+    }
+  },
+  {
+    name: 'desktop_actions',
+    description: '按顺序批量执行桌面操作，减少多次往返。actions 每项与 screenshot/click/key/type/scroll/wait 的参数一致并带 action；任意一步失败就停止并返回错误。',
+    images: 'always',
+    input: {
+      viewId,
+      actions: z.array(z.record(z.string(), z.unknown())).min(1).max(50).describe('最多 50 个操作')
+    }
+  },
+  {
+    name: 'desktop_perf',
+    description: '读取图形桌面的累计流量、当前上下行 kbps 和数据包速率。用于判断卡顿来自带宽、画质还是桌面本身。',
+    readOnly: true,
+    input: { viewId: z.string().optional().describe('留空返回所有已打开桌面') }
+  },
+  {
+    name: 'desktop_a11y',
+    description:
+      '读取 Linux VNC 桌面的 AT-SPI 无障碍控件树，或按 tree 返回的 path 点击控件。通过同主机已有的正向 SSH 连接访问，不自动安装依赖。operation=tree 返回名称、角色、坐标、动作和路径；operation=click 需要 path，action 可选。',
+    input: {
+      viewId,
+      operation: z.enum(['tree', 'click']).optional().describe('默认 tree'),
+      path: z.string().optional().describe('tree 返回的控件路径，例如 0/1/2'),
+      action: z.string().optional().describe('无障碍动作名，默认依次尝试 click、press、activate')
     }
   },
   {

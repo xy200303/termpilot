@@ -62,12 +62,16 @@ termpilot call term_exec --json-file args.json --json
 
 终端在关闭前保持存在。应用重启后，同一编号、标题和备注仍在，上次退出时已经画好的行会按行写回，新会话从下一行开始。`status` 不是 `connected` 时，用 `term_reconnect` 恢复这一扇，不要再 `connection_open`。先用 `term_read` 查看已有记录。没有这扇终端时，才用 `connection_open` 新开。`term_pty` 的命令以换行结束。修改远程文件前先确认目录。用户未明确要求删除时，不调用 `sftp_remove`，也不在命令中使用 `rm`。`sftp_download` 和 `sftp_upload` 只传 512MB 以内的文件。几个 GB 的文件留在远程机器上处理，不要下载到本机。危险操作在 TermPilot 窗口中等待用户确认。
 
-可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_pty`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`、`app_screenshot`、`app_record`。
+可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_pty`、`term_write`、`term_read`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`term_screenshot_scrollback`、`app_screenshot`、`app_record`、`desktop_list`、`desktop_screenshot`、`desktop_click`、`desktop_key`、`desktop_type`、`desktop_scroll`、`desktop_wait`、`desktop_actions`、`desktop_a11y`、`desktop_perf`。
 
 要截指定行时，先 `term_lines` 看行号（不填范围就是当前画面），再把 `startLine` 和 `endLine` 传给 `term_screenshot`。两端都包含，返回的是这一段已经裁好的一张图，不要自己按像素裁。整段历史才用 `term_screenshot_scrollback`。
 
 要看整个窗口（侧边栏 + 标签栏 + 终端）用 `app_screenshot`。录操作演示用 `app_record`：`action=start` 开始，`action=stop` 结束并返回 WebM 路径；`fps` 默认 15，`maxSeconds` 默认 120，到点自动停止并保存。录的是应用窗口本身，不含系统其他窗口和声音。
 
 人和你看的是同一个终端。密码和验证码由用户在窗口里输入。菜单和 TUI 用 `term_write`：`keys` 取 `up`、`down`、`left`、`right`，文字放 `text`，回车用 `submit: true`。已经回到 shell 提示符时再用 `term_pty`。`term_pty` 只返回这次新出现的输出，不是整段滚动缓冲。前台命令停不下来时用 `term_write`，`keys` 填 `["ctrl-c"]`，不要再开一扇终端去结束它。
+
+连接协议也可以是 `rdp`、`vnc`。这两种是独立图形桌面，不是终端：`connection_open` 返回 `viewId`，VNC 使用 noVNC 内嵌，RDP 默认使用 IronRDP（WASM）内嵌。对它们调用 `term_exec`、`sftp_*`、`term_pty`、`term_write` 都不适用。VNC 和内嵌 RDP 默认与本机双向共享文本剪贴板，可用 `clipboard=false` 关闭。RDP 可以在表单里勾选 `nativeClient`，改用 FreeRDP 原生窗口。整窗截图和录屏可用 `app_screenshot` / `app_record`，但原生 RDP 窗口不在 Electron 画面内，不能靠这两个工具截取。
+
+操作图形桌面先 `desktop_list` 获取 `viewId`，再 `desktop_screenshot` 看画面。VNC / RDP 每个连接只有一个桌面标签，重复 `connection_open` 会复用现有窗口。`desktop_screenshot` 加 `grid=true` 会画出 100px 坐标网格；`desktop_click` 的 x/y 统一使用截图图片的像素坐标。`desktop_type` 会逐字输入标点、中文和 Emoji，不再只是写剪贴板；`desktop_key` 发送 `enter`、`ctrl-c` 和 `minus` 等组合键。需要启动应用后等待画面时用 `desktop_wait`，连续操作优先放进 `desktop_actions` 减少往返。桌面卡顿时用 `desktop_perf` 查看上下行流量和性能模式；性能模式可选 auto、quality、balanced、speed。Linux VNC 可用 `desktop_a11y` 读取 AT-SPI 控件树并按控件路径点击；没有 at-spi2-core 时会明确报错，不会自动安装。VNC 和内嵌 RDP 切到别的标签后仍可操作；原生窗口操作目前仅支持 Windows，输入文字会覆盖本机剪贴板，敏感内容先征得用户同意。
 
 新建或修改测试用的连接可以删掉。服务器上的已有文件不要删。需要试文件时，单独建一个测试目录。

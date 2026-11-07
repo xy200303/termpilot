@@ -44,8 +44,7 @@ export const IPC = {
   /** main → renderer，安装 SFTP 的进度和远程日志 */
   sftpInstall: 'sftp:install',
 
-  mcpAgents: 'mcp:agents',
-  mcpApplyAgent: 'mcp:apply-agent',
+  mcpAgentGuide: 'mcp:agent-guide',
   mcpAudit: 'mcp:audit',
   mcpGet: 'mcp:get',
   mcpSave: 'mcp:save',
@@ -77,6 +76,18 @@ export const IPC = {
   recordStart: 'record:start',
   recordStop: 'record:stop',
   recordReply: 'record:reply',
+
+  /** 图形桌面：VNC / RDP 内嵌，也可使用 RDP 原生进程 */
+  desktopOpen: 'desktop:open',
+  desktopClose: 'desktop:close',
+  desktopStatus: 'desktop:status',
+  desktopClipboardRead: 'desktop:clipboard-read',
+  desktopClipboardWrite: 'desktop:clipboard-write',
+  desktopMetrics: 'desktop:metrics',
+  /** 桌面 Agent：GUI / MCP → main → 对应桌面实现 */
+  desktopAgent: 'desktop:agent',
+  desktopAgentRun: 'desktop:agent-run',
+  desktopAgentReply: 'desktop:agent-reply',
 
   reverseStart: 'reverse:start',
   reverseStop: 'reverse:stop',

@@ -1,5 +1,5 @@
 import { useState, type ComponentProps, CSSProperties, ReactNode } from 'react'
-import { ChevronRight, Cable, Folder, Monitor, Network, PanelLeft, Plus, Radio, Search, Server, Settings, TerminalSquare } from 'lucide-react'
+import { ChevronRight, Cable, Folder, Monitor, MonitorUp, Network, PanelLeft, Plus, Radio, ScreenShare, Search, Server, Settings, TerminalSquare } from 'lucide-react'
 import {
   SidebarContent,
   SidebarGroup,
@@ -226,6 +226,18 @@ function ConnectTree() {
         sessions={filtered.filter((s) => s.protocol === 'serial')}
       />
       <ModeRoot
+        mode="forward"
+        protocol="rdp"
+        title="RDP"
+        sessions={filtered.filter((s) => s.protocol === 'rdp')}
+      />
+      <ModeRoot
+        mode="forward"
+        protocol="vnc"
+        title="VNC"
+        sessions={filtered.filter((s) => s.protocol === 'vnc')}
+      />
+      <ModeRoot
         mode="reverse"
         title="反向监听"
         sessions={filtered.filter((s) => s.mode === 'reverse')}
@@ -238,13 +250,17 @@ function ConnectTree() {
 const PROTOCOL_ICONS: Record<SessionProtocol, ReactNode> = {
   ssh: <Monitor />,
   telnet: <Network />,
-  serial: <Cable />
+  serial: <Cable />,
+  rdp: <MonitorUp />,
+  vnc: <ScreenShare />
 }
 
 const PROTOCOL_TITLES: Record<SessionProtocol, string> = {
   ssh: '新建正向 SSH',
   telnet: '新建 Telnet',
-  serial: '新建串口'
+  serial: '新建串口',
+  rdp: '新建 RDP',
+  vnc: '新建 VNC'
 }
 
 function ModeRoot(props: { mode: ConnectMode; protocol?: SessionProtocol; title: string; sessions: SessionConfig[] }) {
@@ -406,25 +422,27 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
   const open = useAppStore((s) => !(s.collapsedGroups[key] ?? false))
   const toggleGroup = useAppStore((s) => s.toggleGroup)
 
-  const nested = tabs.filter((tab) => tab.sessionId === session.id && tab.kind !== 'local')
   const isSerial = session.protocol === 'serial'
   const isTelnet = session.protocol === 'telnet'
+  const isDesktop = session.protocol === 'rdp' || session.protocol === 'vnc'
+  const desktopTab = isDesktop ? tabs.find((tab) => tab.sessionId === session.id) : undefined
+  const nested = isDesktop ? [] : tabs.filter((tab) => tab.sessionId === session.id && tab.kind !== 'local')
   const account = isReverse
     ? session.listenPort
       ? `:${session.listenPort}`
       : ''
     : isSerial
       ? [session.serialPath ?? '', session.baudRate ? String(session.baudRate) : ''].filter(Boolean).join(' ')
-      : isTelnet
-        ? `${session.host}:${session.port || 23}`
+      : isTelnet || isDesktop
+        ? `${session.host}:${session.port}`
         : session.port === 22
           ? session.username
           : `${session.username}:${session.port}`
   const remark = session.remark?.trim() ?? ''
-  const jump = !isReverse && !isSerial && !isTelnet && session.jumpHost ? '经跳板' : ''
+  const jump = !isReverse && !isSerial && !isTelnet && !isDesktop && session.jumpHost ? '经跳板' : ''
   const meta = [account, jump].filter(Boolean).join(' ')
   const active =
-    tabs.some((tab) => tab.id === activeTabId && tab.sessionId === session.id && tab.kind === 'ssh') ||
+    tabs.some((tab) => tab.id === activeTabId && tab.sessionId === session.id) ||
     (selectedId === session.id && nested.every((tab) => tab.id !== activeTabId))
 
   return (
@@ -453,13 +471,15 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           <ContextMenuItem onClick={() => (isReverse ? void toggleListen(session) : openSessionTab(session))}>
             {isReverse ? (listener?.listening ? '停止监听' : '开始监听') : '打开'}
           </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() =>
-              isReverse ? void duplicateSessions([session.id]) : openSessionTab(session, true)
-            }
-          >
-            {isReverse ? '复制这条连接' : '新开一扇终端'}
-          </ContextMenuItem>
+          {isReverse ? (
+            <ContextMenuItem onClick={() => void duplicateSessions([session.id])}>复制这条连接</ContextMenuItem>
+          ) : isDesktop ? (
+            desktopTab && (
+              <ContextMenuItem onClick={() => closeTab(desktopTab.id)}>关闭桌面窗口</ContextMenuItem>
+            )
+          ) : (
+            <ContextMenuItem onClick={() => openSessionTab(session, true)}>新开一扇终端</ContextMenuItem>
+          )}
           {nested.length > 0 && (
             <ContextMenuItem onClick={() => nested.forEach((tab) => closeTab(tab.id))}>
               关闭全部窗口

@@ -31,7 +31,7 @@ export interface SessionConfig {
   /** 缺省 'ssh'，旧配置没有这一列 */
   protocol: SessionProtocol
   mode: ConnectMode
-  /** 正向 SSH / Telnet */
+  /** 正向 SSH / Telnet / 图形桌面 */
   host: string
   port: number
   username: string
@@ -63,8 +63,24 @@ export interface SessionConfig {
   sshOptions?: SshConnectOptions
   /** 文件通道走哪条 SSH。缺省 auto，旧配置没有这一列 */
   sftpMode?: SftpMode
+  /** RDP / VNC 各自的桌面参数，JSON 持久化。 */
+  desktopOptions?: DesktopOptions
   createdAt: number
   updatedAt: number
+}
+
+export interface DesktopOptions {
+  /** 只观看，不发送鼠标键盘。VNC 使用。 */
+  viewOnly?: boolean
+  /** 远端桌面宽度 / 高度。 */
+  width?: number
+  height?: number
+  /** RDP 使用 FreeRDP 原生窗口而不是内嵌 IronRDP。 */
+  nativeClient?: boolean
+  /** 与宿主机双向共享文本剪贴板，缺省开启。 */
+  clipboard?: boolean
+  /** 桌面画质与带宽取舍，缺省 balanced。 */
+  performance?: 'auto' | 'quality' | 'balanced' | 'speed'
 }
 
 /** 创建/更新会话时的输入，secret 为明文，仅在 IPC 调用内存中短暂存在 */
@@ -98,6 +114,8 @@ export interface SessionInput {
   sshOptions?: SshConnectOptions | null
   /** 文件通道走哪条 SSH。undefined 表示不修改，缺省 auto */
   sftpMode?: SftpMode
+  /** 桌面协议参数。undefined 表示不修改，null 表示恢复默认。 */
+  desktopOptions?: DesktopOptions | null
 }
 
 export type SessionStatus = 'disconnected' | 'connecting' | 'connected'
@@ -122,7 +140,7 @@ export interface SerialPortInfo {
   friendlyName?: string
 }
 
-export type TabKind = 'ssh' | 'local' | 'reverse'
+export type TabKind = 'ssh' | 'local' | 'reverse' | 'rdp' | 'vnc'
 
 export interface Tab {
   id: string
@@ -250,7 +268,7 @@ export interface McpAuditEntry {
 
 export type AgentId = 'claude' | 'kimi' | 'codex' | 'cursor' | 'workbuddy' | 'codebuddy'
 
-/** 一键写入时能改到的本机 Agent 配置 */
+/** 各种 Agent 的本机 MCP 配置位置 */
 export interface AgentTarget {
   id: AgentId
   name: string
@@ -345,6 +363,29 @@ export type RecordReply =
   | { id: string; phase: 'started' }
   | { id: string; phase: 'data'; data: Uint8Array; mime: string; auto: boolean }
   | { id: string; phase: 'error'; error: string }
+
+export type DesktopOpenResult =
+  | { mode: 'embedded'; url: string; password?: string }
+  | { mode: 'external'; message: string }
+
+export interface DesktopStatusEvent {
+  viewId: string
+  sessionId: string
+  status: SessionStatus | 'error'
+  message?: string
+}
+
+export interface DesktopMetrics {
+  viewId: string
+  protocol: string
+  mode: 'embedded' | 'external'
+  bytesIn: number
+  bytesOut: number
+  kbpsIn: number
+  kbpsOut: number
+  packetsIn: number
+  packetsOut: number
+}
 
 export interface McpSettingsInput {
   enabled: boolean

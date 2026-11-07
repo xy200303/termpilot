@@ -21,3 +21,12 @@ export function isConnId(value: string): boolean {
 export function isTermId(value: string): boolean {
   return /^term-[0-9a-f]{8}$/i.test(value.trim())
 }
+
+/** 图形桌面标签。与终端编号分开，避免误传给 term_*。 */
+export function newViewId(): string {
+  return `view-${shortId()}`
+}
+
+export function isViewId(value: string): boolean {
+  return /^view-[0-9a-f]{8}$/i.test(value.trim())
+}

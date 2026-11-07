@@ -88,6 +88,7 @@ export class StorageService {
     this.ensureColumn('sessions', 'stop_bits', 'INTEGER')
     this.ensureColumn('sessions', 'parity', 'TEXT')
     this.ensureColumn('sessions', 'sftp_mode', 'TEXT')
+    this.ensureColumn('sessions', 'desktop_options', 'TEXT')
     this.backfillPublicIds()
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS sessions_public_id ON sessions(public_id)')
     this.db.exec(`
@@ -169,7 +170,7 @@ export class StorageService {
     const rows = this.db
       .prepare('SELECT * FROM sessions ORDER BY created_at ASC, rowid ASC')
       .all()
-    return rows.map((row) => this.toPublic(row))
+    return rows.filter((row) => row.protocol !== 'sunshine').map((row) => this.toPublic(row))
   }
 
   /** 按主机记一句话，同一台机器上的连接共用。空备注会删掉。 */
@@ -205,8 +206,8 @@ export class StorageService {
           id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
           jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options,
-          protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode, desktop_options
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -235,7 +236,8 @@ export class StorageService {
         input.dataBits ?? null,
         input.stopBits ?? null,
         input.parity ?? null,
-        input.sftpMode ?? null
+        input.sftpMode ?? null,
+        input.desktopOptions ? JSON.stringify(input.desktopOptions) : null
       )
     const saved = this.require(id)
     return saved
@@ -244,7 +246,7 @@ export class StorageService {
   update(id: string, patch: SessionInput): SessionConfig | null {
     const existing = this.db
       .prepare(
-        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options, protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode FROM sessions WHERE id = ?'
+        'SELECT id, secret_encrypted, jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options, protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode, desktop_options FROM sessions WHERE id = ?'
       )
       .get(id)
     if (!existing) return null
@@ -261,7 +263,7 @@ export class StorageService {
     const jumpPort = patch.jumpPort ?? optionalInteger(existing.jump_port) ?? 22
     const jumpUsername = (patch.jumpUsername !== undefined ? patch.jumpUsername : text(existing.jump_username)).trim()
     const sshOptions = patch.sshOptions === undefined ? (existing.ssh_options ?? null) : encodeOptions(patch.sshOptions)
-    const protocol = patch.protocol ?? (existing.protocol === 'telnet' || existing.protocol === 'serial' ? existing.protocol : 'ssh')
+    const protocol = patch.protocol ?? (['telnet', 'serial', 'rdp', 'vnc'].includes(String(existing.protocol)) ? existing.protocol : 'ssh')
     const serialPath = patch.serialPath !== undefined ? patch.serialPath.trim() || null : optionalText(existing.serial_path) ?? null
     const baudRate = patch.baudRate ?? optionalInteger(existing.baud_rate) ?? null
     const dataBits = patch.dataBits ?? optionalInteger(existing.data_bits) ?? null
@@ -271,33 +273,35 @@ export class StorageService {
     const sftpMode =
       patch.sftpMode ??
       (previousSftpMode === 'shared' || previousSftpMode === 'fresh' ? previousSftpMode : null)
+    const desktopOptions =
+      patch.desktopOptions === undefined ? optionalText(existing.desktop_options) : patch.desktopOptions ? JSON.stringify(patch.desktopOptions) : null
     this.db
       .prepare(
         `UPDATE sessions SET
-          name = ?, group_name = ?, mode = ?, host = ?, port = ?, username = ?,
-          auth_type = ?, key_path = ?, listen_port = ?, remark = ?,
-          secret_encrypted = ?, updated_at = ?,
-          jump_host = ?, jump_port = ?, jump_username = ?, jump_secret_encrypted = ?,
-          ssh_options = ?, protocol = ?, serial_path = ?, baud_rate = ?, data_bits = ?,
-          stop_bits = ?, parity = ?, sftp_mode = ?
-        WHERE id = ?`
+          name = @name, group_name = @group, mode = @mode, host = @host, port = @port, username = @username,
+          auth_type = @authType, key_path = @keyPath, listen_port = @listenPort, remark = @remark,
+          secret_encrypted = @secret, updated_at = @updatedAt,
+          jump_host = @jumpHost, jump_port = @jumpPort, jump_username = @jumpUsername, jump_secret_encrypted = @jumpSecret,
+          ssh_options = @sshOptions, protocol = @protocol, serial_path = @serialPath, baud_rate = @baudRate, data_bits = @dataBits,
+          stop_bits = @stopBits, parity = @parity, sftp_mode = @sftpMode, desktop_options = @desktopOptions
+        WHERE id = @id`
       )
-      .run(
-        patch.name,
-        patch.group,
-        patch.mode,
-        patch.host,
-        patch.port,
-        patch.username,
-        patch.authType,
-        patch.keyPath ?? null,
-        patch.listenPort ?? null,
-        patch.remark ?? null,
+      .run({
+        name: patch.name,
+        group: patch.group,
+        mode: patch.mode,
+        host: patch.host,
+        port: patch.port,
+        username: patch.username,
+        authType: patch.authType,
+        keyPath: patch.keyPath ?? null,
+        listenPort: patch.listenPort ?? null,
+        remark: patch.remark ?? null,
         secret,
-        Date.now(),
-        jumpHost || null,
-        jumpHost ? jumpPort : null,
-        jumpHost ? jumpUsername || null : null,
+        updatedAt: Date.now(),
+        jumpHost: jumpHost || null,
+        jumpPort: jumpHost ? jumpPort : null,
+        jumpUsername: jumpHost ? jumpUsername || null : null,
         jumpSecret,
         sshOptions,
         protocol,
@@ -307,8 +311,9 @@ export class StorageService {
         stopBits,
         parity,
         sftpMode,
+        desktopOptions: desktopOptions ?? null,
         id
-      )
+      })
     const saved = this.require(id)
     return saved
   }
@@ -387,8 +392,8 @@ export class StorageService {
           id, public_id, name, group_name, mode, host, port, username, auth_type,
           key_path, listen_port, remark, secret_encrypted, created_at, updated_at,
           jump_host, jump_port, jump_username, jump_secret_encrypted, ssh_options,
-          protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          protocol, serial_path, baud_rate, data_bits, stop_bits, parity, sftp_mode, desktop_options
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         newId,
@@ -417,7 +422,8 @@ export class StorageService {
         optionalInteger(row.data_bits) ?? null,
         optionalInteger(row.stop_bits) ?? null,
         optionalText(row.parity) ?? null,
-        optionalText(row.sftp_mode) ?? null
+        optionalText(row.sftp_mode) ?? null,
+        optionalText(row.desktop_options) ?? null
       )
     const saved = this.require(newId)
     return saved
@@ -543,7 +549,7 @@ export class StorageService {
   private toPublic(row: Record<string, SQLOutputValue>): SessionConfig {
     const auth = row.auth_type === 'password' ? 'password' : 'key'
     const mode: ConnectMode = row.mode === 'reverse' ? 'reverse' : 'forward'
-    const protocol = row.protocol === 'telnet' || row.protocol === 'serial' ? row.protocol : 'ssh'
+    const protocol = (['telnet', 'serial', 'rdp', 'vnc'].includes(String(row.protocol)) ? row.protocol : 'ssh') as SessionConfig['protocol']
     const parity = optionalText(row.parity)
     return {
       id: text(row.id),
@@ -553,7 +559,7 @@ export class StorageService {
       protocol,
       mode,
       host: text(row.host),
-      port: integer(row.port, protocol === 'telnet' ? 23 : 22),
+      port: integer(row.port, protocol === 'telnet' ? 23 : protocol === 'rdp' ? 3389 : protocol === 'vnc' ? 5900 : 22),
       username: text(row.username),
       authType: auth satisfies AuthType,
       keyPath: optionalText(row.key_path),
@@ -571,6 +577,7 @@ export class StorageService {
       hasJumpSecret: typeof row.jump_secret_encrypted === 'string' && row.jump_secret_encrypted.length > 0,
       sshOptions: decodeOptions(row.ssh_options),
       sftpMode: row.sftp_mode === 'shared' || row.sftp_mode === 'fresh' ? row.sftp_mode : undefined,
+      desktopOptions: decodeDesktopOptions(row.desktop_options),
       createdAt: integer(row.created_at, 0),
       updatedAt: integer(row.updated_at, 0)
     }
@@ -711,6 +718,16 @@ function decodeOptions(value: SQLOutputValue): SessionConfig['sshOptions'] {
   if (typeof value !== 'string' || value.length === 0) return undefined
   try {
     return sanitizeSshOptions(JSON.parse(value))
+  } catch {
+    return undefined
+  }
+}
+
+function decodeDesktopOptions(value: SQLOutputValue): SessionConfig['desktopOptions'] {
+  if (typeof value !== 'string' || value.length === 0) return undefined
+  try {
+    const parsed = JSON.parse(value) as SessionConfig['desktopOptions']
+    return parsed && typeof parsed === 'object' ? parsed : undefined
   } catch {
     return undefined
   }

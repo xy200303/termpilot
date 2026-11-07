@@ -12,7 +12,7 @@ import type { ProtocolCapabilities } from '../../../shared/protocol'
  */
 export class SocketTransport implements ByteTransport {
   readonly protocol = 'reverse' as const
-  readonly capabilities: ProtocolCapabilities = { pty: true, exec: false, sftp: false, concurrent: false }
+  readonly capabilities: ProtocolCapabilities = { pty: true, desktop: false, exec: false, sftp: false, concurrent: false }
 
   private dataCb: ((data: Buffer) => void) | null = null
   private closeCb: (() => void) | null = null

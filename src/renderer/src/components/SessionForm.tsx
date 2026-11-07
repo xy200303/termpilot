@@ -22,8 +22,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '../stores/useAppStore'
 import { parseSshCommand } from '../../../shared/parse-ssh'
 import { sshOptionsForSession, sanitizeSshOptions, type SshConnectOptions } from '../../../shared/ssh-options'
-import { SERIAL_DEFAULTS, TELNET_DEFAULT_PORT, type SessionProtocol } from '../../../shared/protocol'
+import { SERIAL_DEFAULTS, TELNET_DEFAULT_PORT, defaultPort, isDesktopProtocol, protocolLabel, type SessionProtocol } from '../../../shared/protocol'
 import type { AuthType, ConnectMode, SessionInput, SshConfigHost, SerialPortInfo } from '../../../shared/types'
+import { DesktopFields } from './DesktopFields'
 
 /** 名字里 @ 后面的地址。空格或路径不当成主机。 */
 function addressInName(name: string): string | null {
@@ -67,7 +68,7 @@ const empty = (mode: ConnectMode, protocol: SessionProtocol = 'ssh'): SessionInp
   protocol,
   mode,
   host: '',
-  port: protocol === 'telnet' ? TELNET_DEFAULT_PORT : 22,
+  port: defaultPort(protocol),
   username: '',
   authType: 'password',
   keyPath: '',
@@ -132,13 +133,14 @@ export function SessionForm() {
         jumpUsername: s.jumpUsername ?? '',
         jumpSecret: '',
         sshOptions: s.sshOptions,
-        sftpMode: s.sftpMode ?? 'auto'
+        sftpMode: s.sftpMode ?? 'auto',
+        desktopOptions: s.desktopOptions
       })
     } else {
       setForm({
         ...empty(editing.mode, editing.protocol ?? 'ssh'),
         host: editing.host ?? '',
-        port: editing.port ?? (editing.protocol === 'telnet' ? TELNET_DEFAULT_PORT : 22)
+        port: editing.port ?? defaultPort(editing.protocol ?? 'ssh')
       })
     }
     setCommand('')
@@ -181,12 +183,7 @@ export function SessionForm() {
     setForm((f) => ({
       ...f,
       protocol: next,
-      port:
-        next === 'telnet' && f.port === 22
-          ? TELNET_DEFAULT_PORT
-          : next === 'ssh' && f.port === TELNET_DEFAULT_PORT
-            ? 22
-            : f.port
+      port: defaultPort(next)
     }))
   }
 
@@ -330,7 +327,8 @@ export function SessionForm() {
         jumpPort: next.jumpPort ?? 22,
         jumpUsername: protocol === 'ssh' ? (next.jumpUsername?.trim() ?? '') : '',
         jumpSecret: protocol === 'ssh' && next.jumpHost?.trim() ? (next.jumpSecret ? next.jumpSecret : undefined) : '',
-        sshOptions: sshOptionsForSession(next.jumpHost, next.sshOptions) ?? null
+        sshOptions: sshOptionsForSession(next.jumpHost, next.sshOptions) ?? null,
+        desktopOptions: isDesktopProtocol(protocol) ? next.desktopOptions : null
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -348,14 +346,7 @@ export function SessionForm() {
         <DialogHeader>
           <DialogTitle>
             {lockedHost ? `在 ${lockedHost} 上新建连接` : creating ? '新建' : '编辑'}
-            {!lockedHost &&
-              (mode === 'forward'
-                ? protocol === 'ssh'
-                  ? '正向 SSH'
-                  : protocol === 'telnet'
-                    ? 'Telnet'
-                    : '串口'
-                : '反向监听')}
+            {!lockedHost && (mode === 'forward' ? (protocol === 'ssh' ? '正向 SSH' : protocolLabel(protocol)) : '反向监听')}
           </DialogTitle>
           <DialogDescription>
             {lockedHost
@@ -365,7 +356,11 @@ export function SessionForm() {
                   ? '本机作为客户端，主动 SSH 到有地址的服务器。'
                   : protocol === 'telnet'
                     ? 'Telnet 是明文协议，只在内网或受信任链路使用。登录在打开的终端里完成。'
-                    : '直连本机串口设备。只有终端字节流，没有文件传输；波特率等参数要和设备一致。'
+                    : protocol === 'serial'
+                      ? '直连本机串口设备。只有终端字节流，没有文件传输；波特率等参数要和设备一致。'
+                      : protocol === 'rdp'
+                        ? '默认使用内嵌 IronRDP 连接远程桌面，也可切换 FreeRDP 原生窗口。'
+                        : '使用内嵌 noVNC 连接远程桌面，画面直接显示在标签里。'
                 : '本机只在 127.0.0.1 上等待 shell 连入。公网地址用 cpolar 把这个端口映射出去。'}
           </DialogDescription>
         </DialogHeader>
@@ -382,6 +377,8 @@ export function SessionForm() {
                     <SelectItem value="ssh">SSH</SelectItem>
                     <SelectItem value="telnet">Telnet</SelectItem>
                     <SelectItem value="serial">串口</SelectItem>
+                    <SelectItem value="rdp">RDP</SelectItem>
+                    <SelectItem value="vnc">VNC</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -398,7 +395,9 @@ export function SessionForm() {
                     onChange={(e) => set('remark', e.target.value)}
                   />
                 </Field>
-                {protocol === 'telnet' ? (
+                {isDesktopProtocol(protocol) ? (
+                  <DesktopFields protocol={protocol} form={form} set={set} />
+                ) : protocol === 'telnet' ? (
                   <div className="grid grid-cols-[1fr_6rem] gap-2">
                     <Field label="主机">
                       <Input
@@ -868,7 +867,7 @@ function recognizedNote(options: SshConnectOptions | undefined): string {
   return parts.length > 0 ? `命令里还带了${parts.join('、')}。` : ''
 }
 
-function Field(props: { label: string; children: React.ReactNode }) {
+export function Field(props: { label: string; children: React.ReactNode }) {
   return (
     <Label className="grid gap-1 text-xs text-muted-foreground">
       {props.label}

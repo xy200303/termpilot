@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { Camera, ChevronLeft, ChevronRight, GalleryVertical, TerminalSquare, X } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, GalleryVertical, Gauge, MonitorUp, ScreenShare, TerminalSquare, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
@@ -36,6 +36,10 @@ export function TabBar() {
   const renameTab = useAppStore((s) => s.renameTab)
   const setTabRemark = useAppStore((s) => s.setTabRemark)
   const setNotice = useAppStore((s) => s.setNotice)
+  const activeTab = tabs.find((tab) => tab.id === activeTabId)
+  const isDesktop = activeTab?.kind === 'rdp' || activeTab?.kind === 'vnc'
+  const desktopPerformance = useAppStore((s) => s.desktopPerformance)
+  const toggleDesktopPerformance = useAppStore((s) => s.toggleDesktopPerformance)
   const [shot, setShot] = useState<CaptureDone | null>(null)
   const [shotError, setShotError] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -81,7 +85,16 @@ export function TabBar() {
     void (async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve))
       try {
-        const done = await captureTerminalView({ termId, mode })
+        let done: CaptureDone
+        if (isDesktop) {
+          const result = await window.api.desktop.agent.run(termId, { action: 'screenshot' })
+          const split = result.lastIndexOf('\n')
+          const file = result.slice(split + 1).trim()
+          if (split < 0 || !file) throw new Error('截图没有返回图片文件')
+          done = { note: result.slice(0, split), paths: [file] }
+        } else {
+          done = await captureTerminalView({ termId, mode })
+        }
         setNotice(null)
         setShot(done)
       } catch (error) {
@@ -137,7 +150,7 @@ export function TabBar() {
                     setRenamingId(t.id)
                   }}
                 >
-                  <TerminalSquare />
+                  {t.kind === 'rdp' ? <MonitorUp /> : t.kind === 'vnc' ? <ScreenShare /> : <TerminalSquare />}
                   <span className="min-w-0 truncate">{windowLabel(t.title, session?.name)}</span>
                   <span
                     role="button"
@@ -176,10 +189,20 @@ export function TabBar() {
           <ChevronRight />
         </Button>
       )}
+      {isDesktop && (
+        <Button
+          variant={desktopPerformance ? 'secondary' : 'ghost'}
+          size="icon-sm"
+          title={desktopPerformance ? '关闭桌面性能浮层' : '显示桌面性能浮层'}
+          onClick={toggleDesktopPerformance}
+        >
+          <Gauge />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon-sm"
-        title="截取当前终端画面"
+        title="截取当前画面"
         disabled={!activeTabId}
         onClick={() => shoot('viewport')}
       >
@@ -188,8 +211,8 @@ export function TabBar() {
       <Button
         variant="ghost"
         size="icon-sm"
-        title="截取滚动缓冲"
-        disabled={!activeTabId}
+        title={isDesktop ? '图形桌面没有终端滚动缓冲' : '截取滚动缓冲'}
+        disabled={!activeTabId || isDesktop}
         onClick={() => shoot('scrollback')}
       >
         <GalleryVertical />

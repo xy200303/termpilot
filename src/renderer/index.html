@@ -5,12 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:*"
     />
     <title>TermPilot</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; }
+      .boot {
+        display: flex; height: 100%; align-items: center; justify-content: center;
+        background: #f5f6f8; color: #667085;
+        font: 14px system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot">正在启动 TermPilot…</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

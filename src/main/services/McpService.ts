@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
-import { isConnId, isTermId, newTermId } from '../../shared/ids'
+import { isConnId, isTermId, newTermId, newViewId } from '../../shared/ids'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
@@ -17,6 +17,7 @@ import {
   MCP_HOST,
   type AuthType,
   type ConnectMode,
+  type DesktopOptions,
   type McpRuntime,
   type McpSettings,
   type SessionConfig,
@@ -28,8 +29,12 @@ import type { ReverseListenerService } from './ReverseListenerService'
 import type { SftpService } from './SftpService'
 import type { StorageService } from './StorageService'
 import type { TerminalService } from './TerminalService'
+import type { DesktopService } from './desktop/DesktopService'
+import type { DesktopAgentService } from './desktop/DesktopAgentService'
+import { LinuxAccessibilityService } from './desktop/LinuxAccessibilityService'
+import type { DesktopAgentInput } from '../../shared/desktop-agent'
 import { listSerialPorts } from './transport/serial'
-import { capabilitiesOf, protocolLabel, TELNET_DEFAULT_PORT } from '../../shared/protocol'
+import { capabilitiesOf, defaultPort, isDesktopProtocol, protocolLabel, TELNET_DEFAULT_PORT } from '../../shared/protocol'
 import type { SerialParity, SessionProtocol } from '../../shared/protocol'
 
 const SENSITIVE = /^(\/etc|\/boot|\/bin|\/sbin|\/usr|\/dev|\/sys|\/proc)(\/|$)|^[A-Za-z]:\\Windows\\/i
@@ -58,6 +63,7 @@ type SessionPatch = {
   jumpSecret?: string
   listenPort?: number
   sftpMode?: SftpMode
+  desktopOptions?: DesktopOptions
   group?: string
   remark?: string
 }
@@ -83,6 +89,7 @@ export class McpService {
   private modeReads = new Map<string, (result: TermModeReply) => void>()
   private token = ''
   private runtime: McpRuntime = { running: false, port: MCP_DEFAULT_PORT, clients: 0 }
+  private accessibility: LinuxAccessibilityService
 
   constructor(
     private storage: StorageService,
@@ -90,8 +97,12 @@ export class McpService {
     private sftp: SftpService,
     private exec2: ExecService,
     private reverse: ReverseListenerService,
-    private getSender: () => WebContents | null
-  ) {}
+    private getSender: () => WebContents | null,
+    private desktop: DesktopService,
+    private desktopAgent: DesktopAgentService
+  ) {
+    this.accessibility = new LinuxAccessibilityService(storage, exec2, desktop)
+  }
 
   state(): McpRuntime {
     return this.runtime
@@ -441,6 +452,55 @@ export class McpService {
         await this.sftp.remove(found.id, path, kind)
         return `已删除 ${path}`
       }
+      case 'desktop_list':
+        return JSON.stringify(this.desktopAgent.list(), null, 2)
+      case 'desktop_screenshot':
+        return this.desktopAgent.run(need(raw, 'viewId'), { action: 'screenshot', grid: desktopGrid(raw) })
+      case 'desktop_click':
+        return this.desktopAgent.run(need(raw, 'viewId'), {
+          action: 'click',
+          x: intArg(raw, 'x') ?? 0,
+          y: intArg(raw, 'y') ?? 0,
+          button: desktopButton(raw),
+          double: boolArg(raw, 'double')
+        })
+      case 'desktop_key':
+        return this.desktopAgent.run(need(raw, 'viewId'), { action: 'key', keys: need(raw, 'keys') })
+      case 'desktop_type':
+        return this.desktopAgent.run(need(raw, 'viewId'), { action: 'type', text: need(raw, 'text') })
+      case 'desktop_scroll':
+        return this.desktopAgent.run(need(raw, 'viewId'), {
+          action: 'scroll',
+          x: intArg(raw, 'x'),
+          y: intArg(raw, 'y'),
+          deltaY: intArg(raw, 'deltaY') ?? 0
+        })
+      case 'desktop_wait':
+        return this.desktopAgent.run(need(raw, 'viewId'), {
+          action: 'wait',
+          ms: intArg(raw, 'ms'),
+          stableMs: intArg(raw, 'stableMs'),
+          timeoutMs: intArg(raw, 'timeoutMs')
+        })
+      case 'desktop_actions': {
+        if (!Array.isArray(raw.actions) || raw.actions.length === 0) throw new Error('actions 至少包含一个操作')
+        const actions = raw.actions.map((item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('actions 里每项都必须是操作对象')
+          return desktopAction(item as Record<string, unknown>)
+        })
+        return this.desktopAgent.runMany(need(raw, 'viewId'), actions)
+      }
+      case 'desktop_perf': {
+        const id = textArg(raw, 'viewId')
+        if (id) return JSON.stringify(this.desktop.metrics(id), null, 2)
+        return JSON.stringify(this.desktop.list().map((item) => this.desktop.metrics(item.viewId)), null, 2)
+      }
+      case 'desktop_a11y': {
+        const operation = textArg(raw, 'operation') || 'tree'
+        if (operation !== 'tree' && operation !== 'click') throw new Error('operation 只能是 tree 或 click')
+        if (operation === 'click' && !textArg(raw, 'path')) throw new Error('点击无障碍控件需要 tree 返回的 path')
+        return this.accessibility.run(need(raw, 'viewId'), operation, textArg(raw, 'path'), textArg(raw, 'action'))
+      }
       case 'app_screenshot':
         return this.appShot()
       case 'app_record': {
@@ -538,6 +598,31 @@ export class McpService {
   private async connectSession(key: string): Promise<string> {
     const session = this.findSession(key)
     if (session.mode === 'reverse') throw new Error('反向监听要在界面上点开始监听')
+    if (isDesktopProtocol(session.protocol)) {
+      const existing = this.desktop.list().find((item) => item.sessionId === session.id)
+      if (existing) {
+        return [
+          `连接 ${session.publicId}（${session.name}）的桌面已经打开。`,
+          `桌面：${existing.viewId}`,
+          `${session.protocol.toUpperCase()} 每个连接只保留一个桌面标签，直接复用现有窗口。`,
+          '这是图形桌面，不支持 term_exec / sftp_*。整窗截图和录屏可用 app_screenshot / app_record。'
+        ].join('\n')
+      }
+      const viewId = newViewId()
+      this.send(IPC.mcpOpenTab, { termId: viewId, sessionId: session.id, kind: session.protocol, title: '桌面' })
+      try {
+        const result = await this.desktop.open(viewId, session.id)
+        return [
+          `已打开连接 ${session.publicId}（${session.name}）。`,
+          `桌面：${viewId}`,
+          result.mode === 'embedded' ? `${session.protocol.toUpperCase()} 画面已内嵌到标签。` : result.message,
+          '这是图形桌面，不支持 term_exec / sftp_*。整窗截图和录屏可用 app_screenshot / app_record。'
+        ].join('\n')
+      } catch (error) {
+        this.send(IPC.mcpCloseTab, viewId)
+        throw error
+      }
+    }
     const n = this.terminal.listTerms().filter((term) => term.sessionId === session.id).length + 1
     const title = `窗口 ${n}`
     const termId = newTermId()
@@ -596,6 +681,13 @@ export class McpService {
   private normalize(current: SessionConfig | null, patch: SessionPatch, creating: boolean): SessionInput {
     const protocol = patch.protocol ?? current?.protocol ?? 'ssh'
     const protocolChanged = protocol !== (current?.protocol ?? 'ssh')
+    const desktopOptions = isDesktopProtocol(protocol)
+      ? (Object.fromEntries(
+          [...Object.entries(current?.desktopOptions ?? {}), ...Object.entries(patch.desktopOptions ?? {})].filter(
+            ([, value]) => value !== undefined
+          )
+        ) as DesktopOptions)
+      : undefined
     const input: SessionInput = {
       name: (patch.name ?? current?.name ?? '').trim(),
       group: (patch.group ?? current?.group ?? '').trim(),
@@ -603,9 +695,7 @@ export class McpService {
       // 字节流协议只有正向直连一种形态
       mode: protocol === 'ssh' ? (patch.mode ?? current?.mode ?? 'forward') : 'forward',
       host: (patch.host ?? current?.host ?? '').trim(),
-      port:
-        patch.port ??
-        (protocolChanged || current === null ? (protocol === 'telnet' ? TELNET_DEFAULT_PORT : 22) : current.port),
+      port: patch.port ?? (protocolChanged || current === null ? defaultPort(protocol) : current.port),
       username: (patch.username ?? current?.username ?? '').trim(),
       authType: patch.authType ?? current?.authType ?? 'password',
       keyPath: (patch.keyPath ?? current?.keyPath ?? '').trim() || undefined,
@@ -616,6 +706,7 @@ export class McpService {
       parity: patch.parity ?? current?.parity,
       listenPort: patch.listenPort ?? current?.listenPort,
       sftpMode: patch.sftpMode ?? current?.sftpMode,
+      desktopOptions,
       remark: patch.remark ?? current?.remark,
       secret: patch.secret ? patch.secret : undefined,
       jumpHost: patch.jumpHost !== undefined ? patch.jumpHost.trim() : (current?.jumpHost ?? ''),
@@ -630,6 +721,8 @@ export class McpService {
       }
     } else if (protocol === 'telnet') {
       if (!input.host) throw new Error('Telnet 需要主机地址 host')
+    } else if (isDesktopProtocol(protocol)) {
+      if (!input.host) throw new Error(`${protocolLabel(protocol)}需要主机地址 host`)
     } else if (input.mode === 'forward') {
       if (!input.host || !input.username) throw new Error('主机和用户名不能为空')
       if (input.authType === 'key' && !input.keyPath) throw new Error('私钥认证需要填写 keyPath')
@@ -660,7 +753,8 @@ export class McpService {
       this.send(IPC.mcpCloseTab, term.id)
     }
     this.sftp.close(session.id)
-    return `已断开 ${session.name}，关闭 ${terms.length} 个终端`
+    const desktops = this.desktop.closeSession(session.id)
+    return `已断开 ${session.name}，关闭 ${terms.length} 个终端、${desktops} 个桌面窗口`
   }
 
   private async openLocal(): Promise<string> {
@@ -701,6 +795,12 @@ export class McpService {
     const found = this.requireForward(key)
     if (capabilitiesOf(found.protocol)[capability]) return found
     const feature = capability === 'exec' ? 'exec 通道（term_exec）' : 'SFTP 文件传输（sftp_*）'
+    if (isDesktopProtocol(found.protocol)) {
+      throw new Error(
+        `该连接是 ${protocolLabel(found.protocol)} 图形桌面，没有终端字节流，不支持 ${feature}。` +
+          `可用 app_screenshot / app_record 截取应用窗口；该协议也不支持 term_pty / term_write。`
+      )
+    }
     throw new Error(
       `该连接是${protocolLabel(found.protocol)}协议，只有终端字节流，不支持 ${feature}。` +
         `改用 connection_open 开终端后走 term_pty / term_write 这一族。`
@@ -1101,6 +1201,15 @@ function listenError(error: unknown, port: number): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function desktopButton(raw: Record<string, unknown>): 'left' | 'middle' | 'right' | undefined {
+  const value = textArg(raw, 'button')
+  if (!value) return undefined
+  if (value !== 'left' && value !== 'middle' && value !== 'right') {
+    throw new Error('button 只能是 left、middle 或 right')
+  }
+  return value
+}
+
 function lineShot(raw: Record<string, unknown>): {
   termId: string
   startLine: number | undefined
@@ -1164,8 +1273,8 @@ function keyArg(raw: Record<string, unknown>): Array<(typeof TERM_KEYS)[number]>
 
 function sessionPatch(raw: Record<string, unknown>): SessionPatch {
   const protocol = textArg(raw, 'protocol')
-  if (protocol && protocol !== 'ssh' && protocol !== 'telnet' && protocol !== 'serial') {
-    throw new Error('protocol 只能是 ssh、telnet 或 serial')
+  if (protocol && protocol !== 'ssh' && protocol !== 'telnet' && protocol !== 'serial' && protocol !== 'rdp' && protocol !== 'vnc') {
+    throw new Error('protocol 只能是 ssh、telnet、serial、rdp 或 vnc')
   }
   const mode = textArg(raw, 'mode')
   if (mode && mode !== 'forward' && mode !== 'reverse') throw new Error('mode 只能是 forward 或 reverse')
@@ -1195,9 +1304,56 @@ function sessionPatch(raw: Record<string, unknown>): SessionPatch {
     parity: parity as SessionPatch['parity'],
     listenPort: intArg(raw, 'listenPort'),
     sftpMode: sftpMode as SessionPatch['sftpMode'],
+    desktopOptions: isDesktopProtocol(protocol)
+      ? {
+          viewOnly: boolArg(raw, 'viewOnly'),
+          width: intArg(raw, 'width'),
+          height: intArg(raw, 'height'),
+          nativeClient: boolArg(raw, 'nativeClient'),
+          clipboard: boolArg(raw, 'clipboard'),
+          performance: desktopPerformance(raw)
+        }
+      : undefined,
     group: textArg(raw, 'group'),
     remark: textArg(raw, 'remark')
   }
+}
+
+function desktopPerformance(raw: Record<string, unknown>): DesktopOptions['performance'] {
+  const value = textArg(raw, 'performance')
+  if (value === undefined) return undefined
+  if (value === 'auto' || value === 'quality' || value === 'balanced' || value === 'speed') return value
+  throw new Error('performance 只能是 auto、quality、balanced 或 speed')
+}
+
+function desktopGrid(raw: Record<string, unknown>): boolean | number | undefined {
+  const grid = raw.grid
+  if (grid === undefined || typeof grid === 'boolean') return grid
+  if (typeof grid === 'number' && Number.isInteger(grid) && grid >= 20 && grid <= 500) return grid
+  throw new Error('grid 只能是 true/false，或 20–500 的网格像素间距')
+}
+
+function desktopAction(raw: Record<string, unknown>): DesktopAgentInput {
+  const action = textArg(raw, 'action')
+  if (action === 'screenshot') return { action, grid: desktopGrid(raw) }
+  if (action === 'click') {
+    return {
+      action,
+      x: intArg(raw, 'x') ?? 0,
+      y: intArg(raw, 'y') ?? 0,
+      button: desktopButton(raw),
+      double: boolArg(raw, 'double')
+    }
+  }
+  if (action === 'key') return { action, keys: need(raw, 'keys') }
+  if (action === 'type') return { action, text: need(raw, 'text') }
+  if (action === 'scroll') {
+    return { action, x: intArg(raw, 'x'), y: intArg(raw, 'y'), deltaY: intArg(raw, 'deltaY') ?? 0 }
+  }
+  if (action === 'wait') {
+    return { action, ms: intArg(raw, 'ms'), stableMs: intArg(raw, 'stableMs'), timeoutMs: intArg(raw, 'timeoutMs') }
+  }
+  throw new Error(`不支持的桌面操作 ${action || '(缺少 action)'}`)
 }
 
 function stripAnsi(text: string): string {

@@ -42,7 +42,7 @@ export interface SerialOptions {
 /** 串口传输：serialport 包的一条字节流。没有 resize，没有并发。 */
 export class SerialTransport implements ByteTransport {
   readonly protocol = 'serial' as const
-  readonly capabilities: ProtocolCapabilities = { pty: true, exec: false, sftp: false, concurrent: false }
+  readonly capabilities: ProtocolCapabilities = { pty: true, desktop: false, exec: false, sftp: false, concurrent: false }
 
   private port: import('serialport').SerialPort | null = null
   private dataCb: ((data: Buffer) => void) | null = null

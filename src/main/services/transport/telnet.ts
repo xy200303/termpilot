@@ -25,7 +25,7 @@ const SB_TERMINAL_SEND = 1
  */
 export class TelnetTransport implements ByteTransport {
   readonly protocol = 'telnet' as const
-  readonly capabilities: ProtocolCapabilities = { pty: true, exec: false, sftp: false, concurrent: false }
+  readonly capabilities: ProtocolCapabilities = { pty: true, desktop: false, exec: false, sftp: false, concurrent: false }
 
   private socket: Socket | null = null
   private dataCb: ((data: Buffer) => void) | null = null

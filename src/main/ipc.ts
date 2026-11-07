@@ -6,7 +6,6 @@ import { join, relative, resolve } from 'node:path'
 import { IPC } from '../shared/ipc-channels'
 import {
   MCP_HOST,
-  type AgentId,
   type CaptureRect,
   type CaptureReply,
   type RecordReply,
@@ -24,7 +23,10 @@ import type { TerminalService } from './services/TerminalService'
 import type { ReverseListenerService } from './services/ReverseListenerService'
 import type { McpService } from './services/McpService'
 import type { SftpService } from './services/SftpService'
-import { listAgentTargets, writeAgentTarget } from './services/AgentConfigService'
+import type { DesktopService } from './services/desktop/DesktopService'
+import type { DesktopAgentService } from './services/desktop/DesktopAgentService'
+import type { DesktopAgentInput, DesktopAgentReply } from '../shared/desktop-agent'
+import { buildAgentGuide } from './services/AgentConfigService'
 import { listSerialPorts } from './services/transport/serial'
 import { checkUpdate, releaseUrl } from './update-check'
 import { paintFromContents } from './window-chrome'
@@ -44,7 +46,9 @@ export function registerIpc(
   terminal: TerminalService,
   reverse: ReverseListenerService,
   sftp: SftpService,
-  mcp: McpService
+  mcp: McpService,
+  desktop: DesktopService,
+  desktopAgent: DesktopAgentService
 ): void {
   // ------------------------------------------------------------ 会话 CRUD
   ipcMain.handle(IPC.sessionList, () => storage.list())
@@ -168,14 +172,20 @@ export function registerIpc(
 
   ipcMain.handle(IPC.mcpAudit, () => storage.listAudit())
 
-  ipcMain.handle(IPC.mcpAgents, () => {
-    const settings = storage.getMcpSettings()
-    return listAgentTargets(`http://${MCP_HOST}:${settings.port}/mcp`)
-  })
-
-  ipcMain.handle(IPC.mcpApplyAgent, (_e, id: AgentId) => {
-    const settings = storage.getMcpSettings()
-    return writeAgentTarget(id, `http://${MCP_HOST}:${settings.port}/mcp`, settings.token)
+  ipcMain.handle(IPC.mcpAgentGuide, (_event, input?: McpSettingsInput) => {
+    const saved = storage.getMcpSettings()
+    const port = input?.port ?? saved.port
+    const token = input?.token ?? saved.token
+    const enabled = input?.enabled ?? saved.enabled
+    const skillFile = app.isPackaged
+      ? join(process.resourcesPath, 'skills', 'termpilot', 'SKILL.md')
+      : join(app.getAppPath(), 'skills', 'termpilot', 'SKILL.md')
+    return buildAgentGuide({
+      url: `http://${MCP_HOST}:${port}/mcp`,
+      token,
+      enabled,
+      skillFile
+    })
   })
 
   ipcMain.handle(IPC.mcpSave, async (_e, input: McpSettingsInput) => {
@@ -234,6 +244,17 @@ export function registerIpc(
   ipcMain.on(IPC.recordReply, (_event, result: RecordReply) => mcp.resolveRecord(result))
   ipcMain.on(IPC.termLinesReply, (_event, result: TermLinesReply) => mcp.resolveLines(result))
   ipcMain.on(IPC.termModeReply, (_event, result: TermModeReply) => mcp.resolveMode(result))
+
+  // ---------------------------------------------------------- 图形桌面
+  ipcMain.handle(IPC.desktopOpen, (_event, viewId: string, sessionId: string) => desktop.open(viewId, sessionId))
+  ipcMain.handle(IPC.desktopClose, (_event, viewId: string) => desktop.close(viewId))
+  ipcMain.handle(IPC.desktopClipboardRead, () => clipboard.readText())
+  ipcMain.handle(IPC.desktopClipboardWrite, (_event, text: string) => clipboard.writeText(text))
+  ipcMain.handle(IPC.desktopMetrics, (_event, viewId: string) => desktop.metrics(viewId))
+  ipcMain.handle(IPC.desktopAgent, (_event, viewId: string, input: DesktopAgentInput) =>
+    desktopAgent.run(viewId, input)
+  )
+  ipcMain.on(IPC.desktopAgentReply, (_event, reply: DesktopAgentReply) => desktopAgent.resolve(reply))
 
   // ---------------------------------------------------------- 反向监听
   ipcMain.handle(IPC.reverseStart, (_e, sessionId: string) => {
