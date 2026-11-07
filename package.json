@@ -10,10 +10,11 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "check:glibc": "node scripts/check-glibc.mjs",
-    "dist": "npm run cli:build && electron-vite build && electron-builder --publish never",
-    "dist:win": "npm run cli:build && electron-vite build && electron-builder --win --publish never",
-    "dist:mac": "npm run cli:build && electron-vite build && electron-builder --mac --publish never",
-    "dist:linux": "npm run cli:build && electron-vite build && electron-builder --linux --publish never",
+    "rebuild:native": "electron-rebuild -f -o node-pty,@serialport/bindings-cpp",
+    "dist": "npm run cli:build && npm run rebuild:native && electron-vite build && electron-builder --publish never",
+    "dist:win": "npm run cli:build && npm run rebuild:native && electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "npm run cli:build && npm run rebuild:native && electron-vite build && electron-builder --mac --publish never",
+    "dist:linux": "npm run cli:build && npm run rebuild:native && electron-vite build && electron-builder --linux --publish never",
     "cli:build": "node scripts/build-cli.mjs"
   },
   "dependencies": {
@@ -42,6 +43,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.2",
     "@types/react": "^19.3.0",
@@ -122,7 +124,7 @@
       "**/node_modules/@serialport/**",
       "**/node_modules/serialport/**"
     ],
-    "npmRebuild": true,
+    "npmRebuild": false,
     "icon": "resources/icon.png",
     "win": {
       "target": [

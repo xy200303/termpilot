@@ -2,7 +2,8 @@
 
 ## 0.8.1
 
-- 修复 Linux 安装包在 Ubuntu 22.04 上因原生模块要求 `GLIBC_2.42` 而无法启动的问题。Linux 构建固定到 Ubuntu 22.04，原生模块兼容目标改为 `GLIBC_2.35`；发布前自动检查 `node-pty`、串口、SSH 加密等原生模块的 GLIBC 版本。
+- 修复 Linux 安装包在 Ubuntu 22.04 上因原生模块要求 `GLIBC_2.42` 而无法启动的问题。Linux 构建固定到 Ubuntu 22.04，原生模块兼容目标改为 `GLIBC_2.35`；发布前自动检查 `node-pty`、串口和 SSH 加密模块的 GLIBC 版本。
+- 打包时只重建 `node-pty` 和串口模块，不再编译 ssh2 的可选 `cpu-features`，避免它在 Electron 44 下编译失败；ssh2 自动使用纯 JS 加密实现。
 - 修复最小化 Linux 桌面没有系统钥匙串时无法保存凭据、启动流程报错的问题。系统钥匙串不可用时，凭据改用 `userData/local-secrets.key` 的本机 AES-256-GCM 密钥加密，文件权限设为 `0600`；原有系统钥匙串密文仍可读取。
 - Linux CI 同样固定到 Ubuntu 22.04，提前发现高版本 glibc 依赖。
 

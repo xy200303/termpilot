@@ -1,6 +1,7 @@
 ## 0.8.1
 
 - 修复 Ubuntu 22.04 上 Linux 包因原生模块要求 GLIBC 2.42 而无法启动。Linux 构建固定到 Ubuntu 22.04，并自动检查 GLIBC 不超过 2.35。
+- 打包只重建 `node-pty` 和串口模块，跳过 ssh2 可选模块 `cpu-features`，避免 Electron 44 下编译失败。
 - 修复没有系统钥匙串的 Linux 桌面无法保存凭据的问题，改用权限 0600 的本机 AES-256-GCM 密钥文件降级。
 - CI 固定 Ubuntu 22.04 构建环境。
 
