@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readdirSync, statSync } from 'node:fs'
+import { openSync, readSync, closeSync, readdirSync, statSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 
 const root = process.argv[2] || 'release/linux-unpacked'
@@ -17,6 +17,16 @@ function compare(a, b) {
   return a[0] - b[0] || a[1] - b[1]
 }
 
+function isElf(file) {
+  const fd = openSync(file, 'r')
+  try {
+    const magic = Buffer.alloc(4)
+    return readSync(fd, magic, 0, 4, 0) === 4 && magic.toString('latin1') === '\x7fELF'
+  } finally {
+    closeSync(fd)
+  }
+}
+
 function format(version) {
   return version.join('.')
 }
@@ -27,6 +37,7 @@ const failures = []
 
 for (const file of walk(root)) {
   if (extname(file) !== '.node' && basename(file) !== 'spawn-helper') continue
+  if (!isElf(file)) continue
   let output
   try {
     output = execFileSync('objdump', ['-T', file], { encoding: 'utf8' })
@@ -38,6 +49,7 @@ for (const file of walk(root)) {
   checked += 1
   const max = versions.reduce((a, b) => (compare(b, a) > 0 ? b : a), [0, 0])
   if (compare(max, highest) > 0) highest = max
+  console.log(`${file}：GLIBC ${format(max)}`)
   if (compare(max, target) > 0) failures.push(`${file}（最高 GLIBC ${format(max)}）`)
 }
 

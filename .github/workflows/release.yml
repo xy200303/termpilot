@@ -24,7 +24,7 @@ jobs:
           go-version: '1.22'
       - name: Install Linux build tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential python3 fakeroot dpkg
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3 fakeroot dpkg xvfb
       - name: Tag must match package.json
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -47,6 +47,9 @@ jobs:
       - name: Check Linux glibc compatibility
         if: runner.os == 'Linux'
         run: node scripts/check-glibc.mjs release/linux-unpacked 2.35
+      - name: Smoke test Linux package
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke-linux.mjs release/linux-unpacked
       - uses: actions/upload-artifact@v4
         with:
           name: termpilot-${{ runner.os }}
