@@ -1326,11 +1326,13 @@ function desktopPerformance(raw: Record<string, unknown>): DesktopOptions['perfo
   throw new Error('performance 只能是 auto、quality、balanced 或 speed')
 }
 
-function desktopGrid(raw: Record<string, unknown>): boolean | number | undefined {
+function desktopGrid(raw: Record<string, unknown>): boolean | number {
   const grid = raw.grid
-  if (grid === undefined || typeof grid === 'boolean') return grid
+  // 默认带 100px 网格：Agent 不传参数时也能直接按刻度算坐标。
+  if (grid === undefined) return 100
+  if (typeof grid === 'boolean') return grid
   if (typeof grid === 'number' && Number.isInteger(grid) && grid >= 20 && grid <= 500) return grid
-  throw new Error('grid 只能是 true/false，或 20–500 的网格像素间距')
+  throw new Error('grid 只能是 100px 网格开关（true/false），或 20–500 的网格像素间距')
 }
 
 function desktopAction(raw: Record<string, unknown>): DesktopAgentInput {

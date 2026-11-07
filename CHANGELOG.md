@@ -1,5 +1,11 @@
 # 更新日志
 
+## 0.8.2
+
+- `desktop_screenshot` 默认叠加 100px 坐标网格，Agent 不传参数也能直接按刻度算点击坐标；需要干净画面时传 `grid=false` 关闭，也可传 20–500 自定义间距。同一个默认值也作用于 `desktop_actions` 里的截图步骤。
+
+安装包没有代码签名。
+
 ## 0.8.1
 
 - 修复 Linux 安装包在 Ubuntu 22.04 上因原生模块要求 `GLIBC_2.42` 而无法启动的问题。Linux 构建固定到 Ubuntu 22.04，原生模块兼容目标改为 `GLIBC_2.35`；发布前自动检查 `node-pty`、串口和 SSH 加密模块的 GLIBC 版本。

@@ -263,11 +263,11 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_screenshot',
     description:
-      '截取一个图形桌面并返回 PNG。grid=true 叠加 100px 坐标网格，也可填 20–500 的网格间距；网格坐标就是图片像素坐标，便于后续点击。原生 RDP 不支持网格。',
+      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。原生 RDP 不支持网格。',
     images: 'always',
     input: {
       viewId,
-      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('true 为 100px 网格，或自定义间距')
+      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('默认 100px 网格；false 关闭，或自定义间距')
     }
   },
   {
