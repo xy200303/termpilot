@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { app } from 'electron'
+import { app, nativeImage } from 'electron'
 import type { WebContents } from 'electron'
 import { IPC } from '../../../shared/ipc-channels'
 import type { DesktopAgentInput, DesktopAgentReply, DesktopRegion } from '../../../shared/desktop-agent'
 import type { DesktopService } from './DesktopService'
 import { NativeAgentService } from './NativeAgentService'
+import { renderGrid } from './gridRender'
 import { cropPng, withGrid } from './pngGrid'
 
 /** GUI 面板和 MCP 共用的桌面操作入口。 */
@@ -33,7 +34,7 @@ export class DesktopAgentService {
       if (!pid) throw new Error('原生客户端进程不存在或已退出')
       const result = await this.nativeAgent.run(pid, input)
       if (!result.file) return result.note
-      const done = decorate(result.file, grid, region)
+      const done = await decorate(this.sender(), result.file, grid, region)
       return `${result.note}${done.suffix}\n${result.file}`
     }
 
@@ -61,7 +62,7 @@ export class DesktopAgentService {
       mkdirSync(dir, { recursive: true })
       const file = join(dir, `desktop-${viewId}-${Date.now()}.png`)
       writeFileSync(file, Buffer.from(reply.pngBase64, 'base64'))
-      const done = decorate(file, grid, region)
+      const done = await decorate(this.sender(), file, grid, region)
       const note = reply.note ?? `${label} 画面已截取`
       return `${note}${done.suffix}\n${file}`
     }
@@ -92,13 +93,38 @@ function gridSpacing(input: DesktopAgentInput): number {
 }
 
 /** 在落盘的截图上裁区域、叠网格，返回要拼到回复里的说明。 */
-function decorate(file: string, spacing: number, region?: DesktopRegion): { suffix: string } {
+async function decorate(wc: WebContents | null, file: string, spacing: number, region?: DesktopRegion): Promise<{ suffix: string }> {
   const buffer = readFileSync(file)
   const cropped = region
     ? cropPng(buffer, region)
     : { png: buffer, x: 0, y: 0, width: 0, height: 0, fullWidth: 0, fullHeight: 0 }
-  const gridded = spacing > 0 ? withGrid(cropped.png, spacing, cropped.x, cropped.y) : null
-  const out = gridded ?? cropped.png
+  let out = cropped.png
+  let gridded = false
+  if (spacing > 0) {
+    const image = nativeImage.createFromBuffer(cropped.png)
+    const rendered =
+      wc && !wc.isDestroyed()
+        ? await renderGrid(wc, image, {
+            step: spacing,
+            originX: cropped.x,
+            originY: cropped.y,
+            showOrigin: Boolean(region),
+            spanWidth: image.getSize().width,
+            spanHeight: image.getSize().height
+          })
+        : image
+    if (rendered !== image) {
+      out = rendered.toPNG()
+      gridded = true
+    } else {
+      // 渲染进程不可用或绘制失败时退回主进程位图合成，保证网格不丢。
+      const fallback = withGrid(cropped.png, spacing, cropped.x, cropped.y)
+      if (fallback) {
+        out = fallback
+        gridded = true
+      }
+    }
+  }
   if (out !== buffer) writeFileSync(file, out)
   const parts: string[] = []
   if (region) {
