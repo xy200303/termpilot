@@ -94,12 +94,18 @@ function gridSpacing(input: DesktopAgentInput): number {
 /** 在落盘的截图上裁区域、叠网格，返回要拼到回复里的说明。 */
 function decorate(file: string, spacing: number, region?: DesktopRegion): { suffix: string } {
   const buffer = readFileSync(file)
-  const cropped = region ? cropPng(buffer, region) : { png: buffer, x: 0, y: 0, width: 0, height: 0 }
+  const cropped = region
+    ? cropPng(buffer, region)
+    : { png: buffer, x: 0, y: 0, width: 0, height: 0, fullWidth: 0, fullHeight: 0 }
   const gridded = spacing > 0 ? withGrid(cropped.png, spacing, cropped.x, cropped.y) : null
   const out = gridded ?? cropped.png
   if (out !== buffer) writeFileSync(file, out)
   const parts: string[] = []
-  if (region) parts.push(`区域 ${cropped.x},${cropped.y} ${cropped.width}×${cropped.height}，坐标仍是整屏坐标`)
-  if (gridded) parts.push(`网格 ${spacing}px，刻度与点击坐标一致`)
+  if (region) {
+    parts.push(
+      `区域 ${cropped.x},${cropped.y} ${cropped.width}×${cropped.height}，原画面 ${cropped.fullWidth}×${cropped.fullHeight}，刻度是整屏坐标`
+    )
+  }
+  if (gridded) parts.push(`网格 ${spacing}px`)
   return { suffix: parts.length > 0 ? `，${parts.join('；')}` : '' }
 }

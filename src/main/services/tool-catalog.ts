@@ -263,7 +263,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_screenshot',
     description:
-      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，刻度仍标整屏坐标，可直接拿去 desktop_click。网格在主进程合成，VNC、内嵌 RDP 和原生 RDP 窗口都一致。',
+      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，左上角仍标这块图在原画面里的起点坐标，刻度也用原画面坐标，可直接拿去 desktop_click。浅色画面自动改用深色网格线。',
     images: 'always',
     input: {
       viewId,

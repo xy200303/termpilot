@@ -37,8 +37,15 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
   if (bitmap.length !== width * height * 4) return null
 
   const scale = width > 1600 ? 2 : 1
-  const lineAlpha = 0.48
   const advance = (GLYPH_W + 1) * scale
+  // 浅色画面用深线，深色画面用浅线，避免整片网格看不见或糊成一块。
+  const light = brightness(bitmap, width, height) > 140
+  const line = light ? [0, 0, 0, 0.55] : [255, 255, 255, 0.55]
+
+  // 左上角标出这块图在原画面里的起点；顶部刻度避开它。
+  const origin = `${originX},${originY}`
+  const originRight = 3 + origin.length * advance + 4
+  drawText(bitmap, width, height, origin, 3, 3, scale)
 
   // 间距太密时跳过部分刻度文字，只保留能读得清的那几行。
   const labelRoom = 4 * advance + 8
@@ -47,9 +54,9 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
   if (firstX <= originX) firstX += spacing
   for (let i = 0, abs = firstX; abs < originX + width; abs += spacing, i += 1) {
     const x = abs - originX
-    for (let y = 0; y < height; y += 1) blend(bitmap, width, x, y, 255, 255, 255, lineAlpha)
+    for (let y = 0; y < height; y += 1) blend(bitmap, width, x, y, line[0], line[1], line[2], line[3])
     const text = String(abs)
-    if (i % vStep === 0 && x + 3 + text.length * advance + 3 < width) {
+    if (i % vStep === 0 && x + 3 > originRight + 4 && x + 3 + text.length * advance + 3 < width) {
       drawText(bitmap, width, height, text, x + 3, 3, scale)
     }
   }
@@ -58,14 +65,11 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
   if (firstY <= originY) firstY += spacing
   for (let i = 0, abs = firstY; abs < originY + height; abs += spacing, i += 1) {
     const y = abs - originY
-    for (let x = 0; x < width; x += 1) blend(bitmap, width, x, y, 255, 255, 255, lineAlpha)
+    for (let x = 0; x < width; x += 1) blend(bitmap, width, x, y, line[0], line[1], line[2], line[3])
     if (i % hStep === 0) drawText(bitmap, width, height, String(abs), 3, y + 3, scale)
   }
 
-  // 尺寸和间距的说明放在右下角，避开左上角的第一列刻度。
-  const summary = originX === 0 && originY === 0
-    ? `${width}x${height} ${spacing}px`
-    : `${originX},${originY} ${width}x${height} ${spacing}px`
+  const summary = `${width}x${height} ${spacing}px`
   const summaryWidth = summary.length * advance + 2 * scale
   drawText(bitmap, width, height, summary, Math.max(3, width - summaryWidth - 3), Math.max(3, height - GLYPH_H * scale - 5), scale)
 
@@ -73,7 +77,15 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
 }
 
 /** 按 region 裁一块出来，返回裁剪图和它在原画面里的左上角。 */
-export function cropPng(png: Buffer, region: DesktopRegion): { png: Buffer; x: number; y: number; width: number; height: number } {
+export function cropPng(png: Buffer, region: DesktopRegion): {
+  png: Buffer
+  x: number
+  y: number
+  width: number
+  height: number
+  fullWidth: number
+  fullHeight: number
+} {
   const image = nativeImage.createFromBuffer(png)
   if (image.isEmpty()) throw new Error('截图无法解码，请重新截一次')
   const { width, height } = image.getSize()
@@ -85,7 +97,21 @@ export function cropPng(png: Buffer, region: DesktopRegion): { png: Buffer; x: n
   if (x + w > width || y + h > height) {
     throw new Error(`region ${x},${y} ${w}x${h} 超出画面范围 ${width}x${height}`)
   }
-  return { png: image.crop({ x, y, width: w, height: h }).toPNG(), x, y, width: w, height: h }
+  return { png: image.crop({ x, y, width: w, height: h }).toPNG(), x, y, width: w, height: h, fullWidth: width, fullHeight: height }
+}
+
+function brightness(bitmap: Buffer, width: number, height: number): number {
+  const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 4000)))
+  let sum = 0
+  let count = 0
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const i = (y * width + x) * 4
+      sum += bitmap[i + 2] * 0.299 + bitmap[i + 1] * 0.587 + bitmap[i] * 0.114
+      count += 1
+    }
+  }
+  return count > 0 ? sum / count : 128
 }
 
 function blend(bitmap: Buffer, width: number, x: number, y: number, r: number, g: number, b: number, alpha: number): void {
