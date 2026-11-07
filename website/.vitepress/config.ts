@@ -4,10 +4,10 @@ const SITE_URL = 'https://term.xyun.dev'
 const SITE_NAME = 'TermPilot'
 const SITE_TITLE = 'TermPilot — Agent 可操控的 SSH 终端'
 const SITE_DESC =
-  '本机 SSH 终端：SSH / Telnet / 串口三协议，多标签终端与 SFTP 文件传输，凭据加密存本机。内置 MCP Server，AI 助手接着你登录好的会话继续操作。'
+  '本机终端与图形桌面：SSH / Telnet / 串口 / VNC / RDP，多标签终端、SFTP 文件传输和双向剪贴板。内置 MCP Server，AI 助手接着你登录好的会话继续操作。'
 const OG_IMAGE = `${SITE_URL}/og-image.png`
 const REPO = 'https://github.com/xy200303/termpilot'
-const VERSION = '0.7.8'
+const VERSION = '0.8.0'
 
 const softwareJsonLd = {
   '@context': 'https://schema.org',
@@ -22,7 +22,7 @@ const softwareJsonLd = {
   license: `${REPO}/blob/main/LICENSE`,
   author: { '@type': 'Person', name: 'xy200303', url: 'https://github.com/xy200303' },
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
-  keywords: 'SSH 终端,SFTP,Telnet,串口,MCP,AI Agent,终端模拟器'
+  keywords: 'SSH 终端,SFTP,Telnet,串口,VNC,RDP,MCP,AI Agent,终端模拟器'
 }
 
 const websiteJsonLd = {

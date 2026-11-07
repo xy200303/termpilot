@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.8.0
+
+- 新增 VNC 和 RDP 图形桌面连接。VNC 使用内嵌 noVNC；RDP 默认使用内嵌 IronRDP（WASM），也可切换 FreeRDP 原生窗口。VNC / RDP 使用默认端口 5900 / 3389，每个连接只保留一个桌面窗口，侧边栏和标签栏用图标区分终端与桌面。
+- 新增 Mac / Windows / Linux 共用的桌面 Agent 工具：`desktop_list`、`desktop_screenshot`、`desktop_click`、`desktop_key`、`desktop_type`、`desktop_scroll`、`desktop_wait`、`desktop_actions`、`desktop_a11y`、`desktop_perf`，工具总数 27 → 37。
+- 桌面截图支持 100px 坐标网格；点击统一使用截图图片像素坐标。VNC / 内嵌 RDP 支持逐字输入标点和中文 / Emoji、方向键与组合键，也支持鼠标点击、滚轮和批量操作。
+- VNC / 内嵌 RDP 支持宿主机与远端双向文本剪贴板，连接成功后立即同步；Linux VNC 可通过同主机 SSH 读取 AT-SPI 控件树并按控件路径点击，没有无障碍服务时返回明确提示。
+- 新增桌面性能模式：自动、画质、平衡、流畅。自动模式根据实时流量升降 VNC 画质；后台标签自动降载；窗口缩放使用 400ms 防抖；VNC / RDP 桥接合并小包并在缓冲过高时暂停远端读取。
+- 顶栏新增桌面性能浮层，显示分辨率、实时上下行、包速率和累计流量；`desktop_perf` 也可读取同一组指标。RDP 初始分辨率按窗口和性能档位计算。
+- Agent 接入改为“复制接入指引”：指引包含 MCP 地址、Bearer 令牌、各客户端配置路径和 Skill 文件位置，由 Agent 自己完成 MCP 注册和 Skill 安装。安装包附带 `skills/termpilot`，不再直接写入各 Agent 配置。
+- 修复窗口重绘或页面重载后桌面连接残留旧 `viewId`、报“不能重复开窗口”的问题；增加启动占位和重绘检测，白屏时自动重载。
+- 修复桌面截图尚未加载时抛出底层 `drawImage` 错误、VNC 合成点击缺少鼠标按键位掩码的问题。
+
+安装包没有代码签名。
+
 ## 0.7.8
 
 - 侧边栏顶部改为品牌头：应用图标、TermPilot 字标和协议副标题，收纳按钮移到右侧。
