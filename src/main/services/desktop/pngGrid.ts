@@ -1,4 +1,5 @@
 import { nativeImage } from 'electron'
+import type { DesktopRegion } from '../../../shared/desktop-agent'
 
 const GLYPH_W = 5
 const GLYPH_H = 7
@@ -24,8 +25,9 @@ const FONT: Record<string, string[]> = {
 /**
  * 在主进程给截图叠坐标网格。渲染进程和原生窗口截图都走这里，
  * 所以 VNC、内嵌 RDP 和原生 RDP 的网格完全一致。
+ * originX / originY 是这张图在原画面里的左上角，局部截图时刻度仍标原画面坐标。
  */
-export function withGrid(png: Buffer, spacing: number): Buffer | null {
+export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0): Buffer | null {
   if (!Number.isFinite(spacing) || spacing < 8) return null
   const image = nativeImage.createFromBuffer(png)
   if (image.isEmpty()) return null
@@ -41,24 +43,49 @@ export function withGrid(png: Buffer, spacing: number): Buffer | null {
   // 间距太密时跳过部分刻度文字，只保留能读得清的那几行。
   const labelRoom = 4 * advance + 8
   const vStep = Math.max(1, Math.ceil(labelRoom / spacing))
-  for (let i = 1, x = spacing; x < width; x += spacing, i += 1) {
+  let firstX = Math.ceil(originX / spacing) * spacing
+  if (firstX <= originX) firstX += spacing
+  for (let i = 0, abs = firstX; abs < originX + width; abs += spacing, i += 1) {
+    const x = abs - originX
     for (let y = 0; y < height; y += 1) blend(bitmap, width, x, y, 255, 255, 255, lineAlpha)
-    if (i % vStep === 0 && x + 3 + String(x).length * advance + 3 < width) {
-      drawText(bitmap, width, height, String(x), x + 3, 3, scale)
+    const text = String(abs)
+    if (i % vStep === 0 && x + 3 + text.length * advance + 3 < width) {
+      drawText(bitmap, width, height, text, x + 3, 3, scale)
     }
   }
   const hStep = Math.max(1, Math.ceil((GLYPH_H * scale + 6) / spacing))
-  for (let i = 1, y = spacing; y < height; y += spacing, i += 1) {
+  let firstY = Math.ceil(originY / spacing) * spacing
+  if (firstY <= originY) firstY += spacing
+  for (let i = 0, abs = firstY; abs < originY + height; abs += spacing, i += 1) {
+    const y = abs - originY
     for (let x = 0; x < width; x += 1) blend(bitmap, width, x, y, 255, 255, 255, lineAlpha)
-    if (i % hStep === 0) drawText(bitmap, width, height, String(y), 3, y + 3, scale)
+    if (i % hStep === 0) drawText(bitmap, width, height, String(abs), 3, y + 3, scale)
   }
 
   // 尺寸和间距的说明放在右下角，避开左上角的第一列刻度。
-  const summary = `${width}x${height} ${spacing}px`
+  const summary = originX === 0 && originY === 0
+    ? `${width}x${height} ${spacing}px`
+    : `${originX},${originY} ${width}x${height} ${spacing}px`
   const summaryWidth = summary.length * advance + 2 * scale
   drawText(bitmap, width, height, summary, Math.max(3, width - summaryWidth - 3), Math.max(3, height - GLYPH_H * scale - 5), scale)
 
   return nativeImage.createFromBitmap(bitmap, { width, height }).toPNG()
+}
+
+/** 按 region 裁一块出来，返回裁剪图和它在原画面里的左上角。 */
+export function cropPng(png: Buffer, region: DesktopRegion): { png: Buffer; x: number; y: number; width: number; height: number } {
+  const image = nativeImage.createFromBuffer(png)
+  if (image.isEmpty()) throw new Error('截图无法解码，请重新截一次')
+  const { width, height } = image.getSize()
+  const x = Math.round(region.x)
+  const y = Math.round(region.y)
+  const w = Math.round(region.width)
+  const h = Math.round(region.height)
+  if (x < 0 || y < 0 || w < 8 || h < 8) throw new Error('region 的 x/y 不能为负，宽高至少 8px')
+  if (x + w > width || y + h > height) {
+    throw new Error(`region ${x},${y} ${w}x${h} 超出画面范围 ${width}x${height}`)
+  }
+  return { png: image.crop({ x, y, width: w, height: h }).toPNG(), x, y, width: w, height: h }
 }
 
 function blend(bitmap: Buffer, width: number, x: number, y: number, r: number, g: number, b: number, alpha: number): void {

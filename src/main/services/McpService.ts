@@ -32,7 +32,7 @@ import type { TerminalService } from './TerminalService'
 import type { DesktopService } from './desktop/DesktopService'
 import type { DesktopAgentService } from './desktop/DesktopAgentService'
 import { LinuxAccessibilityService } from './desktop/LinuxAccessibilityService'
-import type { DesktopAgentInput } from '../../shared/desktop-agent'
+import type { DesktopAgentInput, DesktopRegion } from '../../shared/desktop-agent'
 import { listSerialPorts } from './transport/serial'
 import { capabilitiesOf, defaultPort, isDesktopProtocol, protocolLabel, TELNET_DEFAULT_PORT } from '../../shared/protocol'
 import type { SerialParity, SessionProtocol } from '../../shared/protocol'
@@ -455,7 +455,11 @@ export class McpService {
       case 'desktop_list':
         return JSON.stringify(this.desktopAgent.list(), null, 2)
       case 'desktop_screenshot':
-        return this.desktopAgent.run(need(raw, 'viewId'), { action: 'screenshot', grid: desktopGrid(raw) })
+        return this.desktopAgent.run(need(raw, 'viewId'), {
+          action: 'screenshot',
+          grid: desktopGrid(raw),
+          region: desktopRegion(raw)
+        })
       case 'desktop_click':
         return this.desktopAgent.run(need(raw, 'viewId'), {
           action: 'click',
@@ -1335,9 +1339,24 @@ function desktopGrid(raw: Record<string, unknown>): boolean | number {
   throw new Error('grid 只能是 100px 网格开关（true/false），或 20–500 的网格像素间距')
 }
 
+function desktopRegion(raw: Record<string, unknown>): DesktopRegion | undefined {
+  const value = raw.region
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'object') throw new Error('region 需要 { x, y, width, height }')
+  const region = value as Record<string, unknown>
+  const x = intArg(region, 'x')
+  const y = intArg(region, 'y')
+  const width = intArg(region, 'width')
+  const height = intArg(region, 'height')
+  if (x === undefined || y === undefined || width === undefined || height === undefined) {
+    throw new Error('region 需要 x、y、width、height 四个整数')
+  }
+  return { x, y, width, height }
+}
+
 function desktopAction(raw: Record<string, unknown>): DesktopAgentInput {
   const action = textArg(raw, 'action')
-  if (action === 'screenshot') return { action, grid: desktopGrid(raw) }
+  if (action === 'screenshot') return { action, grid: desktopGrid(raw), region: desktopRegion(raw) }
   if (action === 'click') {
     return {
       action,

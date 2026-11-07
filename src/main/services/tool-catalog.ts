@@ -263,11 +263,20 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_screenshot',
     description:
-      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。网格在主进程合成，VNC、内嵌 RDP 和原生 RDP 窗口都一致。',
+      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，刻度仍标整屏坐标，可直接拿去 desktop_click。网格在主进程合成，VNC、内嵌 RDP 和原生 RDP 窗口都一致。',
     images: 'always',
     input: {
       viewId,
-      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('默认 100px 网格；false 关闭，或自定义间距')
+      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('默认 100px 网格；false 关闭，或自定义间距'),
+      region: z
+        .object({
+          x: z.number().int().min(0),
+          y: z.number().int().min(0),
+          width: z.number().int().min(8),
+          height: z.number().int().min(8)
+        })
+        .optional()
+        .describe('只截这块区域（整屏像素坐标），缺省截整屏')
     }
   },
   {

@@ -4,10 +4,10 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import type { WebContents } from 'electron'
 import { IPC } from '../../../shared/ipc-channels'
-import type { DesktopAgentInput, DesktopAgentReply } from '../../../shared/desktop-agent'
+import type { DesktopAgentInput, DesktopAgentReply, DesktopRegion } from '../../../shared/desktop-agent'
 import type { DesktopService } from './DesktopService'
 import { NativeAgentService } from './NativeAgentService'
-import { withGrid } from './pngGrid'
+import { cropPng, withGrid } from './pngGrid'
 
 /** GUI 面板和 MCP 共用的桌面操作入口。 */
 export class DesktopAgentService {
@@ -27,14 +27,14 @@ export class DesktopAgentService {
     const protocol = this.desktop.protocolOf(viewId)
     if (!protocol) throw new Error('桌面不存在或已关闭，请先 connection_open')
     const grid = gridSpacing(input)
+    const region = input.action === 'screenshot' ? input.region : undefined
     if (protocol !== 'vnc' && protocol !== 'rdp') {
       const pid = this.desktop.nativePid(viewId)
       if (!pid) throw new Error('原生客户端进程不存在或已退出')
       const result = await this.nativeAgent.run(pid, input)
       if (!result.file) return result.note
-      const note = grid > 0 ? `${result.note}，网格 ${grid}px，坐标与图片一致` : result.note
-      if (grid > 0) paintGrid(result.file, grid)
-      return `${note}\n${result.file}`
+      const done = decorate(result.file, grid, region)
+      return `${result.note}${done.suffix}\n${result.file}`
     }
 
     const label = protocol.toUpperCase()
@@ -60,11 +60,10 @@ export class DesktopAgentService {
       const dir = join(app.getPath('userData'), 'screenshots')
       mkdirSync(dir, { recursive: true })
       const file = join(dir, `desktop-${viewId}-${Date.now()}.png`)
-      const shot = Buffer.from(reply.pngBase64, 'base64')
-      const gridded = grid > 0 ? withGrid(shot, grid) : null
-      writeFileSync(file, gridded ?? shot)
+      writeFileSync(file, Buffer.from(reply.pngBase64, 'base64'))
+      const done = decorate(file, grid, region)
       const note = reply.note ?? `${label} 画面已截取`
-      return `${gridded ? `${note}，网格 ${grid}px，坐标与图片一致` : note}\n${file}`
+      return `${note}${done.suffix}\n${file}`
     }
     return reply.note ?? '已完成'
   }
@@ -92,8 +91,15 @@ function gridSpacing(input: DesktopAgentInput): number {
   return 0
 }
 
-function paintGrid(file: string, spacing: number): void {
+/** 在落盘的截图上裁区域、叠网格，返回要拼到回复里的说明。 */
+function decorate(file: string, spacing: number, region?: DesktopRegion): { suffix: string } {
   const buffer = readFileSync(file)
-  const gridded = withGrid(buffer, spacing)
-  if (gridded) writeFileSync(file, gridded)
+  const cropped = region ? cropPng(buffer, region) : { png: buffer, x: 0, y: 0, width: 0, height: 0 }
+  const gridded = spacing > 0 ? withGrid(cropped.png, spacing, cropped.x, cropped.y) : null
+  const out = gridded ?? cropped.png
+  if (out !== buffer) writeFileSync(file, out)
+  const parts: string[] = []
+  if (region) parts.push(`区域 ${cropped.x},${cropped.y} ${cropped.width}×${cropped.height}，坐标仍是整屏坐标`)
+  if (gridded) parts.push(`网格 ${spacing}px，刻度与点击坐标一致`)
+  return { suffix: parts.length > 0 ? `，${parts.join('；')}` : '' }
 }

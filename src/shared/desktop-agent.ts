@@ -29,8 +29,15 @@ export interface DesktopWaitInput {
   timeoutMs?: number
 }
 
+export interface DesktopRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export type DesktopAgentInput =
-  | { action: 'screenshot'; grid?: boolean | number }
+  | { action: 'screenshot'; grid?: boolean | number; region?: DesktopRegion }
   | ({ action: 'click' } & DesktopClickInput)
   | ({ action: 'key' } & DesktopKeyInput)
   | ({ action: 'type' } & DesktopTypeInput)

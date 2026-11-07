@@ -101,7 +101,7 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 ### 图形桌面（10）
 
 - `desktop_list`：列出打开的桌面，返回 `viewId`
-- `desktop_screenshot`：截取 VNC / 内嵌 RDP 画布或 Windows 原生客户端窗口；默认带 100px 图片坐标网格，`grid=false` 关闭
+- `desktop_screenshot`：截取 VNC / 内嵌 RDP 画布或 Windows 原生客户端窗口；默认带 100px 图片坐标网格，`grid=false` 关闭，`region` 可只截一块区域
 - `desktop_click`：按截图图片像素坐标点击，支持左右键和双击
 - `desktop_key`：发送方向键、回车、`ctrl-c` 等组合键
 - `desktop_type`：逐字输入文字，VNC 和内嵌 RDP 支持标点、中文和 Emoji
