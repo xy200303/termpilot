@@ -11,9 +11,9 @@ Linux x64 包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubu
 
 | 平台 | 安装包 | 免安装 |
 | --- | --- | --- |
-| Windows x64 | [TermPilot.Setup.0.8.2.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.2.exe) | [TermPilot-0.8.2-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2-win.zip) |
-| macOS（Apple Silicon） | [TermPilot-0.8.2-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2-arm64.dmg) | [TermPilot-0.8.2-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2-arm64-mac.zip) |
-| Linux x64 | [termpilot_0.8.2_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.2_amd64.deb) | [TermPilot-0.8.2.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2.AppImage) |
+| Windows x64 | [TermPilot.Setup.0.8.2.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.2.exe)（146MB） | [TermPilot-0.8.2-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2-win.zip)（198MB） |
+| macOS（Apple Silicon） | [TermPilot-0.8.2-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2-arm64.dmg)（168MB） | [TermPilot-0.8.2-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2-arm64-mac.zip)（169MB） |
+| Linux x64 | [termpilot_0.8.2_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.2_amd64.deb)（129MB） | [TermPilot-0.8.2.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.2.AppImage)（167MB） |
 
 ## 安装提示
 
