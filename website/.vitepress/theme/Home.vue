@@ -18,20 +18,20 @@ const DOWNLOADS = {
 
 const announcement = {
   version: `v${VERSION}`,
-  text: '文件通道可按连接配置复用或独立拨号；~/.ssh/config 改为创建时手动导入',
+  text: '新增 VNC / RDP 图形桌面、双向剪贴板、桌面 Agent 工具与性能模式',
   link: RELEASE_TAG
 }
 
 /* Hero 大标题：两行，第二行用强调色。逐字进场是纯 CSS（.hero-title .ch），
    脚本没加载完也不会留白。 */
-const heroLines = ['你的终端，', '助手可以接着用。']
+const heroLines = ['终端与桌面，', '助手都能接着用。']
 const heroOffset = heroLines[0].length
 const heroEl = ref<HTMLElement | null>(null)
 const shotEl = ref<HTMLElement | null>(null)
 
 const stats = [
-  { value: '3', label: '类连接协议', note: 'SSH / Telnet / 串口' },
-  { value: '27', label: '个 Agent 工具', note: '连接 / 终端 / exec / 屏幕 / 文件 / 应用' },
+  { value: '5', label: '类连接协议', note: 'SSH / Telnet / 串口 / VNC / RDP' },
+  { value: '37', label: '个 Agent 工具', note: '连接 / 终端 / exec / SFTP / 桌面 / 应用' },
   { value: '0', label: '遥测上报', note: '没有统计、没有 crash 上报通道' },
   { value: '6', label: '个安装包', note: 'Windows · macOS · Linux 各两种' }
 ]
@@ -40,12 +40,23 @@ const tracks = [
   {
     key: 'connect',
     title: '连接',
-    summary: '三类协议一张表单。密码和私钥口令用系统钥匙串加密，只存本机。',
+    summary: '五种协议一张表单。密码和私钥口令用系统钥匙串加密，只存本机。',
     points: [
       'SSH 支持密码 / 私钥、多跳跳板（ssh -J）、ProxyCommand',
-      '串口波特率、数据位、停止位、校验可配，serial_list 先探路',
-      '可从 ~/.ssh/config 手动导入已有 Host，应用不写回该文件',
-      '无公网地址的机器用反向监听，只接受 127.0.0.1 连入'
+      'Telnet 与串口只有终端字节流，能力模型会提前说明',
+      'VNC 默认 5900，RDP 默认 3389；每个桌面连接只开一个窗口',
+      '可从 ~/.ssh/config 手动导入已有 Host，应用不写回该文件'
+    ]
+  },
+  {
+    key: 'desktop',
+    title: '桌面',
+    summary: 'VNC / RDP 内嵌在同一个窗口，剪贴板和 Agent 操作都能直接用。',
+    points: [
+      'VNC 使用 noVNC；RDP 默认 IronRDP，也可切 FreeRDP 原生窗口',
+      '截图网格、图片坐标点击、中文输入、滚动和批量操作',
+      '宿主机与远端双向共享文本剪贴板',
+      'Linux 可读 AT-SPI 控件树；性能浮层显示流量与包速率'
     ]
   },
   {
@@ -75,8 +86,8 @@ const tracks = [
 const steps = [
   { title: '新建连接', text: '填主机和账号，或从 ~/.ssh/config 导入。口令加密存本机。' },
   { title: '打开终端', text: '双击连接即开标签。多跳跳板自动串起，登录只输一次。' },
-  { title: '日常操作', text: '多标签切换、右键复制截图。断线用 term_reconnect 原样恢复。' },
-  { title: '交给助手', text: '设置里启用 Agent 连接，助手在同一会话里跑命令、读屏幕。' },
+  { title: '日常操作', text: '终端与 VNC / RDP 桌面共用标签栏，右键复制或截图。' },
+  { title: '交给助手', text: '复制 Agent 指引完成接入；助手可在终端或桌面里继续操作。' },
   { title: '传文件', text: '文件面板上传下载，文本文件双击直接在线改。' },
   { title: '收工', text: '关掉标签。连接、终端标题和已绘制的行，下次启动还在。' }
 ]
@@ -109,14 +120,16 @@ const compare = {
     ['登录', '每次敲完整命令，密码靠 ssh-agent 兜底', '保存会话，双击连接', '保存连接，双击或由助手代开'],
     ['中途交互', '菜单、向导、sudo 都要本人', '本人操作', '本人或助手代按，画面实时可见'],
     ['继续下一步', '同一窗口继续', '同一窗口继续，助手进不来', '同一条会话助手接着做，不重连'],
-    ['批量与脚本', '自己写 shell 脚本', '基本靠手动', '27 个 MCP 工具 + 本机 CLI'],
+    ['批量与脚本', '自己写 shell 脚本', '基本靠手动', '37 个 MCP 工具 + 本机 CLI'],
     ['凭据', 'ssh_config / ssh-agent', '软件内保存', '系统钥匙串加密，只存本机']
   ]
 }
 
 const specs = [
-  ['连接协议', 'SSH / Telnet / 串口（波特率、数据位、停止位、校验可配）'],
+  ['连接协议', 'SSH / Telnet / 串口 / VNC / RDP'],
   ['终端', 'xterm.js + WebGL 渲染；本机与远程同一标签栏；滚轮横滚、右键复制截图'],
+  ['图形桌面', 'VNC noVNC、RDP IronRDP 内嵌；RDP 可切 FreeRDP；双向文本剪贴板'],
+  ['桌面性能', '自动 / 画质 / 平衡 / 流畅；后台降载、缩放防抖、桥接合包与背压'],
   ['通道', 'shell / exec（stdout、stderr 分流，协议级退出码）/ SFTP，同一条 SSH 复用'],
   ['文件传输', '上传、下载、新建目录、改名、删除；单文件 512MB 以内；文本在线编辑'],
   ['凭据存储', 'safeStorage 加密 → 本机 SQLite，不出本机'],
@@ -159,6 +172,10 @@ const faqs = [
   {
     q: '能连跳板机吗？',
     a: '可以。支持 ssh -J 多跳、ProxyCommand，也能从 ~/.ssh/config 导入现成配置。跳板只授权一次转发时，把这条连接的「文件通道」设为复用终端连接，SFTP 就不会触发第二次拨号。'
+  },
+  {
+    q: 'VNC 和 RDP 能像终端一样交给 Agent 操作吗？',
+    a: '可以。助手可以看桌面截图、按图片坐标点击、输入文字和组合键、滚动、等待画面稳定并批量执行操作；VNC 和内嵌 RDP 还能双向共享文本剪贴板。每个桌面连接只保留一个窗口。'
   },
   {
     q: 'Telnet 和串口能用 exec 通道和 SFTP 吗？',
@@ -296,8 +313,8 @@ onBeforeUnmount(() => {
           </span>
         </h1>
         <p class="hero-sub">
-          TermPilot 是本机 SSH 终端：连接、终端、文件一体。你在窗口里登录后，
-          AI 助手通过内置 MCP Server 接着同一条会话继续操作——口令不出本机。
+          TermPilot 把 SSH / Telnet / 串口终端与 VNC / RDP 桌面放在同一个窗口。
+          你在窗口里登录后，AI 助手通过内置 MCP Server 接着同一条会话或同一个桌面继续操作——口令不出本机。
         </p>
         <div class="hero-cta">
           <a v-press class="btn primary" :href="withBase('/download')">
@@ -340,7 +357,7 @@ onBeforeUnmount(() => {
     <!-- 三条主线 -->
     <section class="section">
       <div class="wrap">
-        <h2 class="reveal">连接、操作、传输，三件事做扎实</h2>
+        <h2 class="reveal">连接、桌面、操作、传输，四件事做扎实</h2>
         <div class="tracks">
           <div v-for="t in tracks" :key="t.key" class="track reveal">
             <h3>{{ t.title }}</h3>
@@ -819,8 +836,8 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
 /* 三条主线 */
 .tracks {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 40px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 28px;
 }
 .track h3 {
   font-size: 20px;

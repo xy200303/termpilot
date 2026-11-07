@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 const SITE_URL = 'https://term.xyun.dev'
 const SITE_NAME = 'TermPilot'
-const SITE_TITLE = 'TermPilot — Agent 可操控的 SSH 终端'
+const SITE_TITLE = 'TermPilot — Agent 可操控的终端与远程桌面'
 const SITE_DESC =
   '本机终端与图形桌面：SSH / Telnet / 串口 / VNC / RDP，多标签终端、SFTP 文件传输和双向剪贴板。内置 MCP Server，AI 助手接着你登录好的会话继续操作。'
 const OG_IMAGE = `${SITE_URL}/og-image.png`
@@ -48,7 +48,7 @@ export default defineConfig({
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
     ['link', { rel: 'stylesheet', href: '/fonts/noto/noto-sans-sc.css' }],
     ['link', { rel: 'stylesheet', href: '/fonts/mono/jetbrains-mono.css' }],
-    ['meta', { name: 'keywords', content: 'SSH 终端,SFTP 文件传输,Telnet,串口终端,MCP Server,AI Agent 终端,TermPilot' }],
+    ['meta', { name: 'keywords', content: 'SSH 终端,SFTP 文件传输,Telnet,串口终端,VNC,RDP,远程桌面,MCP Server,AI Agent 终端,TermPilot' }],
     ['meta', { name: 'author', content: 'xy200303' }],
     ['meta', { name: 'robots', content: 'index,follow,max-image-preview:large' }],
     ['meta', { name: 'theme-color', content: '#f9f9f8' }],
@@ -60,7 +60,7 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: OG_IMAGE }],
     ['meta', { property: 'og:image:width', content: '1200' }],
     ['meta', { property: 'og:image:height', content: '630' }],
-    ['meta', { property: 'og:image:alt', content: 'TermPilot — Agent 可操控的 SSH 终端' }],
+    ['meta', { property: 'og:image:alt', content: 'TermPilot — Agent 可操控的终端与远程桌面' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:title', content: SITE_TITLE }],
     ['meta', { name: 'twitter:description', content: SITE_DESC }],

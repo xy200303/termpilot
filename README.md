@@ -6,9 +6,9 @@
 
 # TermPilot
 
-**你的终端，助手可以接着用。**
+**终端和远程桌面，助手都能接着用。**
 
-本机 SSH 终端。凭据保存在本机。用户在窗口中登录后，Agent 继续操作同一条未断开的会话。
+本机 SSH / Telnet / 串口终端与 VNC / RDP 图形桌面。凭据保存在本机。用户在窗口中登录后，Agent 继续操作同一条未断开的会话或同一个桌面画面。
 
 <a href="https://github.com/xy200303/termpilot/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/xy200303/termpilot?style=flat-square"></a>
 <img alt="Windows" src="https://img.shields.io/badge/-Windows-blue?style=flat-square&logo=windows&logoColor=white">
@@ -26,6 +26,13 @@ Windows · macOS · Linux
 </td>
 </tr>
 </table>
+
+## 终端与桌面
+
+- **终端**：SSH、Telnet、串口、本机终端和反向 shell 放在同一行标签里。SSH 复用同一条会话提供 PTY、exec 和 SFTP；Telnet / 串口只有终端字节流。
+- **桌面**：VNC 使用内嵌 noVNC，RDP 默认使用内嵌 IronRDP，也可切换 FreeRDP 原生窗口。每个连接只保留一个桌面标签。
+- **桌面能力**：支持截图网格、图片坐标点击、逐字输入中文和 Emoji、按键、滚动、批量操作、等待画面稳定；VNC / 内嵌 RDP 与本机双向共享文本剪贴板。
+- **Agent**：内置 MCP Server，共 37 个工具，覆盖连接、终端、exec、SFTP、图形桌面和应用窗口截图 / 录屏。桌面工具还能读取 Linux AT-SPI 控件树和实时流量指标。
 
 ## 会话模型
 

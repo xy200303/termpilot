@@ -62,7 +62,7 @@ function SidebarBrand(props: { collapsed: boolean; onToggle: () => void }) {
           <div className="truncate text-[13.5px] font-semibold tracking-tight text-sidebar-foreground">
             TermPilot
           </div>
-          <div className="truncate text-[10.5px] text-muted-foreground">SSH · Telnet · 串口</div>
+          <div className="truncate text-[10.5px] text-muted-foreground">SSH · Telnet · 串口 · VNC · RDP</div>
         </div>
       )}
       <Button
