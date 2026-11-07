@@ -1,3 +1,11 @@
+## 0.8.1
+
+- 修复 Ubuntu 22.04 上 Linux 包因原生模块要求 GLIBC 2.42 而无法启动。Linux 构建固定到 Ubuntu 22.04，并自动检查 GLIBC 不超过 2.35。
+- 修复没有系统钥匙串的 Linux 桌面无法保存凭据的问题，改用权限 0600 的本机 AES-256-GCM 密钥文件降级。
+- CI 固定 Ubuntu 22.04 构建环境。
+
+安装包没有代码签名。
+
 ## 0.8.0
 
 - 新增 VNC / RDP 图形桌面：VNC 使用内嵌 noVNC，RDP 默认内嵌 IronRDP，也可切换 FreeRDP 原生窗口。

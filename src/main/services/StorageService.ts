@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto'
 import { DatabaseSync, type SQLOutputValue } from 'node:sqlite'
 import {
   MCP_DEFAULT_PORT,
@@ -32,6 +32,7 @@ export class StorageService {
   private closed = false
   private launchApp = ''
   private launchArgs: string[] = []
+  private localKey: Buffer | null = null
 
   constructor() {
     const dir = app.getPath('userData')
@@ -533,11 +534,7 @@ export class StorageService {
     const row = this.db.prepare(`SELECT ${column} AS secret FROM sessions WHERE id = ?`).get(id)
     const encrypted = row?.secret
     if (typeof encrypted !== 'string' || encrypted.length === 0) return null
-    try {
-      return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
-    } catch {
-      return null
-    }
+    return this.decryptSecret(encrypted)
   }
 
   private require(id: string): SessionConfig {
@@ -668,19 +665,56 @@ export class StorageService {
 
   private encryptSecret(secret?: string): string | undefined {
     if (!secret) return undefined
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error('系统钥匙串不可用，无法安全保存凭据')
-    }
-    return safeStorage.encryptString(secret).toString('base64')
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.encryptString(secret).toString('base64')
+    const key = this.localEncryptionKey()
+    const iv = randomBytes(12)
+    const cipher = createCipheriv('aes-256-gcm', key, iv)
+    const body = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()])
+    return `localv1:${Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64url')}`
   }
 
-  private decryptToken(value: SQLOutputValue): string | null {
-    if (typeof value !== 'string' || value.length === 0) return null
+  private decryptSecret(value: string): string | null {
     try {
+      if (value.startsWith('localv1:')) {
+        const payload = Buffer.from(value.slice('localv1:'.length), 'base64url')
+        const iv = payload.subarray(0, 12)
+        const tag = payload.subarray(12, 28)
+        const body = payload.subarray(28)
+        const decipher = createDecipheriv('aes-256-gcm', this.localEncryptionKey(), iv)
+        decipher.setAuthTag(tag)
+        return Buffer.concat([decipher.update(body), decipher.final()]).toString('utf8')
+      }
       return safeStorage.decryptString(Buffer.from(value, 'base64'))
     } catch {
       return null
     }
+  }
+
+  private localEncryptionKey(): Buffer {
+    if (this.localKey) return this.localKey
+    const file = join(app.getPath('userData'), 'local-secrets.key')
+    if (existsSync(file)) {
+      const key = readFileSync(file)
+      if (key.length !== 32) throw new Error(`本机密钥文件损坏：${file}`)
+      this.localKey = key
+      return key
+    }
+    const key = randomBytes(32)
+    mkdirSync(app.getPath('userData'), { recursive: true })
+    writeFileSync(file, key, { mode: 0o600 })
+    try {
+      chmodSync(file, 0o600)
+    } catch {
+      // Windows 不支持 POSIX 权限；system keychain 正常时不会走到这里
+    }
+    console.warn('[TermPilot] 系统钥匙串不可用，凭据改用本机密钥文件加密')
+    this.localKey = key
+    return key
+  }
+
+  private decryptToken(value: SQLOutputValue): string | null {
+    if (typeof value !== 'string' || value.length === 0) return null
+    return this.decryptSecret(value)
   }
 }
 

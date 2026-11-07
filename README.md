@@ -27,6 +27,12 @@ Windows · macOS · Linux
 </tr>
 </table>
 
+## Linux 兼容性
+
+官方 Linux x64 安装包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubuntu 22.04 / 24.04。发布流程会扫描 `node-pty`、串口和 SSH 加密原生模块，阻止更高 GLIBC 依赖进入安装包。
+
+系统钥匙串不可用时（例如最小化 XFCE），密码、私钥口令和 MCP 令牌会降级为本机 AES-256-GCM 加密，密钥文件是 `userData/local-secrets.key`，权限 `0600`。有系统钥匙串时仍优先使用系统钥匙串。
+
 ## 终端与桌面
 
 - **终端**：SSH、Telnet、串口、本机终端和反向 shell 放在同一行标签里。SSH 复用同一条会话提供 PTY、exec 和 SFTP；Telnet / 串口只有终端字节流。

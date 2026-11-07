@@ -5,7 +5,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.8.0'
+const VERSION = '0.8.1'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
@@ -18,7 +18,7 @@ const DOWNLOADS = {
 
 const announcement = {
   version: `v${VERSION}`,
-  text: '新增 VNC / RDP 图形桌面、双向剪贴板、桌面 Agent 工具与性能模式',
+  text: '修复 Ubuntu 22.04 的 GLIBC 兼容与无系统钥匙串启动问题',
   link: RELEASE_TAG
 }
 
@@ -141,6 +141,13 @@ const specs = [
 
 const changelog = [
   {
+    version: '0.8.1',
+    items: [
+      'Linux 构建固定 Ubuntu 22.04，兼容 GLIBC 2.35，并在发布前检查原生模块',
+      '没有系统钥匙串时改用本机 AES-256-GCM 密钥文件，Linux 最小桌面可以正常启动'
+    ]
+  },
+  {
     version: '0.8.0',
     items: [
       '新增 VNC / RDP 图形桌面、双向剪贴板和桌面性能模式',
@@ -148,18 +155,10 @@ const changelog = [
     ]
   },
   {
-    version: '0.7.7',
+    version: '0.7.8',
     items: [
-      '修复使用 TermPilot 后本机 ssh 命令失效（Bad owner or permissions）的问题：不再写回 ~/.ssh/config',
-      '改为新建连接时手动「从 ssh_config 导入」，选中 Host 自动填好主机、私钥和跳板'
-    ]
-  },
-  {
-    version: '0.7.6',
-    items: [
-      '每条连接新增「文件通道」设置：自动 / 复用终端连接 / 总是单独拨号',
-      '一次性授权的跳板机（第二跳会被拒）改复用后，SFTP 走已授权的同一条连接',
-      'MCP connection_create / update 新增 sftpMode 参数，connection_list 输出带上'
+      '侧边栏品牌头；串口路径可直接选择；连接右键可关闭全部窗口',
+      'MCP 新增 app_screenshot 和 app_record'
     ]
   }
 ]
