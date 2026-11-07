@@ -38,35 +38,34 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
 
   const scale = width > 1600 ? 2 : 1
   const advance = (GLYPH_W + 1) * scale
-  // 浅色画面用深线，深色画面用浅线，避免整片网格看不见或糊成一块。
+  // 浅色画面用深线，深色画面用浅线；格子越密线越淡，免得盖住内容。
   const light = brightness(bitmap, width, height) > 140
-  const line = light ? [0, 0, 0, 0.55] : [255, 255, 255, 0.55]
+  const alpha = spacing >= 50 ? 0.55 : 0.32
+  const line = light ? [0, 0, 0, alpha] : [255, 255, 255, alpha]
 
   // 左上角标出这块图在原画面里的起点；顶部刻度避开它。
   const origin = `${originX},${originY}`
   const originRight = 3 + origin.length * advance + 4
   drawText(bitmap, width, height, origin, 3, 3, scale)
 
-  // 间距太密时跳过部分刻度文字，只保留能读得清的那几行。
-  const labelRoom = 4 * advance + 8
-  const vStep = Math.max(1, Math.ceil(labelRoom / spacing))
+  // 线按 spacing 画，刻度文字最多每 100px 标一个，细网格也不会糊成一片。
+  const labelStep = Math.max(1, Math.ceil(100 / spacing))
   let firstX = Math.ceil(originX / spacing) * spacing
   if (firstX <= originX) firstX += spacing
   for (let i = 0, abs = firstX; abs < originX + width; abs += spacing, i += 1) {
     const x = abs - originX
     for (let y = 0; y < height; y += 1) blend(bitmap, width, x, y, line[0], line[1], line[2], line[3])
     const text = String(abs)
-    if (i % vStep === 0 && x + 3 > originRight + 4 && x + 3 + text.length * advance + 3 < width) {
+    if (i % labelStep === 0 && x + 3 > originRight + 4 && x + 3 + text.length * advance + 3 < width) {
       drawText(bitmap, width, height, text, x + 3, 3, scale)
     }
   }
-  const hStep = Math.max(1, Math.ceil((GLYPH_H * scale + 6) / spacing))
   let firstY = Math.ceil(originY / spacing) * spacing
   if (firstY <= originY) firstY += spacing
   for (let i = 0, abs = firstY; abs < originY + height; abs += spacing, i += 1) {
     const y = abs - originY
     for (let x = 0; x < width; x += 1) blend(bitmap, width, x, y, line[0], line[1], line[2], line[3])
-    if (i % hStep === 0) drawText(bitmap, width, height, String(abs), 3, y + 3, scale)
+    if (i % labelStep === 0) drawText(bitmap, width, height, String(abs), 3, y + 3, scale)
   }
 
   const summary = `${width}x${height} ${spacing}px`

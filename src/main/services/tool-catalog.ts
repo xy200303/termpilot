@@ -263,7 +263,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_screenshot',
     description:
-      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，左上角仍标这块图在原画面里的起点坐标，刻度也用原画面坐标，可直接拿去 desktop_click。浅色画面自动改用深色网格线。',
+      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，左上角仍标这块图在原画面里的起点坐标，刻度也用原画面坐标，可直接拿去 desktop_click。浅色画面自动改用深色网格线，格子越密线越淡。原生 RDP 窗口的截图是窗口外框（含系统标题栏），点击用同一基准。',
     images: 'always',
     input: {
       viewId,
@@ -282,7 +282,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_click',
     description:
-      '点击图形桌面。VNC / 内嵌 RDP 的 x/y 统一使用 desktop_screenshot 返回图片的像素坐标；原生窗口使用客户区像素。button 默认 left，double=true 表示双击。只读 VNC 会拒绝输入。',
+      '点击图形桌面。x/y 用 desktop_screenshot 返回那张图的像素坐标：VNC / 内嵌 RDP 是画布坐标；原生 RDP 是窗口外框坐标（截图含系统标题栏，和截图同一基准）。button 默认 left，double=true 表示双击。只读 VNC 会拒绝输入。',
     input: {
       viewId,
       x: z.number().int().min(0).describe('图片横坐标'),

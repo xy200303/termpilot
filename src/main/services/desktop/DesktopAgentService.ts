@@ -103,7 +103,7 @@ function decorate(file: string, spacing: number, region?: DesktopRegion): { suff
   const parts: string[] = []
   if (region) {
     parts.push(
-      `区域 ${cropped.x},${cropped.y} ${cropped.width}×${cropped.height}，原画面 ${cropped.fullWidth}×${cropped.fullHeight}，刻度是整屏坐标`
+      `区域 ${cropped.x},${cropped.y} ${cropped.width}×${cropped.height}，原画面 ${cropped.fullWidth}×${cropped.fullHeight}，坐标基准是整屏`
     )
   }
   if (gridded) parts.push(`网格 ${spacing}px`)
