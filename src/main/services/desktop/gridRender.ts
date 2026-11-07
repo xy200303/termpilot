@@ -26,6 +26,27 @@ export type GridPalette = {
 
 const SAMPLE_TARGET = 4000
 const BLOCK = 32
+const MIN_COLOR_CONTRAST = 4.5
+
+function channel(v: number): number {
+  const c = v / 255
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+
+/** WCAG 2.1 相对亮度。 */
+function luminance(r: number, g: number, b: number): number {
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+
+/** WCAG 对比度，1 表示完全一样，21 是黑白。 */
+function contrast(a: number, b: number): number {
+  const hi = Math.max(a, b)
+  const lo = Math.min(a, b)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+const LUM_RED = luminance(185, 28, 28)
+const LUM_BLUE = luminance(29, 78, 216)
 
 function alphaFor(step: number): number {
   return step >= 50 ? 0.44 : step >= 20 ? 0.34 : 0.28
@@ -95,28 +116,47 @@ function averageColor(image: NativeImage): { r: number; g: number; b: number } |
  * 把画面切成 32px 小块并标出明暗，用 '1' 表示深底。
  * 网格线逐段取色，同一张图里亮暗各半时两边都看得清。
  */
-function toneMap(image: NativeImage): { bw: number; bh: number; flags: string } {
+export function lineToneMap(image: NativeImage): { bw: number; bh: number; flags: string } {
   const data = image.toBitmap()
   const size = image.getSize()
   const bw = Math.ceil(size.width / BLOCK)
   const bh = Math.ceil(size.height / BLOCK)
-  const sums = new Float32Array(bw * bh)
+  const red = new Float32Array(bw * bh)
+  const green = new Float32Array(bw * bh)
+  const blue = new Float32Array(bw * bh)
   const counts = new Uint32Array(bw * bh)
   for (let y = 0; y < size.height; y += 2) {
     const row = Math.floor(y / BLOCK) * bw
     for (let x = 0; x < size.width; x += 2) {
       const i = (y * size.width + x) * 4
       const cell = row + Math.floor(x / BLOCK)
-      sums[cell] += data[i + 2] * 0.299 + data[i + 1] * 0.587 + data[i] * 0.114
+      blue[cell] += data[i]
+      green[cell] += data[i + 1]
+      red[cell] += data[i + 2]
       counts[cell] += 1
     }
   }
   let flags = ''
-  for (let i = 0; i < sums.length; i += 1) {
-    const lum = counts[i] > 0 ? sums[i] / counts[i] : 128
-    flags += lum < 140 ? '1' : '0'
+  for (let i = 0; i < counts.length; i += 1) {
+    const n = counts[i] > 0 ? counts[i] : 1
+    const lum = luminance(red[i] / n, green[i] / n, blue[i] / n)
+    // 彩色线够清楚就用彩色；不够就在黑白里挑对比更高的那个。
+    const cr = contrast(lum, LUM_RED)
+    const cb = contrast(lum, LUM_BLUE)
+    if (Math.max(cr, cb) >= MIN_COLOR_CONTRAST) flags += cr >= cb ? '0' : '1'
+    else flags += contrast(lum, 1) >= contrast(lum, 0) ? '2' : '3'
   }
   return { bw, bh, flags }
+}
+
+function lineColors(step: number): Record<string, { rgb: string; alpha: number }> {
+  const base = alphaFor(step)
+  return {
+    '0': { rgb: '185,28,28', alpha: base },
+    '1': { rgb: '29,78,216', alpha: base + 0.06 },
+    '2': { rgb: '255,255,255', alpha: base + 0.11 },
+    '3': { rgb: '0,0,0', alpha: base + 0.06 }
+  }
 }
 
 /**
@@ -152,10 +192,8 @@ export async function renderGrid(wc: WebContents, image: NativeImage, options: G
   const showOrigin = Boolean(options.showOrigin)
   const labelStep = Math.max(step, Math.round(Number(options.labelStep) || 0) || 100)
   const palette = chooseGridPalette(image, step)
-  // 深色块统一用浅色线；浅色块用红/蓝线。整图偏暗时 palette 是白色，要换回红系。
-  const darkBg = lightPalette(step)
-  const lightBg = palette.name === 'light' ? redPalette(step) : palette
-  const tone = toneMap(image)
+  const colors = lineColors(step)
+  const tone = lineToneMap(image)
 
   try {
     const dataUrl = image.toDataURL()
@@ -176,10 +214,7 @@ export async function renderGrid(wc: WebContents, image: NativeImage, options: G
       const TONE_W = ${tone.bw}
       const TONE_H = ${tone.bh}
       const TONE = ${JSON.stringify(tone.flags)}
-      const ON_DARK_RGB = ${JSON.stringify(darkBg.lineRgb)}
-      const ON_DARK_ALPHA = ${darkBg.lineAlpha}
-      const ON_LIGHT_RGB = ${JSON.stringify(lightBg.lineRgb)}
-      const ON_LIGHT_ALPHA = ${lightBg.lineAlpha}
+      const LINE_COLORS = ${JSON.stringify(colors)}
       const img = new Image()
       img.src = ${JSON.stringify(dataUrl)}
       await img.decode()
@@ -196,25 +231,34 @@ export async function renderGrid(wc: WebContents, image: NativeImage, options: G
       ctx.font = font + 'px ui-monospace, SFMono-Regular, Menlo, monospace'
       ctx.textBaseline = 'top'
       const hasChip = ${showOrigin ? 'true' : 'false'}
+      // 标签跟着所在小块的线色走，白底上就不会出现白字
+      const colorKeyAt = (x, y) => {
+        const bx = Math.min(TONE_W - 1, Math.max(0, Math.floor(x / BLOCK)))
+        const by = Math.min(TONE_H - 1, Math.max(0, Math.floor(y / BLOCK)))
+        return TONE[by * TONE_W + bx]
+      }
       const label = (text, x, y) => {
         // 标签用描边打底，必须 save/restore，否则会改掉线条的 strokeStyle
+        const key = colorKeyAt(x, y)
+        const color = LINE_COLORS[key] || LINE_COLORS['0']
         ctx.save()
         ctx.font = font + 'px ui-monospace, SFMono-Regular, Menlo, monospace'
         ctx.textBaseline = 'top'
         ctx.lineWidth = 3
-        ctx.strokeStyle = HALO_RGBA
+        ctx.strokeStyle = key === '2' ? 'rgba(0,0,0,0.62)' : 'rgba(255,255,255,0.9)'
         ctx.strokeText(text, x, y)
         ctx.lineWidth = 1
-        ctx.fillStyle = LABEL_RGBA
+        ctx.fillStyle = 'rgba(' + color.rgb + ',0.96)'
         ctx.fillText(text, x, y)
         ctx.restore()
       }
       // 每 32px 一段按局部底色换线色，同一张图亮暗各半也不会有一边看不见
       const paintRun = (vertical, fixed, from, to) => {
-        const bx = Math.min(TONE_W - 1, Math.floor(fixed / BLOCK))
-        const by = Math.min(TONE_H - 1, Math.floor(from / BLOCK))
-        const onDark = TONE[by * TONE_W + bx] === '1'
-        ctx.strokeStyle = 'rgba(' + (onDark ? ON_DARK_RGB : ON_LIGHT_RGB) + ',' + (onDark ? ON_DARK_ALPHA : ON_LIGHT_ALPHA) + ')'
+        // 竖线固定的是 x，横线固定的是 y；另一个方向决定段落在哪一块
+        const bx = Math.min(TONE_W - 1, Math.max(0, Math.floor((vertical ? fixed : from) / BLOCK)))
+        const by = Math.min(TONE_H - 1, Math.max(0, Math.floor((vertical ? from : fixed) / BLOCK)))
+        const color = LINE_COLORS[TONE[by * TONE_W + bx]] || LINE_COLORS['0']
+        ctx.strokeStyle = 'rgba(' + color.rgb + ',' + color.alpha + ')'
         ctx.beginPath()
         if (vertical) {
           ctx.moveTo(Math.round(fixed) + 0.5, from)
