@@ -22,10 +22,10 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
   if (!entry) throw new Error('VNC 画面不存在或已断开，请先打开该 VNC 标签')
   const { rfb, canvas } = entry
   if (input.action === 'screenshot') {
-    const shot = captureCanvas(canvas, input.grid)
+    const shot = captureCanvas(canvas)
     return {
       pngBase64: shot.pngBase64,
-      note: `VNC 画面已截取（${shot.width}×${shot.height}${shot.grid ? `，网格 ${shot.grid}px，坐标与图片一致` : ''}）`
+      note: `VNC 画面已截取（${shot.width}×${shot.height}）`
     }
   }
   if (input.action === 'wait') return waitForCanvas(canvas, input)

@@ -121,10 +121,10 @@ export function runRdpAgent(connection: RdpConnection, input: Exclude<DesktopAge
 function runRdpAgentUnsafe(connection: RdpConnection, input: Exclude<DesktopAgentInput, { action: 'wait' }>): { pngBase64?: string; note: string } {
   const { session, canvas } = connection
   if (input.action === 'screenshot') {
-    const shot = captureCanvas(canvas, input.grid)
+    const shot = captureCanvas(canvas)
     return {
       pngBase64: shot.pngBase64,
-      note: `RDP 画面已截取（${shot.width}×${shot.height}${shot.grid ? `，网格 ${shot.grid}px，坐标与图片一致` : ''}）`
+      note: `RDP 画面已截取（${shot.width}×${shot.height}）`
     }
   }
   if (input.action === 'click') {

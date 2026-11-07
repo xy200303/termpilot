@@ -4,24 +4,21 @@ export interface CanvasCapture {
   pngBase64: string
   width: number
   height: number
-  grid?: number
 }
 
-export function captureCanvas(canvas: HTMLCanvasElement, grid?: boolean | number): CanvasCapture {
+/** 只取原始画面；坐标网格统一由主进程合成，三种桌面来源保持一致。 */
+export function captureCanvas(canvas: HTMLCanvasElement): CanvasCapture {
   if (canvas.width === 0 || canvas.height === 0) throw new Error('桌面画面尚未加载，请等待连接完成后再截图')
-  const spacing = grid === true ? 100 : typeof grid === 'number' ? grid : 0
   const output = document.createElement('canvas')
   output.width = canvas.width
   output.height = canvas.height
   const context = output.getContext('2d')
   if (!context) throw new Error('无法创建截图画布')
   context.drawImage(canvas, 0, 0)
-  if (spacing > 0) drawGrid(context, output.width, output.height, spacing)
   return {
     pngBase64: output.toDataURL('image/png').split(',')[1],
     width: output.width,
-    height: output.height,
-    grid: spacing || undefined
+    height: output.height
   }
 }
 
@@ -62,37 +59,4 @@ function canvasSignature(canvas: HTMLCanvasElement): string {
     hash = Math.imul(hash ^ data[i + 2], 16777619)
   }
   return String(hash >>> 0)
-}
-
-function drawGrid(context: CanvasRenderingContext2D, width: number, height: number, spacing: number): void {
-  context.save()
-  context.lineWidth = 1
-  context.font = '12px sans-serif'
-  context.textBaseline = 'top'
-  for (let x = spacing; x < width; x += spacing) {
-    context.strokeStyle = 'rgba(255, 255, 255, 0.48)'
-    context.beginPath()
-    context.moveTo(x + 0.5, 0)
-    context.lineTo(x + 0.5, height)
-    context.stroke()
-    label(context, String(x), x + 3, 3)
-  }
-  for (let y = spacing; y < height; y += spacing) {
-    context.strokeStyle = 'rgba(255, 255, 255, 0.48)'
-    context.beginPath()
-    context.moveTo(0, y + 0.5)
-    context.lineTo(width, y + 0.5)
-    context.stroke()
-    label(context, String(y), 3, y + 3)
-  }
-  label(context, `0,0 · ${width}×${height} · ${spacing}px/格`, 3, 3)
-  context.restore()
-}
-
-function label(context: CanvasRenderingContext2D, text: string, x: number, y: number): void {
-  const width = context.measureText(text).width
-  context.fillStyle = 'rgba(0, 0, 0, 0.72)'
-  context.fillRect(x - 2, y - 2, width + 4, 16)
-  context.fillStyle = '#ffffff'
-  context.fillText(text, x, y)
 }
