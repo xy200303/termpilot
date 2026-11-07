@@ -11,9 +11,9 @@ Linux x64 包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubu
 
 | 平台 | 安装包 | 免安装 |
 | --- | --- | --- |
-| Windows x64 | [TermPilot.Setup.0.8.1.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.1.exe) | [TermPilot-0.8.1-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1-win.zip) |
-| macOS（Apple Silicon） | [TermPilot-0.8.1-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1-arm64.dmg) | [TermPilot-0.8.1-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1-arm64-mac.zip) |
-| Linux x64 | [termpilot_0.8.1_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.1_amd64.deb) | [TermPilot-0.8.1.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1.AppImage) |
+| Windows x64 | [TermPilot.Setup.0.8.1.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.1.exe)（146MB） | [TermPilot-0.8.1-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1-win.zip)（198MB） |
+| macOS（Apple Silicon） | [TermPilot-0.8.1-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1-arm64.dmg)（168MB） | [TermPilot-0.8.1-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1-arm64-mac.zip)（169MB） |
+| Linux x64 | [termpilot_0.8.1_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.1_amd64.deb)（129MB） | [TermPilot-0.8.1.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.1.AppImage)（167MB） |
 
 ## 安装提示
 
@@ -34,7 +34,7 @@ Linux x64 包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubu
 
 macOS 对应 `~/Library/Application Support/TermPilot/`，Linux 对应 `~/.config/TermPilot/`。
 
-备份就复制整个目录。注意 `termpilot.db` 里的口令密文用本机钥匙串加密，**换机器后口令需要重新输入**，连接参数（主机、端口、跳板）不受影响。
+备份就复制整个目录。注意 `termpilot.db` 里的口令密文用本机钥匙串加密，**换机器后口令需要重新输入**，连接参数（主机、端口、跳板）不受影响。Linux 上没有系统钥匙串时（例如最小化桌面），口令改用同目录 `local-secrets.key` 的本机密钥加密，连同这个文件一起备份才能解开。
 
 ## 从源码运行
 
