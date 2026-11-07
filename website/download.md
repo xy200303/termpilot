@@ -9,9 +9,9 @@ description: TermPilot 三端安装包下载：Windows x64、macOS（Apple Silic
 
 | 平台 | 安装包 | 免安装 |
 | --- | --- | --- |
-| Windows x64 | [TermPilot.Setup.0.8.0.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.0.exe) | [TermPilot-0.8.0-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0-win.zip) |
-| macOS（Apple Silicon） | [TermPilot-0.8.0-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0-arm64.dmg) | [TermPilot-0.8.0-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0-arm64-mac.zip) |
-| Linux x64 | [termpilot_0.8.0_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.0_amd64.deb) | [TermPilot-0.8.0.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0.AppImage) |
+| Windows x64 | [TermPilot.Setup.0.8.0.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.0.exe)（146MB） | [TermPilot-0.8.0-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0-win.zip)（198MB） |
+| macOS（Apple Silicon） | [TermPilot-0.8.0-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0-arm64.dmg)（168MB） | [TermPilot-0.8.0-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0-arm64-mac.zip)（168MB） |
+| Linux x64 | [termpilot_0.8.0_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.0_amd64.deb)（130MB） | [TermPilot-0.8.0.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.0.AppImage)（167MB） |
 
 ## 安装提示
 
