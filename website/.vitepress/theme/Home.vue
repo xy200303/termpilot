@@ -5,7 +5,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.8.1'
+const VERSION = '0.8.2'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
@@ -135,11 +135,18 @@ const specs = [
   ['凭据存储', 'safeStorage 加密 → 本机 SQLite，不出本机'],
   ['Agent 接口', '内置 MCP Server（37 个工具，只绑 127.0.0.1 + 令牌）；Go 写的本机 CLI'],
   ['平台', 'Windows x64 / macOS（Apple Silicon）/ Linux x64'],
-  ['安装包', 'Windows Setup 150MB · macOS dmg 172MB · AppImage 171MB · deb 132MB'],
+  ['安装包', 'Windows Setup 146MB · macOS dmg 168MB · AppImage 167MB · deb 129MB'],
   ['许可证', 'MIT']
 ]
 
 const changelog = [
+  {
+    version: '0.8.2',
+    items: [
+      'desktop_screenshot 默认带 100px 坐标网格，Agent 不传参就能按刻度算坐标',
+      '需要干净画面时传 grid=false 关闭，也可自定义 20–500 的网格间距'
+    ]
+  },
   {
     version: '0.8.1',
     items: [
@@ -152,13 +159,6 @@ const changelog = [
     items: [
       '新增 VNC / RDP 图形桌面、双向剪贴板和桌面性能模式',
       'MCP 新增 10 个桌面工具，工具总数 37'
-    ]
-  },
-  {
-    version: '0.7.8',
-    items: [
-      '侧边栏品牌头；串口路径可直接选择；连接右键可关闭全部窗口',
-      'MCP 新增 app_screenshot 和 app_record'
     ]
   }
 ]
