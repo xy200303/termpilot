@@ -8,7 +8,7 @@ import type { DesktopAgentInput, DesktopAgentReply, DesktopRegion } from '../../
 import type { DesktopService } from './DesktopService'
 import { NativeAgentService } from './NativeAgentService'
 import { renderGrid } from './gridRender'
-import { cropPng, withGrid } from './pngGrid'
+import { cropPng } from './pngCrop'
 
 /** GUI 面板和 MCP 共用的桌面操作入口。 */
 export class DesktopAgentService {
@@ -95,39 +95,28 @@ function gridSpacing(input: DesktopAgentInput): number {
 /** 在落盘的截图上裁区域、叠网格，返回要拼到回复里的说明。 */
 async function decorate(wc: WebContents | null, file: string, spacing: number, region?: DesktopRegion): Promise<{ suffix: string }> {
   const buffer = readFileSync(file)
-  const cropped = region
-    ? cropPng(buffer, region)
-    : { png: buffer, x: 0, y: 0, width: 0, height: 0, fullWidth: 0, fullHeight: 0 }
-  let out = cropped.png
+  const cropped = region ? cropPng(buffer, region) : null
+  let out = cropped?.png ?? buffer
   let gridded = false
-  if (spacing > 0) {
-    const image = nativeImage.createFromBuffer(cropped.png)
-    const rendered =
-      wc && !wc.isDestroyed()
-        ? await renderGrid(wc, image, {
-            step: spacing,
-            originX: cropped.x,
-            originY: cropped.y,
-            showOrigin: Boolean(region),
-            spanWidth: image.getSize().width,
-            spanHeight: image.getSize().height
-          })
-        : image
+  if (spacing > 0 && wc && !wc.isDestroyed()) {
+    const image = nativeImage.createFromBuffer(out)
+    const size = image.getSize()
+    const rendered = await renderGrid(wc, image, {
+      step: spacing,
+      originX: cropped?.x ?? 0,
+      originY: cropped?.y ?? 0,
+      showOrigin: Boolean(cropped),
+      spanWidth: size.width,
+      spanHeight: size.height
+    })
     if (rendered !== image) {
       out = rendered.toPNG()
       gridded = true
-    } else {
-      // 渲染进程不可用或绘制失败时退回主进程位图合成，保证网格不丢。
-      const fallback = withGrid(cropped.png, spacing, cropped.x, cropped.y)
-      if (fallback) {
-        out = fallback
-        gridded = true
-      }
     }
   }
   if (out !== buffer) writeFileSync(file, out)
   const parts: string[] = []
-  if (region) {
+  if (cropped) {
     parts.push(
       `区域 ${cropped.x},${cropped.y} ${cropped.width}×${cropped.height}，原画面 ${cropped.fullWidth}×${cropped.fullHeight}，坐标基准是整屏`
     )
