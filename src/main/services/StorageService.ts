@@ -665,7 +665,7 @@ export class StorageService {
 
   private encryptSecret(secret?: string): string | undefined {
     if (!secret) return undefined
-    if (safeStorage.isEncryptionAvailable()) return safeStorage.encryptString(secret).toString('base64')
+    if (this.keychainUsable()) return safeStorage.encryptString(secret).toString('base64')
     const key = this.localEncryptionKey()
     const iv = randomBytes(12)
     const cipher = createCipheriv('aes-256-gcm', key, iv)
@@ -687,6 +687,20 @@ export class StorageService {
       return safeStorage.decryptString(Buffer.from(value, 'base64'))
     } catch {
       return null
+    }
+  }
+
+  /**
+   * Linux 没有钥匙串时 safeStorage 会退到 basic_text（固定口令），比本机密钥文件更弱，
+   * 这种情况也当作不可用，直接走 localv1。旧密文仍能由 safeStorage 解出来。
+   */
+  private keychainUsable(): boolean {
+    if (!safeStorage.isEncryptionAvailable()) return false
+    if (process.platform !== 'linux') return true
+    try {
+      return safeStorage.getSelectedStorageBackend() !== 'basic_text'
+    } catch {
+      return false
     }
   }
 
