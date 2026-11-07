@@ -7,6 +7,11 @@ description: TermPilot 最近三个版本的更新内容，与仓库 CHANGELOG.m
 
 这里只同步最近三个版本。完整历史见仓库 [CHANGELOG.md](https://github.com/xy200303/termpilot/blob/main/CHANGELOG.md)。安装包均未做代码签名。
 
+## 0.8.3
+
+- `desktop_screenshot` 支持 `region`：只截一块区域返回，角标标出这块图在原画面里的起点坐标，刻度仍是整屏坐标，可直接拿去点击。
+- 网格线按局部底色在 OKLCH 空间选色，并用 APCA + WCAG 双轨校验；细网格只画线不标数字，原生 RDP 窗口截图也支持网格。
+
 ## 0.8.2
 
 - `desktop_screenshot` 默认叠加 100px 坐标网格，Agent 不传参数也能直接按刻度算点击坐标；需要干净画面时传 `grid=false` 关闭，也可传 20–500 自定义间距。

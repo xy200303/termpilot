@@ -5,7 +5,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.8.2'
+const VERSION = '0.8.3'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
@@ -141,17 +141,17 @@ const specs = [
 
 const changelog = [
   {
+    version: '0.8.3',
+    items: [
+      'desktop_screenshot 支持 region 只截一块区域，角标标出原画面起点坐标',
+      '网格线按局部底色在 OKLCH 里选色，并用 APCA 对比度校验，亮暗各半也看得清'
+    ]
+  },
+  {
     version: '0.8.2',
     items: [
       'desktop_screenshot 默认带 100px 坐标网格，Agent 不传参就能按刻度算坐标',
       '需要干净画面时传 grid=false 关闭，也可自定义 20–500 的网格间距'
-    ]
-  },
-  {
-    version: '0.8.1',
-    items: [
-      'Linux 构建固定 Ubuntu 22.04，兼容 GLIBC 2.35，并在发布前检查原生模块',
-      '没有系统钥匙串时改用本机 AES-256-GCM 密钥文件，Linux 最小桌面可以正常启动'
     ]
   },
   {
