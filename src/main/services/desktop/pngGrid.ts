@@ -38,10 +38,16 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
 
   const scale = width > 1600 ? 2 : 1
   const advance = (GLYPH_W + 1) * scale
-  // 浅色画面用深线，深色画面用浅线；格子越密线越淡，免得盖住内容。
-  const light = brightness(bitmap, width, height) > 140
-  const alpha = spacing >= 50 ? 0.55 : 0.32
-  const line = light ? [0, 0, 0, alpha] : [255, 255, 255, alpha]
+  // 按 32px 小块的底色选线色：浅底用深蓝、深底用亮青，半张亮半张暗也不会有一边看不见。
+  const tone = buildTone(bitmap, width, height)
+  const alpha = spacing >= 50 ? 0.58 : 0.34
+  const LIGHT_BG = [37, 99, 235, alpha]
+  const DARK_BG = [103, 232, 249, alpha]
+  const colorAt = (x: number, y: number): number[] => {
+    const bx = Math.min(tone.bw - 1, Math.floor(x / BLOCK))
+    const by = Math.min(tone.bh - 1, Math.floor(y / BLOCK))
+    return tone.data[by * tone.bw + bx] > 140 ? LIGHT_BG : DARK_BG
+  }
 
   // 左上角标出这块图在原画面里的起点；顶部刻度避开它。
   const origin = `${originX},${originY}`
@@ -54,7 +60,11 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
   if (firstX <= originX) firstX += spacing
   for (let i = 0, abs = firstX; abs < originX + width; abs += spacing, i += 1) {
     const x = abs - originX
-    for (let y = 0; y < height; y += 1) blend(bitmap, width, x, y, line[0], line[1], line[2], line[3])
+    for (let y = 0; y < height; ) {
+      const color = colorAt(x, y)
+      const end = Math.min(height, (Math.floor(y / BLOCK) + 1) * BLOCK)
+      for (; y < end; y += 1) blend(bitmap, width, x, y, color[0], color[1], color[2], color[3])
+    }
     const text = String(abs)
     if (i % labelStep === 0 && x + 3 > originRight + 4 && x + 3 + text.length * advance + 3 < width) {
       drawText(bitmap, width, height, text, x + 3, 3, scale)
@@ -64,7 +74,11 @@ export function withGrid(png: Buffer, spacing: number, originX = 0, originY = 0)
   if (firstY <= originY) firstY += spacing
   for (let i = 0, abs = firstY; abs < originY + height; abs += spacing, i += 1) {
     const y = abs - originY
-    for (let x = 0; x < width; x += 1) blend(bitmap, width, x, y, line[0], line[1], line[2], line[3])
+    for (let x = 0; x < width; ) {
+      const color = colorAt(x, y)
+      const end = Math.min(width, (Math.floor(x / BLOCK) + 1) * BLOCK)
+      for (; x < end; x += 1) blend(bitmap, width, x, y, color[0], color[1], color[2], color[3])
+    }
     if (i % labelStep === 0) drawText(bitmap, width, height, String(abs), 3, y + 3, scale)
   }
 
@@ -99,18 +113,26 @@ export function cropPng(png: Buffer, region: DesktopRegion): {
   return { png: image.crop({ x, y, width: w, height: h }).toPNG(), x, y, width: w, height: h, fullWidth: width, fullHeight: height }
 }
 
-function brightness(bitmap: Buffer, width: number, height: number): number {
-  const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 4000)))
-  let sum = 0
-  let count = 0
-  for (let y = 0; y < height; y += step) {
-    for (let x = 0; x < width; x += step) {
+const BLOCK = 32
+
+/** 把画面切成 BLOCK×BLOCK 的小块，算每块的平均亮度，用来逐段挑网格线颜色。 */
+function buildTone(bitmap: Buffer, width: number, height: number): { bw: number; bh: number; data: Float32Array } {
+  const bw = Math.ceil(width / BLOCK)
+  const bh = Math.ceil(height / BLOCK)
+  const sums = new Float32Array(bw * bh)
+  const counts = new Uint32Array(bw * bh)
+  for (let y = 0; y < height; y += 2) {
+    const row = Math.floor(y / BLOCK) * bw
+    for (let x = 0; x < width; x += 2) {
       const i = (y * width + x) * 4
-      sum += bitmap[i + 2] * 0.299 + bitmap[i + 1] * 0.587 + bitmap[i] * 0.114
-      count += 1
+      const cell = row + Math.floor(x / BLOCK)
+      sums[cell] += bitmap[i + 2] * 0.299 + bitmap[i + 1] * 0.587 + bitmap[i] * 0.114
+      counts[cell] += 1
     }
   }
-  return count > 0 ? sum / count : 128
+  const data = new Float32Array(bw * bh)
+  for (let i = 0; i < data.length; i += 1) data[i] = counts[i] > 0 ? sums[i] / counts[i] : 128
+  return { bw, bh, data }
 }
 
 function blend(bitmap: Buffer, width: number, x: number, y: number, r: number, g: number, b: number, alpha: number): void {
