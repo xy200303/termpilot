@@ -9,11 +9,7 @@ description: TermPilot 三端安装包下载：Windows x64、macOS（Apple Silic
 
 Linux x64 包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubuntu 22.04 / 24.04。
 
-| 平台 | 安装包 | 免安装 |
-| --- | --- | --- |
-| Windows x64 | [TermPilot.Setup.0.8.6.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.6.exe)（146MB） | [TermPilot-0.8.6-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6-win.zip)（198MB） |
-| macOS（Apple Silicon） | [TermPilot-0.8.6-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6-arm64.dmg)（168MB） | [TermPilot-0.8.6-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6-arm64-mac.zip)（169MB） |
-| Linux x64 | [termpilot_0.8.6_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.6_amd64.deb)（129MB） | [TermPilot-0.8.6.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6.AppImage)（167MB） |
+<DownloadTable version="0.8.6" locale="zh" />
 
 ## 安装提示
 

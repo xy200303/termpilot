@@ -9,6 +9,22 @@ const OG_IMAGE = `${SITE_URL}/og-image.png`
 const REPO = 'https://github.com/xy200303/termpilot'
 const VERSION = '0.8.6'
 
+const EN_NAV = [
+  { text: 'Home', link: '/en/' },
+  { text: 'Download', link: '/en/download' },
+  { text: 'Docs', link: '/en/guide/quickstart' },
+  { text: 'GitHub', link: REPO }
+]
+
+const EN_SIDEBAR = {
+  '/en/guide/': [
+    {
+      text: 'Guide',
+      items: [{ text: 'Quick start', link: '/en/guide/quickstart' }]
+    }
+  ]
+}
+
 const softwareJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
@@ -35,6 +51,10 @@ const websiteJsonLd = {
 }
 
 export default defineConfig({
+  locales: {
+    root: { label: '简体中文', lang: 'zh-CN' },
+    en: { label: 'English', lang: 'en', link: '/en/' }
+  },
   lang: 'zh-CN',
   title: SITE_TITLE,
   description: SITE_DESC,
@@ -80,7 +100,6 @@ export default defineConfig({
       { text: '下载', link: '/download' },
       { text: '文档', link: '/guide/quickstart' },
       { text: '更新日志', link: '/changelog' },
-      { text: 'English', link: '/en/' },
       { text: 'GitHub', link: REPO }
     ],
     sidebar: {
@@ -95,6 +114,18 @@ export default defineConfig({
           ]
         }
       ]
+    },
+    locales: {
+      en: {
+        nav: EN_NAV,
+        sidebar: EN_SIDEBAR,
+        outline: { label: 'On this page' },
+        docFooter: { prev: 'Previous', next: 'Next' },
+        lastUpdated: { text: 'Last updated' },
+        returnToTopLabel: 'Back to top',
+        sidebarMenuLabel: 'Menu',
+        darkModeSwitchLabel: 'Appearance'
+      }
     },
     outline: { label: '本页目录' },
     docFooter: { prev: '上一篇', next: '下一篇' },

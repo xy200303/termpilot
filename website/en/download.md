@@ -9,11 +9,7 @@ Current version **v0.8.6**. All packages are published on [GitHub Releases](http
 
 Linux x64 packages are built on Ubuntu 22.04 and require `glibc >= 2.35`; Ubuntu 22.04 / 24.04 work.
 
-| Platform | Installer | Portable |
-| --- | --- | --- |
-| Windows x64 | [TermPilot.Setup.0.8.6.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.6.exe) | [TermPilot-0.8.6-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6-win.zip) |
-| macOS (Apple Silicon) | [TermPilot-0.8.6-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6-arm64.dmg) | [TermPilot-0.8.6-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6-arm64-mac.zip) |
-| Linux x64 | [termpilot_0.8.6_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.6_amd64.deb) | [TermPilot-0.8.6.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.6.AppImage) |
+<DownloadTable version="0.8.6" locale="en" />
 
 ## Installation notes
 
