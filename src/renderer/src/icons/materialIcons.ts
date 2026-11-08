@@ -1,6 +1,6 @@
 /**
  * VS Code Material Icon Theme：按文件名、扩展名、文件夹名选图标。
- * 图标清单 0.43 MB，只在第一次渲染文件图标时加载，不参与首屏。
+ * 图标清单和 SVG 地址都在 materialIconsData 里按需加载，不参与首屏。
  */
 export type IconTheme = {
   iconDefinitions: Record<string, { iconPath: string }>
@@ -34,19 +34,8 @@ type NameMaps = {
   rootFolderNamesExpanded: Record<string, string>
 }
 
-/* 图标 URL 本身很小，仍随首屏一起打包；重的清单按需加载 */
-const iconUrls = import.meta.glob('../../../../node_modules/material-icon-theme/icons/*.svg', {
-  eager: true,
-  query: '?url&no-inline',
-  import: 'default'
-}) as Record<string, string>
-
-const urls = new Map<string, string>()
-for (const [path, url] of Object.entries(iconUrls)) {
-  urls.set(path.slice(path.lastIndexOf('/') + 1), url)
-}
-
 let theme: IconTheme | null = null
+let urls = new Map<string, string>()
 let darkMaps: NameMaps | null = null
 let lightMaps: NameMaps | null = null
 let loading: Promise<void> | null = null
@@ -76,9 +65,11 @@ function build(): void {
 /** 加载并构建图标映射；重复调用只加载一次。 */
 export function ensureMaterialIcons(): Promise<void> {
   if (loading) return loading
-  loading = import('material-icon-theme/dist/material-icons.json')
-    .then((mod) => {
-      theme = (mod.default ?? (mod as unknown)) as IconTheme
+  loading = import('./materialIconsData')
+    .then((mod) => mod.loadIconData())
+    .then((data) => {
+      theme = data.theme
+      urls = data.urls
       build()
     })
     .catch(() => {
