@@ -7,6 +7,7 @@ import {
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { useAppStore } from '../stores/useAppStore'
+import { useT } from '../i18n'
 import { captureTerminalView, type CaptureDone } from '../terminal/captureView'
 import { terminalPool } from '../terminal/TerminalPool'
 import { CaptureDialog } from './CaptureDialog'
@@ -16,6 +17,7 @@ import { CaptureDialog } from './CaptureDialog'
  * 切换标签时组件卸载/重挂载，但终端本体只是 re-parent，缓冲不丢。
  */
 export function TerminalView(props: { termId: string }) {
+  const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   const setNotice = useAppStore((s) => s.setNotice)
   const [selection, setSelection] = useState<{ text: string; startLine: number; endLine: number } | null>(null)
@@ -56,7 +58,7 @@ export function TerminalView(props: { termId: string }) {
     if (!selection) return
     const range = selection
     setShotError(null)
-    setNotice('正在截图…')
+    setNotice(t('正在截图…'))
     void (async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve))
       try {

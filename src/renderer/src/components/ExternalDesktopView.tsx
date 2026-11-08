@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { MonitorUp, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '../stores/useAppStore'
+import { useT } from '../i18n'
 import type { SessionConfig } from '../../../shared/types'
 
 /** 原生 RDP 的画面由外部客户端显示，这里只管理进程与连接状态。 */
 export function ExternalDesktopView(props: { viewId: string; session: SessionConfig }) {
+  const t = useT()
   const status = useAppStore((s) => s.desktopState[props.viewId])
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -40,7 +42,7 @@ export function ExternalDesktopView(props: { viewId: string; session: SessionCon
         )}
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void open()}>
           <RotateCw />
-          {busy ? '正在打开…' : status?.status === 'connected' ? '重新打开原生窗口' : '打开原生窗口'}
+          {busy ? t('正在打开…') : status?.status === 'connected' ? t('重新打开原生窗口') : t('打开原生窗口')}
         </Button>
         <p className="text-xs leading-5 text-muted-foreground">
           关闭这个标签会结束对应的原生客户端进程。画面不进入 Electron，因此整窗截图和录屏不包含原生窗口内容。

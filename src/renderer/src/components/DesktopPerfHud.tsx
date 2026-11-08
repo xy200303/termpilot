@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { DesktopMetrics } from '../../../shared/types'
+import { useT } from '../i18n'
 
 const PROFILE_LABEL: Record<string, string> = {
   auto: '自动',
@@ -15,6 +16,7 @@ export function DesktopPerfHud(props: {
   performance?: 'auto' | 'quality' | 'balanced' | 'speed'
   canvas: () => HTMLCanvasElement | null
 }) {
+  const t = useT()
   const [metrics, setMetrics] = useState<DesktopMetrics | null>(null)
   const [size, setSize] = useState('')
 
@@ -41,7 +43,7 @@ export function DesktopPerfHud(props: {
   return (
     <div className="pointer-events-none absolute left-2 top-2 z-20 rounded-md bg-black/65 px-2 py-1 font-mono text-[10px] leading-4 text-white/85">
       <div>
-        {props.protocol.toUpperCase()} · {PROFILE_LABEL[props.performance ?? 'balanced']} · {size || '—'}
+        {props.protocol.toUpperCase()} · {t(PROFILE_LABEL[props.performance ?? 'balanced'])} · {size || '—'}
       </div>
       <div>
         ↓ {metrics.kbpsIn.toFixed(0)} kbps ↑ {metrics.kbpsOut.toFixed(0)} kbps · {received} MB

@@ -9,6 +9,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import type { SftpInstallEvent } from '../../../shared/types'
+import { useT } from '../i18n'
 
 type InstallView = {
   open: boolean
@@ -18,6 +19,7 @@ type InstallView = {
 
 /** 文件通道打不开时弹出，把远端改子系统的输出原样滚出来。 */
 export function SftpInstallDialog() {
+  const t = useT()
   const [view, setView] = useState<InstallView | null>(null)
   const box = useRef<HTMLPreElement>(null)
 
@@ -49,21 +51,21 @@ export function SftpInstallDialog() {
           <DialogTitle>文件通道</DialogTitle>
           <DialogDescription>
             {status === 'running'
-              ? '正在改成 sshd 自带的 SFTP。'
+              ? t('正在改成 sshd 自带的 SFTP。')
               : status === 'ok'
-                ? '已经改成内置 SFTP，正在连接。'
-                : '文件通道没有打开，下面是这台机器的输出。'}
+                ? t('已经改成内置 SFTP，正在连接。')
+                : t('文件通道没有打开，下面是这台机器的输出。')}
           </DialogDescription>
         </DialogHeader>
         <pre
           ref={box}
           className="max-h-80 min-h-40 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-5 whitespace-pre-wrap"
         >
-          {view?.lines.join('\n') || '等待远程输出…'}
+          {view?.lines.join('\n') || t('等待远程输出…')}
         </pre>
         <DialogFooter>
           <Button variant="outline" onClick={() => setView((current) => current && { ...current, open: false })}>
-            {status === 'running' ? '隐藏' : '关闭'}
+            {status === 'running' ? t('隐藏') : t('关闭')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -9,9 +9,11 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import type { CaptureDone } from '../terminal/captureView'
+import { useT } from '../i18n'
 
 /** 截图完成后的确认。失败时直接说明原因。可以打开文件所在目录，或把图片复制到剪贴板。 */
 export function CaptureDialog(props: { shot: CaptureDone | null; error?: string | null; onClose: () => void }) {
+  const t = useT()
   const file = props.shot?.paths.at(-1) ?? ''
   const [preview, setPreview] = useState('')
   const [copied, setCopied] = useState(false)
@@ -78,9 +80,9 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
     <Dialog open={props.shot !== null} onOpenChange={(open) => !open && props.onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>截图已保存</DialogTitle>
+          <DialogTitle>{t('截图已保存')}</DialogTitle>
           <DialogDescription>
-            {count > 1 ? `共 ${count} 张，下面是最后一张。` : '已经保存到截图目录。'}
+            {count > 1 ? t('共 {count} 张，下面是最后一张。', { count }) : t('已经保存到截图目录。')}
             {props.shot?.note ? ` ${props.shot.note}` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -93,9 +95,9 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
         {error && <p className="text-xs text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => void reveal()}>
-            打开所在目录
+            {t('打开所在目录')}
           </Button>
-          <Button onClick={() => void copy()}>{copied ? '已复制' : '复制图片'}</Button>
+          <Button onClick={() => void copy()}>{copied ? t('已复制') : t('复制图片')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

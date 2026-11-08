@@ -18,6 +18,7 @@ import { CaptureDialog } from './CaptureDialog'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { sendTextToVnc } from '../desktop/vncAgent'
 import { sendTextToRdp } from '../desktop/rdpAgent'
+import { useT } from '../i18n'
 
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
 
@@ -29,6 +30,7 @@ export function DragStrip() {
 
 /** 终端标签。窗口级标签，不用 Tabs 组件，避免切走时卸载终端。 */
 export function TabBar() {
+  const tr = useT()
   const tabs = useAppStore((s) => s.tabs)
   const sessions = useAppStore((s) => s.sessions)
   const activeTabId = useAppStore((s) => s.activeTabId)
@@ -93,7 +95,7 @@ export function TabBar() {
       else await sendTextToRdp(activeTab.id, sayText, pasteKeys)
       setSayOpen(false)
       setSayText('')
-      setNotice(pasteKeys === 'ctrl-shift-v' ? '已按终端方式粘贴' : '已粘贴到桌面')
+      setNotice(pasteKeys === 'ctrl-shift-v' ? tr('已按终端方式粘贴') : tr('已粘贴到桌面'))
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error))
     } finally {
@@ -114,7 +116,7 @@ export function TabBar() {
           const result = await window.api.desktop.agent.run(termId, { action: 'screenshot' })
           const split = result.lastIndexOf('\n')
           const file = result.slice(split + 1).trim()
-          if (split < 0 || !file) throw new Error('截图没有返回图片文件')
+          if (split < 0 || !file) throw new Error(tr('截图没有返回图片文件'))
           done = { note: result.slice(0, split), paths: [file] }
         } else {
           done = await captureTerminalView({ termId, mode })
@@ -194,14 +196,14 @@ export function TabBar() {
                 >
                   复制为 Agent 提示词
                 </ContextMenuItem>
-                <ContextMenuItem onClick={() => openAfterMenu(() => setRenamingId(t.id))}>重命名</ContextMenuItem>
-                <ContextMenuItem onClick={() => openAfterMenu(() => setRemarkingId(t.id))}>备注</ContextMenuItem>
+                <ContextMenuItem onClick={() => openAfterMenu(() => setRenamingId(t.id))}>{tr('重命名')}</ContextMenuItem>
+                <ContextMenuItem onClick={() => openAfterMenu(() => setRemarkingId(t.id))}>{tr('备注')}</ContextMenuItem>
                 {t.kind !== 'reverse' &&
                 (termState[t.id]?.status === 'disconnected' || termState[t.id]?.status === 'error') ? (
-                  <ContextMenuItem onClick={() => reconnectTab(t.id)}>重新连接</ContextMenuItem>
+                  <ContextMenuItem onClick={() => reconnectTab(t.id)}>{tr('重新连接')}</ContextMenuItem>
                 ) : null}
                 <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => closeTab(t.id)}>关闭</ContextMenuItem>
+                <ContextMenuItem onClick={() => closeTab(t.id)}>{tr('关闭')}</ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
             </Fragment>
@@ -217,7 +219,7 @@ export function TabBar() {
         <Button
           variant={desktopPerformance ? 'secondary' : 'ghost'}
           size="icon-sm"
-          title={desktopPerformance ? '关闭桌面性能浮层' : '显示桌面性能浮层'}
+          title={desktopPerformance ? tr('关闭桌面性能浮层') : tr('显示桌面性能浮层')}
           onClick={toggleDesktopPerformance}
         >
           <Gauge />
@@ -227,21 +229,21 @@ export function TabBar() {
         <Button
           variant={desktopIme[activeTab.id] ? 'secondary' : 'ghost'}
           size="icon-sm"
-          title={desktopIme[activeTab.id] ? '退出中文键盘接管' : '中文键盘接管（本机输入法直接打中文）'}
+          title={desktopIme[activeTab.id] ? tr('退出中文键盘接管') : tr('中文键盘接管（本机输入法直接打中文）')}
           onClick={() => setDesktopIme(activeTab.id, !desktopIme[activeTab.id])}
         >
           <Keyboard />
         </Button>
       )}
       {isDesktop && (
-        <Button variant="ghost" size="icon-sm" title="发送文字（走远端剪贴板）" onClick={() => setSayOpen(true)}>
+        <Button variant="ghost" size="icon-sm" title={tr('发送文字（走远端剪贴板）')} onClick={() => setSayOpen(true)}>
           <Type />
         </Button>
       )}
       <Button
         variant="ghost"
         size="icon-sm"
-        title="截取当前画面"
+        title={tr('截取当前画面')}
         disabled={!activeTabId}
         onClick={() => shoot('viewport')}
       >
@@ -250,7 +252,7 @@ export function TabBar() {
       <Button
         variant="ghost"
         size="icon-sm"
-        title={isDesktop ? '图形桌面没有终端滚动缓冲' : '截取滚动缓冲'}
+        title={isDesktop ? tr('图形桌面没有终端滚动缓冲') : tr('截取滚动缓冲')}
         disabled={!activeTabId || isDesktop}
         onClick={() => shoot('scrollback')}
       >
@@ -259,10 +261,10 @@ export function TabBar() {
     </div>
     <RemarkDialog
       open={renamingId !== null}
-      title="重命名"
+      title={tr('重命名')}
       description={`给「${tabs.find((tab) => tab.id === renamingId)?.title ?? ''}」换个名字。`}
       initial={tabs.find((tab) => tab.id === renamingId)?.title ?? ''}
-      placeholder="窗口名称"
+      placeholder={tr('窗口名称')}
       onOpenChange={(open) => !open && setRenamingId(null)}
       onSave={(value) => {
         if (renamingId) renameTab(renamingId, value)
@@ -271,10 +273,10 @@ export function TabBar() {
     />
     <RemarkDialog
       open={remarkingId !== null}
-      title="备注"
+      title={tr('备注')}
       description={`给「${tabs.find((tab) => tab.id === remarkingId)?.title ?? ''}」写一句，方便以后认出它。留空就是清掉。`}
       initial={tabs.find((tab) => tab.id === remarkingId)?.remark ?? ''}
-      placeholder="这扇窗口在做什么"
+      placeholder={tr('这扇窗口在做什么')}
       onOpenChange={(open) => !open && setRemarkingId(null)}
       onSave={(value) => {
         if (remarkingId) setTabRemark(remarkingId, value)
@@ -284,16 +286,16 @@ export function TabBar() {
     <Dialog open={sayOpen} onOpenChange={(open) => !open && setSayOpen(false)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>发送文字</DialogTitle>
+          <DialogTitle>{tr('发送文字')}</DialogTitle>
           <DialogDescription>
-            用本机输入法打完，整段写进远端剪贴板再粘贴。终端里的应用用「粘贴到终端」。
+            {tr('用本机输入法打完，整段写进远端剪贴板再粘贴。终端里的应用用「粘贴到终端」。')}
           </DialogDescription>
         </DialogHeader>
         <textarea
           autoFocus
           value={sayText}
           onChange={(event) => setSayText(event.target.value)}
-          placeholder="要发送的文字"
+          placeholder={tr('要发送的文字')}
           className="h-24 w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus-visible:ring-1"
         />
         <div className="flex justify-end gap-2">
@@ -302,10 +304,10 @@ export function TabBar() {
             disabled={sayBusy || !sayText || !activeTab}
             onClick={() => void sendSay('ctrl-shift-v')}
           >
-            粘贴到终端
+            {tr('粘贴到终端')}
           </Button>
           <Button disabled={sayBusy || !sayText || !activeTab} onClick={() => void sendSay('ctrl-v')}>
-            粘贴
+            {tr('粘贴')}
           </Button>
         </div>
       </DialogContent>

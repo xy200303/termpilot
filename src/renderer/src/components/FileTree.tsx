@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/context-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '../stores/useAppStore'
+import { useT } from '../i18n'
 import { FileIcon } from './FileIcon'
 import { openAfterMenu, RemarkDialog } from './RemarkDialog'
 import type { RemoteFile } from '../../../shared/types'
@@ -17,6 +18,7 @@ type DirListing = { entries: RemoteFile[]; error?: string }
 
 /** 当前正向 SSH 的远程目录，按 VS Code 资源管理器的方式就地展开。 */
 export function FileTree() {
+  const t = useT()
   const sessions = useAppStore((s) => s.sessions)
   const selectedId = useAppStore((s) => s.selectedSessionId)
   const tabs = useAppStore((s) => s.tabs)
@@ -71,7 +73,7 @@ export function FileTree() {
       if (fallback && path !== '.') {
         try {
           await showRoot(id, '.')
-          setError('上次打开的目录打不开，已回到登录目录')
+          setError(t('上次打开的目录打不开，已回到登录目录'))
           setPicking(false)
           return
         } catch (again) {
@@ -142,15 +144,15 @@ export function FileTree() {
   }
 
   if (!session) {
-    return <Hint text="在「连接」里选一条正向 SSH，这里显示那台机器的文件。" />
+    return <Hint text={t('在「连接」里选一条正向 SSH，这里显示那台机器的文件。')} />
   }
   if (!forward) {
     return (
       <Hint
         text={
           (session.protocol ?? 'ssh') === 'ssh'
-            ? '文件树跟随正向 SSH。反向监听进来的是 shell。'
-            : 'Telnet 和串口只有终端字节流，没有文件通道。'
+            ? t('文件树跟随正向 SSH。反向监听进来的是 shell。')
+            : t('Telnet 和串口只有终端字节流，没有文件通道。')
         }
       />
     )
@@ -169,7 +171,7 @@ export function FileTree() {
     if (!renaming) return
     const name = raw.trim()
     if (!name || name.includes('/') || name.includes('\\')) {
-      setRenameError('名称不能为空，也不能包含斜杠')
+      setRenameError(t('名称不能为空，也不能包含斜杠'))
       return
     }
     if (name === renaming.name) {
@@ -192,7 +194,7 @@ export function FileTree() {
 
   const remove = async (item: RemoteFile) => {
     const message =
-      item.kind === 'dir' ? `删除目录 ${item.name} 及其中的文件？` : `删除 ${item.name}？`
+      item.kind === 'dir' ? t('删除目录 {name} 及其中的文件？', { name: item.name }) : t('删除 {name}？', { name: item.name })
     if (!confirm(message)) return
     try {
       await window.api.sftp.remove(forward.id, item.path, item.kind)
@@ -226,7 +228,7 @@ export function FileTree() {
   const mkdir = async (raw: string) => {
     const name = raw.trim()
     if (!name || name.includes('/') || name.includes('\\')) {
-      setFolderError('名称不能为空，也不能包含斜杠')
+      setFolderError(t('名称不能为空，也不能包含斜杠'))
       return
     }
     const dest = directoryOf(selected)
@@ -314,7 +316,7 @@ export function FileTree() {
               <ContextMenuContent>
                 {item.kind === 'dir' && (
                   <ContextMenuItem onClick={() => void loadRoot(forward.id, item.path)}>
-                    <FolderInput /> 打开此目录
+                    <FolderInput /> {t('打开此目录')}
                   </ContextMenuItem>
                 )}
                 {item.kind !== 'dir' && (
@@ -332,15 +334,15 @@ export function FileTree() {
                     })
                   }
                 >
-                  <Pencil /> 重命名
+                  <Pencil /> {t('重命名')}
                 </ContextMenuItem>
                 {item.kind !== 'dir' && (
                   <ContextMenuItem onClick={() => download(item)}>
-                    <Download /> 下载
+                    <Download /> {t('下载')}
                   </ContextMenuItem>
                 )}
                 <ContextMenuItem variant="destructive" onClick={() => remove(item)}>
-                  <Trash2 /> 删除
+                  <Trash2 /> {t('删除')}
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
@@ -348,7 +350,7 @@ export function FileTree() {
             <div>
               {loading[item.path] && !listing && (
                 <p className="flex h-[22px] items-center text-[12px] text-muted-foreground" style={{ paddingLeft: (depth + 1) * TREE_INDENT + TREE_TWISTIE }}>
-                  正在加载
+                  {t('正在加载')}
                 </p>
               )}
               {listing?.error && (
@@ -358,7 +360,7 @@ export function FileTree() {
               )}
               {listing && listing.entries.length === 0 && !listing.error && (
                 <p className="flex h-[22px] items-center text-[12px] text-muted-foreground" style={{ paddingLeft: (depth + 1) * TREE_INDENT + TREE_TWISTIE }}>
-                  空目录
+                  {t('空目录')}
                 </p>
               )}
               {listing && renderNodes(listing.entries, depth + 1)}
@@ -378,7 +380,7 @@ export function FileTree() {
         <Button
           variant="ghost"
           size="icon-sm"
-          title="打开目录"
+          title={t('打开目录')}
           aria-expanded={picking}
           onClick={() => {
             setPathError('')
@@ -387,7 +389,7 @@ export function FileTree() {
         >
           <FolderInput />
         </Button>
-        <Button variant="ghost" size="icon-sm" title="刷新" disabled={busy} onClick={() => void refresh()}>
+        <Button variant="ghost" size="icon-sm" title={t('刷新')} disabled={busy} onClick={() => void refresh()}>
           <RefreshCw />
         </Button>
         {!unsupported && (
@@ -395,7 +397,7 @@ export function FileTree() {
             <Button
               variant="ghost"
               size="icon-sm"
-              title="新建文件夹"
+              title={t('新建文件夹')}
               onClick={() => {
                 setFolderError('')
                 setMaking(true)
@@ -403,18 +405,18 @@ export function FileTree() {
             >
               <FolderPlus />
             </Button>
-            <Button variant="ghost" size="icon-sm" title="上传" disabled={busy} onClick={() => void upload()}>
+            <Button variant="ghost" size="icon-sm" title={t('上传')} disabled={busy} onClick={() => void upload()}>
               <Upload />
             </Button>
           </>
         )}
       </div>
       {unsupported ? (
-        <Hint text="内置 SFTP 没有用起来，机器上原来的文件通道也打不开。改 sshd 需要 root 或免密 sudo。" />
+        <Hint text={t('内置 SFTP 没有用起来，机器上原来的文件通道也打不开。改 sshd 需要 root 或免密 sudo。')} />
       ) : (
         <>
           {busy && entries.length === 0 && !error && (
-            <Hint text="正在通过当前 SSH 连接准备 SFTP，不会另开端口。" />
+            <Hint text={t('正在通过当前 SSH 连接准备 SFTP，不会另开端口。')} />
           )}
           {error && <p className="px-3 pb-1 text-[11px] text-destructive">{error}</p>}
           {!(busy && entries.length === 0 && root === '.') && !(error && entries.length === 0 && root === '.') && (
@@ -445,7 +447,7 @@ export function FileTree() {
                 <ContextMenuContent>
                   {parentDir(root) && (
                     <ContextMenuItem onClick={() => void loadRoot(forward.id, parentDir(root)!)}>
-                      打开上级目录
+                      {t('打开上级目录')}
                     </ContextMenuItem>
                   )}
                   <ContextMenuItem
@@ -456,7 +458,7 @@ export function FileTree() {
                       })
                     }
                   >
-                    <FolderInput /> 打开其他目录
+                    <FolderInput /> {t('打开其他目录')}
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
@@ -464,7 +466,7 @@ export function FileTree() {
                 <>
                   {entries.length === 0 && !busy && !error && (
                     <p className="flex h-[22px] items-center text-[12px] text-muted-foreground" style={{ paddingLeft: TREE_INDENT + TREE_TWISTIE }}>
-                      空目录
+                      {t('空目录')}
                     </p>
                   )}
                   {renderNodes(entries, 1)}
@@ -492,7 +494,7 @@ export function FileTree() {
       />
       <RemarkDialog
         open={making}
-        title="新建文件夹"
+        title={t('新建文件夹')}
         description="在当前目录新建一个文件夹。"
         initial=""
         placeholder="文件夹名"
@@ -507,7 +509,7 @@ export function FileTree() {
       />
       <RemarkDialog
         open={picking}
-        title="打开目录"
+        title={t('打开目录')}
         description="填写这台机器上的目录。"
         initial={root === '.' ? '/' : root}
         placeholder="/root 或 /home"

@@ -4,12 +4,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { DesktopOptions, SessionInput } from '../../../shared/types'
 import type { DesktopProtocol } from '../../../shared/protocol'
 import { Field } from './SessionForm'
+import { useT } from '../i18n'
 
 export function DesktopFields(props: {
   protocol: DesktopProtocol
   form: SessionInput
   set: <K extends keyof SessionInput>(key: K, value: SessionInput[K]) => void
 }) {
+  const t = useT()
   const { form, protocol, set } = props
   const options = form.desktopOptions ?? {}
   const setOptions = (patch: Partial<DesktopOptions>) =>
@@ -18,10 +20,10 @@ export function DesktopFields(props: {
   return (
     <>
       <div className="grid grid-cols-[1fr_6rem] gap-2">
-        <Field label="主机">
-          <Input value={form.host} placeholder="IP 或域名" onChange={(e) => set('host', e.target.value)} />
+        <Field label={t('主机')}>
+          <Input value={form.host} placeholder={t('IP 或域名')} onChange={(e) => set('host', e.target.value)} />
         </Field>
-        <Field label="端口">
+        <Field label={t('端口')}>
           <Input
             type="number"
             value={form.port}
@@ -29,33 +31,33 @@ export function DesktopFields(props: {
           />
         </Field>
       </div>
-      <Field label={protocol === 'rdp' ? '用户名' : 'VNC 密码'}>
+      <Field label={protocol === 'rdp' ? t('用户名') : t('VNC 密码')}>
         <Input
           type={protocol === 'rdp' ? 'text' : 'password'}
           value={protocol === 'rdp' ? form.username : (form.secret ?? '')}
-          placeholder={protocol === 'rdp' ? '登录账号，密码由 FreeRDP 窗口询问' : '无密码可留空'}
+          placeholder={protocol === 'rdp' ? t('登录账号，密码由 FreeRDP 窗口询问') : t('无密码可留空')}
           onChange={(e) => set(protocol === 'rdp' ? 'username' : 'secret', e.target.value)}
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="桌面宽度（可选）">
+        <Field label={t('桌面宽度（可选）')}>
           <Input
             type="number"
             value={options.width ?? ''}
-            placeholder="跟随窗口"
+            placeholder={t('跟随窗口')}
             onChange={(e) => setOptions({ width: Number(e.target.value) || undefined })}
           />
         </Field>
-        <Field label="桌面高度（可选）">
+        <Field label={t('桌面高度（可选）')}>
           <Input
             type="number"
             value={options.height ?? ''}
-            placeholder="跟随窗口"
+            placeholder={t('跟随窗口')}
             onChange={(e) => setOptions({ height: Number(e.target.value) || undefined })}
           />
         </Field>
       </div>
-      <Field label="性能模式">
+      <Field label={t('性能模式')}>
         <Select
           value={options.performance ?? 'balanced'}
           onValueChange={(value) => setOptions({ performance: value as DesktopOptions['performance'] })}
@@ -65,9 +67,9 @@ export function DesktopFields(props: {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="auto">自动</SelectItem>
-            <SelectItem value="quality">画质优先</SelectItem>
-            <SelectItem value="balanced">平衡</SelectItem>
-            <SelectItem value="speed">流畅优先</SelectItem>
+            <SelectItem value="quality">{t('画质优先')}</SelectItem>
+            <SelectItem value="balanced">{t('平衡')}</SelectItem>
+            <SelectItem value="speed">{t('流畅优先')}</SelectItem>
           </SelectContent>
         </Select>
       </Field>
@@ -77,7 +79,7 @@ export function DesktopFields(props: {
           checked={options.clipboard !== false}
           onChange={(e) => setOptions({ clipboard: e.target.checked })}
         />
-        与本机共享文本剪贴板
+        {t('与本机共享文本剪贴板')}
       </Label>
       {protocol === 'vnc' && (
         <Label className="flex items-center gap-2 text-sm font-normal">
@@ -86,7 +88,7 @@ export function DesktopFields(props: {
             checked={options.viewOnly === true}
             onChange={(e) => setOptions({ viewOnly: e.target.checked })}
           />
-          只观看，不发送鼠标键盘
+          {t('只观看，不发送鼠标键盘')}
         </Label>
       )}
       {protocol === 'rdp' && (
@@ -96,7 +98,7 @@ export function DesktopFields(props: {
             checked={options.nativeClient === true}
             onChange={(e) => setOptions({ nativeClient: e.target.checked })}
           />
-          改用 FreeRDP 原生窗口（默认内嵌 IronRDP）
+          {t('改用 FreeRDP 原生窗口（默认内嵌 IronRDP）')}
         </Label>
       )}
     </>
