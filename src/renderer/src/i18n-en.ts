@@ -305,7 +305,7 @@ export const EN: Record<string, string> = {
   '合成没有画出来。请到设置里关掉「合成算法」。': 'Compositing produced no image. Turn off "compose" in Settings.',
   '缓冲共 {total} 行，已截取第 {from}–{to} 行': 'Buffer has {total} lines; captured lines {from}–{to}',
   '（超出上限）': ' (over the limit)',
-  '截图是空的': 'The screenshot is empty'
+  '截图是空的': 'The screenshot is empty',
 
   文件尚未保存: 'File not saved',
   '{name} 有未保存的修改。关闭后这些内容会丢失。': '{name} has unsaved changes. Closing will lose them.',
