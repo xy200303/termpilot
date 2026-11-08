@@ -274,4 +274,24 @@ export const EN: Record<string, string> = {
   '正在连接 VNC…': 'Connecting to VNC…',
   'VNC 连接失败': 'VNC connection failed',
 
+  // Agent 提示词
+  '编号：{id}': 'ID: {id}',
+  '名称：{name}': 'Name: {name}',
+  '类型：反向监听': 'Type: reverse listener',
+  '本机端口：{port}': 'Local port: {port}',
+  '类型：串口（只有终端字节流，没有 exec 通道和 SFTP）': 'Type: serial (terminal stream only, no exec channel or SFTP)',
+  '串口：{path}': 'Serial path: {path}',
+  '波特率：{rate}': 'Baud rate: {rate}',
+  '类型：Telnet（只有终端字节流，没有 exec 通道和 SFTP）': 'Type: Telnet (terminal stream only, no exec channel or SFTP)',
+  '主机：{host}': 'Host: {host}',
+  '端口：{port}': 'Port: {port}',
+  '用户：{user}': 'User: {user}',
+  '备注：{text}': 'Note: {text}',
+  '终端：{id}': 'Terminal: {id}',
+  '标题：{title}': 'Title: {title}',
+  '所属连接：{id}': 'Connection: {id}',
+  '连接名称：{name}': 'Connection name: {name}',
+  '连接备注：{text}': 'Connection note: {text}',
+  '已复制 Agent 提示词': 'Agent prompt copied'
+
 }
