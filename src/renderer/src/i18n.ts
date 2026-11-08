@@ -26,7 +26,7 @@ export type Translate = (text: string, params?: Record<string, string | number>)
 /** 组件里用它拿翻译：中文返回原文，英文查表，查不到回退中文。 */
 export function useT(): Translate {
   const { t } = useTranslation()
-  return (text, params) => t(text, params) as string
+  return (text, params) => t(text, { ...(params ?? {}), defaultValue: text }) as string
 }
 
 export function syncLanguage(locale: 'zh' | 'en'): void {
