@@ -358,7 +358,7 @@ export class McpService {
         const termId = this.requireTerm(need(raw, 'termId'))
         const remark = textArg(raw, 'remark')
         this.terminal.setLabel(termId, { remark })
-        return `已写上备注`
+        return mt('mcp.note_written')
       }
       case 'term_reconnect':
         return this.reconnectTerm(need(raw, 'termId'))
@@ -384,7 +384,7 @@ export class McpService {
         const output = clipCommand(agentText(run.output))
         if (run.finished && run.exitCode !== null) return `${output}\n\nexit code: ${run.exitCode}`
         if (run.finished) return output
-        return `${output}\n\n命令还在跑，以上是已经回来的内容。`
+        return mt('mcp.cmd_still_running', { output })
       }
       case 'term_write':
         return this.writeTerm(raw)
@@ -392,7 +392,7 @@ export class McpService {
         const termId = this.requireTerm(need(raw, 'termId'))
         this.terminal.close(termId)
         this.send(IPC.mcpCloseTab, termId)
-        return '已关闭'
+        return mt('mcp.closed')
       }
       case 'term_open_local':
         return this.openLocal()
@@ -420,27 +420,27 @@ export class McpService {
         const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guardPath(path)
         await this.sftp.mkdirPath(found.id, path)
-        return `已创建 ${path}`
+        return mt('mcp.created', { path })
       }
       case 'sftp_upload': {
         const remotePath = need(raw, 'remotePath')
         const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guardPath(remotePath)
         await this.sftp.put(found.id, need(raw, 'localPath'), remotePath)
-        return `已上传到 ${remotePath}`
+        return mt('mcp.uploaded', { path: remotePath })
       }
       case 'sftp_download': {
         const localPath = need(raw, 'localPath')
         const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.sftp.get(found.id, need(raw, 'remotePath'), localPath)
-        return `已下载到 ${localPath}`
+        return mt('mcp.downloaded', { path: localPath })
       }
       case 'sftp_rename': {
         const to = need(raw, 'to')
         const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guardPath(to)
         await this.sftp.rename(found.id, need(raw, 'from'), to)
-        return `已改名为 ${to}`
+        return mt('mcp.renamed', { to })
       }
       case 'sftp_remove': {
         const path = need(raw, 'path')
@@ -449,7 +449,7 @@ export class McpService {
         const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guard(`rm ${path}`)
         await this.sftp.remove(found.id, path, kind)
-        return `已删除 ${path}`
+        return mt('mcp.removed', { path })
       }
       case 'desktop_list':
         return JSON.stringify(this.desktopAgent.list(), null, 2)
@@ -528,13 +528,13 @@ export class McpService {
   private async reconnectTerm(termId: string): Promise<string> {
     const id = this.requireTerm(termId)
     const current = this.terminal.listTerms().find((term) => term.id === id)
-    if (current?.status === 'connected') return `终端 ${id} 已经连着。`
+    if (current?.status === 'connected') return mt('mcp.term_already', { id })
     await this.terminal.reconnect(id)
     const session = this.storage.list().find((item) => item.id === current?.sessionId)
     return [
-      `已重新连接终端 ${id}。`,
+      mt('mcp.term_reconnected', { id }),
       session ? `连接：${session.publicId}（${session.name}）` : '',
-      '编号没变，上次退出时已经画好的行还在，新会话从下一行开始。'
+      mt('mcp.reconnect_note')
     ]
       .filter(Boolean)
       .join('\n')
@@ -546,17 +546,17 @@ export class McpService {
     const text = textArg(raw, 'text')
     const data = textArg(raw, 'data')
     const submit = boolArg(raw, 'submit')
-    if (!keys?.length && !text && !data && !submit) throw new Error('要提供 keys、text、submit 或 data')
+    if (!keys?.length && !text && !data && !submit) throw new Error(mt('mcp.need_input'))
     const applicationCursor = keys?.some((key) => MOVES.has(key)) ? await this.cursorMode(termId) : false
     const payload = encodeTermInput({ keys, text, data, submit, applicationCursor })
-    if (!payload) throw new Error('没有可发送的内容')
+    if (!payload) throw new Error(mt('mcp.nothing_to_send'))
     if (payload.includes('\n') || payload.includes('\r')) await this.guard(payload)
     this.terminal.input(termId, payload)
     await wait(200)
     try {
       return await this.lines(termId)
     } catch {
-      return '已发送'
+      return mt('mcp.sent')
     }
   }
 
@@ -606,26 +606,26 @@ export class McpService {
 
   private async connectSession(key: string): Promise<string> {
     const session = this.findSession(key)
-    if (session.mode === 'reverse') throw new Error('反向监听要在界面上点开始监听')
+    if (session.mode === 'reverse') throw new Error(mt('mcp.reverse_manual'))
     if (isDesktopProtocol(session.protocol)) {
       const existing = this.desktop.list().find((item) => item.sessionId === session.id)
       if (existing) {
         return [
-          `连接 ${session.publicId}（${session.name}）的桌面已经打开。`,
-          `桌面：${existing.viewId}`,
-          `${session.protocol.toUpperCase()} 每个连接只保留一个桌面标签，直接复用现有窗口。`,
-          '这是图形桌面，不支持 term_exec / sftp_*。整窗截图和录屏可用 app_screenshot / app_record。'
+          mt('mcp.desktop_already', { id: session.publicId, name: session.name }),
+          mt('mcp.desktop_line', { id: existing.viewId }),
+          mt('mcp.desktop_reuse', { protocol: session.protocol.toUpperCase() }),
+          mt('mcp.desktop_hint')
         ].join('\n')
       }
       const viewId = newViewId()
-      this.send(IPC.mcpOpenTab, { termId: viewId, sessionId: session.id, kind: session.protocol, title: '桌面' })
+      this.send(IPC.mcpOpenTab, { termId: viewId, sessionId: session.id, kind: session.protocol, title: mt('mcp.desktop_title') })
       try {
         const result = await this.desktop.open(viewId, session.id)
         return [
-          `已打开连接 ${session.publicId}（${session.name}）。`,
-          `桌面：${viewId}`,
-          result.mode === 'embedded' ? `${session.protocol.toUpperCase()} 画面已内嵌到标签。` : result.message,
-          '这是图形桌面，不支持 term_exec / sftp_*。整窗截图和录屏可用 app_screenshot / app_record。'
+          mt('mcp.connection_opened', { id: session.publicId, name: session.name }),
+          mt('mcp.desktop_line', { id: viewId }),
+          result.mode === 'embedded' ? mt('mcp.desktop_embedded', { protocol: session.protocol.toUpperCase() }) : result.message,
+          mt('mcp.desktop_hint')
         ].join('\n')
       } catch (error) {
         this.send(IPC.mcpCloseTab, viewId)
@@ -633,7 +633,7 @@ export class McpService {
       }
     }
     const n = this.terminal.listTerms().filter((term) => term.sessionId === session.id).length + 1
-    const title = `窗口 ${n}`
+    const title = mt('mcp.window_number', { n })
     const termId = newTermId()
     const bound = this.terminal.expectBind(termId, 8000)
     this.send(IPC.mcpOpenTab, { termId, sessionId: session.id, kind: 'ssh', title })
@@ -653,10 +653,10 @@ export class McpService {
       throw error
     }
     return [
-      `已打开连接 ${session.publicId}（${session.name}）。`,
-      `终端：${termId}`,
-      `标题：${title}`,
-      '操作这扇终端用 termId。连接用 conn- 编号。弄清这扇终端在做什么之后，用 term_update 写上备注。'
+      mt('mcp.connection_opened', { id: session.publicId, name: session.name }),
+      mt('mcp.term_line', { id: termId }),
+      mt('mcp.title_line', { title }),
+      mt('mcp.term_hint')
     ].join('\n')
   }
 
@@ -669,7 +669,7 @@ export class McpService {
   private updateSession(key: string, patch: SessionPatch): string {
     const current = this.findSession(key)
     const saved = this.storage.update(current.id, this.normalize(current, patch, false))
-    if (!saved) throw new Error('连接已不存在')
+    if (!saved) throw new Error(mt('mcp.connection_gone'))
     this.publishSessions()
     return JSON.stringify(this.connectionView(saved), null, 2)
   }
@@ -677,14 +677,14 @@ export class McpService {
   private async deleteSession(key: string): Promise<string> {
     const session = this.findSession(key)
     if (this.storage.getMcpSettings().confirmDangerous) {
-      const ok = await this.ask(`删除连接 ${session.name}`)
-      if (!ok) throw new Error('已取消：删除未确认')
+      const ok = await this.ask(mt('mcp.delete_connection', { name: session.name }))
+      if (!ok) throw new Error(mt('mcp.cancelled_delete'))
     }
     this.disconnectById(session)
     if (session.mode === 'reverse') this.reverse.stop(session.id)
     this.storage.delete(session.id)
     this.publishSessions()
-    return `已删除 ${session.name}`
+    return mt('mcp.deleted_connection', { name: session.name })
   }
 
   private normalize(current: SessionConfig | null, patch: SessionPatch, creating: boolean): SessionInput {
@@ -723,27 +723,27 @@ export class McpService {
       jumpUsername: patch.jumpUsername !== undefined ? patch.jumpUsername.trim() : (current?.jumpUsername ?? ''),
       jumpSecret: patch.jumpSecret
     }
-    if (!input.name) throw new Error('名称不能为空')
+    if (!input.name) throw new Error(mt('mcp.err_name_required'))
     if (protocol === 'serial') {
       if (!input.serialPath?.trim()) {
-        throw new Error('串口连接需要 serialPath（COM3 / /dev/ttyUSB0）。先用 serial_list 看本机有哪些串口')
+        throw new Error(mt('mcp.err_serial_path'))
       }
     } else if (protocol === 'telnet') {
-      if (!input.host) throw new Error('Telnet 需要主机地址 host')
+      if (!input.host) throw new Error(mt('mcp.err_telnet_host'))
     } else if (isDesktopProtocol(protocol)) {
-      if (!input.host) throw new Error(`${protocolLabel(protocol)}需要主机地址 host`)
+      if (!input.host) throw new Error(mt('mcp.err_host_required', { protocol: protocolLabel(protocol) }))
     } else if (input.mode === 'forward') {
-      if (!input.host || !input.username) throw new Error('主机和用户名不能为空')
-      if (input.authType === 'key' && !input.keyPath) throw new Error('私钥认证需要填写 keyPath')
-      if (creating && input.authType === 'password' && !input.secret) throw new Error('密码认证需要填写 secret')
+      if (!input.host || !input.username) throw new Error(mt('mcp.err_host_user'))
+      if (input.authType === 'key' && !input.keyPath) throw new Error(mt('mcp.err_key_path'))
+      if (creating && input.authType === 'password' && !input.secret) throw new Error(mt('mcp.err_secret'))
       if (input.jumpHost) {
-        if (!input.jumpUsername) throw new Error('跳板需要用户名')
+        if (!input.jumpUsername) throw new Error(mt('mcp.err_jump_user'))
       }
     } else if (!input.listenPort) {
-      throw new Error('反向监听需要 listenPort')
+      throw new Error(mt('mcp.err_listen_port'))
     }
     const taken = this.storage.list().some((item) => item.name === input.name && item.id !== current?.id)
-    if (taken) throw new Error(`已有同名连接: ${input.name}`)
+    if (taken) throw new Error(mt('mcp.err_duplicate_name', { name: input.name }))
     return input
   }
 
@@ -763,12 +763,12 @@ export class McpService {
     }
     this.sftp.close(session.id)
     const desktops = this.desktop.closeSession(session.id)
-    return `已断开 ${session.name}，关闭 ${terms.length} 个终端、${desktops} 个桌面窗口`
+    return mt('mcp.closed_connection', { name: session.name, terms: terms.length, desktops })
   }
 
   private async openLocal(): Promise<string> {
     const n = this.terminal.listTerms().filter((term) => term.kind === 'local').length + 1
-    const title = `窗口 ${n}`
+    const title = mt('mcp.window_number', { n })
     const termId = newTermId()
     const bound = this.terminal.expectBind(termId, 8000)
     this.send(IPC.mcpOpenTab, { termId, sessionId: null, kind: 'local', title })
@@ -787,7 +787,7 @@ export class McpService {
       this.send(IPC.mcpCloseTab, termId)
       throw error
     }
-    return [`已打开本机终端 ${termId}。`, `标题：${title}`, '它没有连接。弄清它在做什么之后，用 term_update 写上备注。'].join('\n')
+    return [mt('mcp.local_opened', { id: termId }), mt('mcp.title_line', { title }), mt('mcp.local_hint')].join('\n')
   }
 
   private requireForward(key: string) {
