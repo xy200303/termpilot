@@ -164,6 +164,12 @@
     "linux": {
       "category": "Development",
       "maintainer": "TermPilot",
+      "extraFiles": [
+        {
+          "from": "resources/app.termpilot.desktop.appdata.xml",
+          "to": "usr/share/metainfo/app.termpilot.desktop.appdata.xml"
+        }
+      ],
       "target": [
         {
           "target": "AppImage",
