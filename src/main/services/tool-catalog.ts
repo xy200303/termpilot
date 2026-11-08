@@ -18,7 +18,7 @@ const sessionFields: ZodRawShape = {
     .describe('Connection protocol, ssh by default. telnet/serial carry a terminal stream only; rdp/vnc are standalone desktops with no exec or SFTP'),
   mode: z.enum(['forward', 'reverse']).optional().describe('SSH only: forward dials the server; reverse listens on 127.0.0.1 only'),
   host: z.string().optional().describe('Host for SSH, Telnet, RDP or VNC'),
-  port: z.number().int().min(1).max(65535).optional().describe('SSH 22，Telnet 23，RDP 3389，VNC 5900'),
+  port: z.number().int().min(1).max(65535).optional().describe('SSH 22, Telnet 23, RDP 3389, VNC 5900'),
   username: z.string().optional().describe('SSH login user'),
   authType: z.enum(['password', 'key']).optional().describe('password or key'),
   keyPath: z.string().optional().describe('Absolute local path to the private key file'),
