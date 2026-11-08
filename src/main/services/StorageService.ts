@@ -1,4 +1,5 @@
 import { app, safeStorage } from 'electron'
+import { t as mt } from '../i18n'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto'
@@ -343,7 +344,7 @@ export class StorageService {
           id: text(row.id),
           sessionId: optionalText(row.session_id) ?? null,
           kind,
-          title: text(row.title) || '窗口',
+          title: text(row.title) || mt('common.window'),
           remark: text(row.remark),
           scrollback: text(row.scrollback)
         }
@@ -440,7 +441,7 @@ export class StorageService {
     const row = this.db
       .prepare('SELECT enabled, port, token_encrypted, confirm_dangerous FROM mcp_config WHERE id = 1')
       .get()
-    if (!row) throw new Error('MCP 配置不存在')
+    if (!row) throw new Error(mt('storage.mcp_missing'))
 
     let token = this.decryptToken(row.token_encrypted)
     if (!token) {
@@ -507,10 +508,10 @@ export class StorageService {
 
   saveMcpSettings(input: McpSettingsInput): McpSettings {
     if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535) {
-      throw new Error('端口需要在 1–65535')
+      throw new Error(mt('storage.port_range'))
     }
     const token = input.token.trim()
-    if (token.length < 16) throw new Error('令牌至少 16 位')
+    if (token.length < 16) throw new Error(mt('storage.token_min'))
     this.getMcpSettings()
     this.db
       .prepare(
@@ -541,7 +542,7 @@ export class StorageService {
 
   private require(id: string): SessionConfig {
     const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id)
-    if (!row) throw new Error(`会话不存在: ${id}`)
+    if (!row) throw new Error(mt('storage.session_missing', { id }))
     return this.toPublic(row)
   }
 
@@ -587,7 +588,7 @@ export class StorageService {
     let parsed: unknown
     try {
       parsed = JSON.parse(readFileSync(file, 'utf-8'))
-      if (!Array.isArray(parsed)) throw new Error('sessions.json 不是数组')
+      if (!Array.isArray(parsed)) throw new Error(mt('storage.sessions_not_array'))
     } catch {
       renameSync(file, `${file}.bak`)
       return
@@ -610,7 +611,7 @@ export class StorageService {
         const mode = row.mode === 'reverse' ? 'reverse' : 'forward'
         insert.run(
           row.id,
-          typeof row.name === 'string' ? row.name : '未命名',
+          typeof row.name === 'string' ? row.name : mt('common.untitled'),
           typeof row.group === 'string' ? row.group : '',
           mode,
           typeof row.host === 'string' ? row.host : '',
@@ -636,11 +637,11 @@ export class StorageService {
   private copyName(name: string): string {
     const base = name.replace(/ 副本(?: \d+)?$/, '') || name
     const taken = new Set(this.list().map((session) => session.name))
-    const first = `${base} 副本`
+    const first = mt('storage.copy_base', { base })
     if (!taken.has(first)) return first
     let n = 2
-    while (taken.has(`${base} 副本 ${n}`)) n += 1
-    return `${base} 副本 ${n}`
+    while (taken.has(mt('storage.copy_numbered', { base, n }))) n += 1
+    return mt('storage.copy_numbered', { base, n })
   }
 
   /** 给本机 Agent 自己注册 MCP 用。令牌只写在 userData，不进仓库。 */
@@ -711,7 +712,7 @@ export class StorageService {
     const file = join(app.getPath('userData'), 'local-secrets.key')
     if (existsSync(file)) {
       const key = readFileSync(file)
-      if (key.length !== 32) throw new Error(`本机密钥文件损坏：${file}`)
+      if (key.length !== 32) throw new Error(mt('storage.key_corrupt', { file }))
       this.localKey = key
       return key
     }
@@ -723,7 +724,7 @@ export class StorageService {
     } catch {
       // Windows 不支持 POSIX 权限；system keychain 正常时不会走到这里
     }
-    console.warn('[TermPilot] 系统钥匙串不可用，凭据改用本机密钥文件加密')
+    console.warn(mt('storage.keychain_fallback'))
     this.localKey = key
     return key
   }

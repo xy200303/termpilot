@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
+import { t as mt } from '../i18n'
 import { basename, dirname, isAbsolute, join, posix } from 'node:path'
 import { app, dialog, type WebContents } from 'electron'
 import { Client, type OpenMode, type SFTPWrapper } from 'ssh2'
@@ -36,8 +37,8 @@ export class SftpService {
       const requested = dir && dir !== '' ? dir : '.'
       return using(sftp, requested, async (target) => {
         // realpath 没有自己的超时：通道半死时不能卡在这里，超时后按原路径交给 readdir 的 20 秒兜底
-        const path = await withTimeout(realpath(sftp, target), 10_000, 'SFTP 没有响应').catch(() => target)
-        const entries = await withTimeout(readdir(sftp, path), 20_000, '读取目录超时')
+        const path = await withTimeout(realpath(sftp, target), 10_000, mt('sftp.no_response')).catch(() => target)
+        const entries = await withTimeout(readdir(sftp, path), 20_000, mt('sftp.dir_timeout'))
         return { path, entries }
       })
     })
@@ -56,7 +57,7 @@ export class SftpService {
 
   async put(sessionId: string, localPath: string, remotePath: string): Promise<void> {
     assertLocal(localPath)
-    if (!existsSync(localPath)) throw new Error('本地文件不存在')
+    if (!existsSync(localPath)) throw new Error(mt('sftp.local_file_missing'))
     refuseHuge(statSync(localPath).size)
     return this.run(sessionId, (sftp) =>
       using(sftp, remotePath, (target) => call((cb) => sftp.fastPut(localPath, target, XFER, cb)))
@@ -65,7 +66,7 @@ export class SftpService {
 
   async get(sessionId: string, remotePath: string, localPath: string): Promise<void> {
     assertLocal(localPath)
-    if (!existsSync(dirname(localPath))) throw new Error('本地目录不存在')
+    if (!existsSync(dirname(localPath))) throw new Error(mt('sftp.local_dir_missing'))
     return this.run(sessionId, (sftp) =>
       using(sftp, remotePath, async (target) => {
         refuseHuge(await statSize(sftp, target))
@@ -98,7 +99,7 @@ export class SftpService {
 
   async upload(sessionId: string, dir: string): Promise<number> {
     const picked = await dialog.showOpenDialog({
-      title: '上传到当前目录',
+      title: mt('sftp.upload_here'),
       properties: ['openFile', 'multiSelections']
     })
     if (picked.canceled || picked.filePaths.length === 0) return 0
@@ -112,9 +113,9 @@ export class SftpService {
   }
 
   async download(sessionId: string, file: RemoteFile): Promise<boolean> {
-    if (file.kind === 'dir') throw new Error('先进入目录再下载里面的文件')
+    if (file.kind === 'dir') throw new Error(mt('sftp.enter_dir_first'))
     const picked = await dialog.showSaveDialog({
-      title: '下载到本地',
+      title: mt('sftp.download_local'),
       defaultPath: file.name
     })
     if (picked.canceled || !picked.filePath) return false
@@ -179,8 +180,8 @@ export class SftpService {
         if (isMissingSftp(error)) {
           const message = error instanceof Error ? error.message : String(error)
           throw new Error(
-            `${message}。这条连接的文件通道设置为复用终端连接，不会改 sshd 也不会单独拨号。` +
-              '要恢复文件功能：在高级设置里改回「自动」，或断开重连这条 SSH 后重试'
+            mt('sftp.shared_note', { message }) +
+              mt('sftp.shared_recover')
           )
         }
         throw error
@@ -196,7 +197,7 @@ export class SftpService {
         const note = this.switchNote.get(sessionId)
         if (note && note.length > 0) {
           this.switchNote.delete(sessionId)
-          this.emit(sessionId, 'start', '文件通道没有打开')
+          this.emit(sessionId, 'start', mt('sftp.channel_closed'))
           for (const line of note) this.emit(sessionId, 'log', line)
           const message = error instanceof Error ? error.message : String(error)
           this.emit(sessionId, 'error', message)
@@ -217,8 +218,8 @@ export class SftpService {
     const message = error instanceof Error ? error.message : String(error)
     if (/Channel open failure|授权|authorization denied/i.test(message)) {
       throw new Error(
-        `${message}。单独拨号被跳板拒绝（一次性授权）。` +
-          '在这条连接的高级设置里把文件通道改成「复用终端连接」；如果刚改过 internal-sftp，断开重连这条 SSH 后文件通道即可复用同一条连接'
+        mt('sftp.jump_rejected', { message }) +
+          mt('sftp.jump_hint')
       )
     }
     throw error
@@ -243,9 +244,9 @@ export class SftpService {
       const result = await execScript(hold.client, installScript(), () => undefined)
       const lines = result.lines.filter((line) => !line.startsWith('TERMPILOT_SFTP '))
       if (result.code === 0 && result.lines.some((line) => line === 'TERMPILOT_SFTP switched')) {
-        this.emit(sessionId, 'start', '这台机器还没用 sshd 自带的 SFTP，先改过去')
+        this.emit(sessionId, 'start', mt('sftp.install_needed'))
         for (const line of lines) this.emit(sessionId, 'log', line)
-        this.emit(sessionId, 'done', '已经改成内置 SFTP，正在连接')
+        this.emit(sessionId, 'done', mt('sftp.installed'))
         this.route.set(sessionId, 'fresh')
         return 'fresh'
       }
@@ -286,7 +287,7 @@ export class SftpService {
   private openHold(sessionId: string): Promise<SshHold> {
     const session = this.storage.list().find((s) => s.id === sessionId)
     if (!session || (session.mode ?? 'forward') !== 'forward') {
-      return Promise.reject(new Error('只能浏览正向 SSH 的文件'))
+      return Promise.reject(new Error(mt('sftp.forward_only')))
     }
     return this.sshPool.acquire(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
   }
@@ -296,7 +297,7 @@ export class SftpService {
     this.conns.delete(sessionId)
     const session = this.storage.list().find((item) => item.id === sessionId)
     if (!session || (session.mode ?? 'forward') !== 'forward') {
-      return Promise.reject(new Error('只能浏览正向 SSH 的文件'))
+      return Promise.reject(new Error(mt('sftp.forward_only')))
     }
     const pending = this.sshPool
       .acquireIsolated(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
@@ -346,7 +347,7 @@ function armSftp(
     if (state.settled) return
     state.settled = true
     hold.release()
-    reject(new Error('SFTP 子系统没有响应'))
+    reject(new Error(mt('sftp.subsystem_no_response')))
   }, 12_000)
   hold.client.sftp((err, sftp) => {
     if (state.settled) return
@@ -354,7 +355,7 @@ function armSftp(
     clearTimeout(timer)
     if (err || !sftp) {
       hold.release()
-      reject(err ?? new Error('打不开 SFTP'))
+      reject(err ?? new Error(mt('sftp.open_failed')))
       return
     }
     resolve({ client: hold.client, sftp, release: hold.release })
@@ -382,11 +383,11 @@ function execScript(
       } catch {
         /* 通道已经关了 */
       }
-      done(() => reject(new Error('检查 SFTP 子系统超时')))
+      done(() => reject(new Error(mt('sftp.check_timeout'))))
     }, 15_000)
     client.exec('sh -s', (err, opened) => {
       if (err || !opened) {
-        done(() => reject(err ?? new Error('无法执行远程命令')))
+        done(() => reject(err ?? new Error(mt('sftp.exec_failed'))))
         return
       }
       stream = opened
@@ -449,7 +450,7 @@ function installScript(): string {
 function realpath(sftp: SFTPWrapper, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     sftp.realpath(path, (err, resolved) => {
-      if (err || !resolved) reject(err ?? new Error('无法解析路径'))
+      if (err || !resolved) reject(err ?? new Error(mt('sftp.resolve_failed')))
       else resolve(resolved)
     })
   })
@@ -487,7 +488,7 @@ function readdir(sftp: SFTPWrapper, dir: string): Promise<RemoteFile[]> {
 }
 
 async function removeDir(sftp: SFTPWrapper, path: string, depth = 0): Promise<void> {
-  if (depth > 32) throw new Error('目录层级过深')
+  if (depth > 32) throw new Error(mt('sftp.too_deep'))
   const entries = await readdir(sftp, path).catch(() => [] as RemoteFile[])
   for (const item of entries) {
     if (item.kind === 'dir') await removeDir(sftp, item.path, depth + 1)
@@ -497,14 +498,14 @@ async function removeDir(sftp: SFTPWrapper, path: string, depth = 0): Promise<vo
 }
 
 function assertLocal(file: string): void {
-  if (!isAbsolute(file)) throw new Error('本地路径需要是绝对路径')
+  if (!isAbsolute(file)) throw new Error(mt('sftp.absolute_path'))
 }
 
 function refuseHuge(bytes: number): void {
   if (bytes <= MAX_TRANSFER_BYTES) return
   const gb = bytes / (1024 * 1024 * 1024)
   const size = gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.ceil(bytes / (1024 * 1024))} MB`
-  throw new Error(`文件有 ${size}，超过 512 MB。SFTP 不适合传几个 GB，请在远程机器上直接处理。`)
+  throw new Error(mt('sftp.too_large', { size }))
 }
 
 function call(run: (cb: (err: Error | undefined | null) => void) => void): Promise<void> {
@@ -523,9 +524,9 @@ const loginDirs = new WeakMap<SFTPWrapper, Promise<string>>()
 
 async function readTextAt(sftp: SFTPWrapper, path: string): Promise<string> {
   const size = await statSize(sftp, path)
-  if (size > MAX_EDIT_BYTES) throw new Error('文件超过 1.5MB，不在编辑器里打开')
+  if (size > MAX_EDIT_BYTES) throw new Error(mt('sftp.editor_too_large'))
   const buf = await readAll(sftp, path)
-  if (buf.includes(0)) throw new Error('这是二进制文件，不能用文本编辑器打开')
+  if (buf.includes(0)) throw new Error(mt('sftp.binary'))
   return buf.toString('utf8')
 }
 
@@ -572,7 +573,7 @@ async function writeAll(sftp: SFTPWrapper, path: string, data: Buffer): Promise<
 function openFile(sftp: SFTPWrapper, path: string, flags: OpenMode): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     sftp.open(path, flags, (err, handle) => {
-      if (err || !handle) reject(err ?? new Error('无法打开文件'))
+      if (err || !handle) reject(err ?? new Error(mt('sftp.open_file_failed')))
       else resolve(handle)
     })
   })
@@ -626,7 +627,7 @@ async function loginRelative(sftp: SFTPWrapper, path: string): Promise<string | 
 function loginDir(sftp: SFTPWrapper): Promise<string> {
   const cached = loginDirs.get(sftp)
   if (cached) return cached
-  const pending = withTimeout(realpath(sftp, '.'), 10_000, 'SFTP 没有响应').catch(() => '')
+  const pending = withTimeout(realpath(sftp, '.'), 10_000, mt('sftp.no_response')).catch(() => '')
   loginDirs.set(sftp, pending)
   return pending
 }

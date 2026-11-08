@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { t as mt } from '../i18n'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { WebContents } from 'electron'
@@ -22,7 +23,7 @@ try {
   pty = req('node-pty') as typeof import('node-pty')
 } catch (e) {
   ptyLoadError = e instanceof Error ? e.message : String(e)
-  console.error('[TermPilot] node-pty 加载失败（本地终端不可用）:', ptyLoadError)
+  console.error(mt('term.pty_load_failed'), ptyLoadError)
 }
 
 interface TermEntry {
@@ -116,12 +117,12 @@ export class TerminalService {
    */
   async reconnect(termId: string): Promise<void> {
     const term = this.terms.get(termId)
-    if (!term) throw new Error('终端不存在或已关闭')
-    if (term.kind === 'reverse') throw new Error('反向终端要等对端再连进来，不能从这里重拨')
-    if (term.kind !== 'ssh' || !term.sessionId) throw new Error('本机终端断开后不会保留，请用 term_open_local 再开一扇')
+    if (!term) throw new Error(mt('term.missing'))
+    if (term.kind === 'reverse') throw new Error(mt('term.reverse_wait'))
+    if (term.kind !== 'ssh' || !term.sessionId) throw new Error(mt('term.local_gone'))
     const session = this.storage.list().find((item) => item.id === term.sessionId)
-    if (!session) throw new Error('这条连接已经删除了')
-    if (session.mode === 'reverse') throw new Error('反向监听要在界面上点开始监听')
+    if (!session) throw new Error(mt('term.connection_deleted'))
+    if (session.mode === 'reverse') throw new Error(mt('term.reverse_manual'))
     if (term.channel) return
     if (this.lastStatus.get(termId)?.status === 'connecting') {
       await this.waitStatus(termId, 20_000)
@@ -215,7 +216,7 @@ export class TerminalService {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.bindWaiters.delete(termId)
-        reject(new Error('界面没有打开终端'))
+        reject(new Error(mt('term.no_window')))
       }, timeoutMs)
       this.bindWaiters.set(termId, () => {
         clearTimeout(timer)
@@ -232,12 +233,12 @@ export class TerminalService {
   waitStatus(termId: string, timeoutMs: number): Promise<void> {
     const current = this.lastStatus.get(termId)
     if (current?.status === 'connected') return Promise.resolve()
-    if (current?.status === 'error') return Promise.reject(new Error(current.error ?? '连接失败'))
+    if (current?.status === 'error') return Promise.reject(new Error(current.error ?? mt('term.connect_failed')))
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.statusListeners.delete(onStatus)
-        reject(new Error('连接超时'))
+        reject(new Error(mt('term.connect_timeout')))
       }, timeoutMs)
       const onStatus = (event: TermStatusEvent) => {
         if (event.termId !== termId) return
@@ -248,7 +249,7 @@ export class TerminalService {
         } else if (event.status === 'error' || event.status === 'disconnected') {
           clearTimeout(timer)
           this.statusListeners.delete(onStatus)
-          reject(new Error(event.error ?? '连接失败'))
+          reject(new Error(event.error ?? mt('term.connect_failed')))
         }
       }
       this.statusListeners.add(onStatus)
@@ -256,7 +257,7 @@ export class TerminalService {
   }
 
   readTail(termId: string, maxChars: number): string {
-    if (!this.terms.has(termId)) throw new Error('终端不存在或已断开')
+    if (!this.terms.has(termId)) throw new Error(mt('term.disconnected_missing'))
     return (this.output.get(termId) ?? '').slice(-maxChars)
   }
 
@@ -272,7 +273,7 @@ export class TerminalService {
     timeoutMs: number
   ): Promise<{ output: string; exitCode: number | null; finished: boolean }> {
     const term = this.terms.get(termId)
-    if (!term?.channel) throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
+    if (!term?.channel) throw new Error(mt('term.disconnected_hint'))
     const origin = this.logicalEnd(termId)
     const promptBefore = lastScreenLine(this.readTail(termId, 4000))
     const body = command.endsWith('\n') ? command.slice(0, -1) : command
@@ -330,7 +331,7 @@ export class TerminalService {
   private async createSsh(opts: TermCreateOptions, retried = false): Promise<void> {
     const session = this.storage.list().find((s) => s.id === opts.sessionId)
     if (!session) {
-      this.sendStatus(opts.termId, opts.sessionId ?? null, 'error', '会话不存在')
+      this.sendStatus(opts.termId, opts.sessionId ?? null, 'error', mt('term.session_missing'))
       return
     }
 
@@ -339,7 +340,7 @@ export class TerminalService {
       id: opts.termId,
       sessionId: session.id,
       kind: 'ssh',
-      title: opts.title?.trim() || '窗口',
+      title: opts.title?.trim() || mt('common.window'),
       remark: '',
       liveGen: 0
     }
@@ -395,7 +396,7 @@ export class TerminalService {
           void this.createSsh(opts, true)
           return
         }
-        this.sendStatus(opts.termId, sessionId, 'error', `打开 shell 失败: ${err?.message ?? '未知原因'}`)
+        this.sendStatus(opts.termId, sessionId, 'error', mt('term.shell_failed', { reason: err?.message ?? mt('common.unknown') }))
         return
       }
       entry.channel = sshChannel(stream)
@@ -465,7 +466,7 @@ export class TerminalService {
       id: opts.termId,
       sessionId: session.id,
       kind: 'ssh',
-      title: opts.title?.trim() || '窗口',
+      title: opts.title?.trim() || mt('common.window'),
       remark: '',
       liveGen: 0
     }
@@ -517,7 +518,7 @@ export class TerminalService {
       id: termId,
       sessionId,
       kind: 'reverse',
-      title: '窗口',
+      title: mt('common.window'),
       remark: opts?.remark ?? '',
       liveGen: 0,
       // 反向 shell 大多是 POSIX（bash/sh），退出码探针按 POSIX 打
@@ -551,7 +552,7 @@ export class TerminalService {
         opts.termId,
         null,
         'error',
-        `node-pty 不可用: ${ptyLoadError ?? '未知原因'}（原生模块需 electron-rebuild）`
+        mt('term.pty_unavailable', { reason: ptyLoadError ?? mt('common.unknown') })
       )
       return
     }
@@ -563,7 +564,7 @@ export class TerminalService {
       id: opts.termId,
       sessionId: null,
       kind: 'local',
-      title: opts.title?.trim() || '窗口',
+      title: opts.title?.trim() || mt('common.window'),
       remark: '',
       liveGen: 0
     }
@@ -677,7 +678,7 @@ export class TerminalService {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.statusListeners.delete(onStatus)
-        reject(new Error('连接超时'))
+        reject(new Error(mt('term.connect_timeout')))
       }, timeoutMs)
       const onStatus = (event: TermStatusEvent) => {
         if (event.termId !== termId) return
@@ -685,7 +686,7 @@ export class TerminalService {
         clearTimeout(timer)
         this.statusListeners.delete(onStatus)
         if (event.status === 'connected') resolve()
-        else reject(new Error(event.error ?? '连接失败'))
+        else reject(new Error(event.error ?? mt('term.connect_failed')))
       }
       this.statusListeners.add(onStatus)
     })
@@ -758,5 +759,5 @@ function delay(ms: number): Promise<void> {
 
 function isForwardDenied(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
-  return message.includes('跳板无法转到目标机')
+  return message.includes(mt('term.jump_failed'))
 }
