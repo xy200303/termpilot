@@ -78,7 +78,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
             viewId: props.viewId,
             sessionId: props.session.id,
             status: 'error',
-            message: rdpErrorText(error)
+            message: withStaleHint(rdpErrorText(error), t)
           })
         })
       } catch (error) {
@@ -88,7 +88,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
           viewId: props.viewId,
           sessionId: props.session.id,
           status: 'error',
-          message: rdpErrorText(error)
+          message: withStaleHint(rdpErrorText(error), t)
         })
       }
     }
@@ -128,6 +128,10 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
       )}
     </div>
   )
+}
+
+function withStaleHint(message: string, t: (key: string) => string): string {
+  return message.includes('fastPath') ? `${message}\n${t('rdp.rdp_stale_session_hint')}` : message
 }
 
 function rdpDesktopSize(session: SessionConfig, host: HTMLElement | null): { width: number; height: number } {

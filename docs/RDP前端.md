@@ -95,12 +95,15 @@ cp dist/{iron-remote-desktop-rdp.js,index.d.ts,package.json,CHANGELOG.md} \
 - `desktop_type`（method=keys）输入密码后登录进 XFCE 桌面
 - `desktop_type`（method=clipboard，pasteKeys=ctrl-shift-v）把中文整段写进远端剪贴板并粘贴，xfce4-terminal 里中文完整到达
 - 远端 `xclip -selection clipboard` 写入文本后，本机 Windows 剪贴板同步到同一内容（远端 → 本机）
-- 同一连接关闭后重新打开，可以重新连入（`connection_close`/`connection_open` 多次循环验证）
+- 同一连接关闭后重新打开可以再连入（`connection_close`/`connection_open` 多次循环验证）；旧会话已被 xrdp 回收时是全新会话，回收前会命中上面「接回仍然存活的会话」的限制
 
 ## 已知限制
 
 - **中文输入要走剪贴板**：xrdp 会丢掉 Unicode 键盘事件里的非 ASCII 字符，用 `desktop_type` 的 keys 方式打中文只留下空格；`method=clipboard` 正常。官方组件的 canvas 不是可编辑元素，也没有处理 `compositionend`，所以本机输入法直接打字同样不适用于中文，界面上用「发送文字」走剪贴板。
-- **重连会先失败一次**：客户端在会话存活时重新连入，xrdp 回放的首个 fast-path 帧会触发 `invalid fastPath_length` 解析错误，画面停在空白。`RdpView` 在 connect/run 失败时自动关掉桥接、1.5 秒后重试一次，第二次能正常出画面；重试窗口内 MCP 的桌面工具会短暂报「桌面不存在」。
+- **接回仍然存活的 xrdp 会话会失败**：客户端断开后服务端会话还在时，再次连入有两种表现——回放的首个 fast-path 帧触发 `invalid fastPath_length` 解析错误，或者连上后没有任何 PDU（画面空白）；服务端 `/var/log/xrdp.log` 会记 `++ reconnected session`，有时跟随 sesman 的 `login failed for display 0`。官方 wasm + 官方演示客户端同样如此，不是这次接入引入的。
+  - `RdpView` 在 connect/run 失败时会自动关掉桥接、1.5 秒后重试一次；会话已被 xrdp 回收时重试即可恢复。
+  - 仍失败时界面会提示「服务器上可能还留着上一次的会话」，等 xrdp 回收（或服务端 `pkill -u <用户>`）后再点「重新连接」即可。
+  - 全新会话、以及登录框阶段的断线重连都正常。
 - 官方组件把会话藏在元素内部，只有 `Session` 的少量接口外露，Agent 的点击/按键只能通过给 canvas 派发合成 DOM 事件实现（已验证有效）。
 - `vendor` 里是未做 `wasm-opt` 的产物，比上游发布流程的产物大一些；本机访问不了 GitHub Releases，暂时保持现状。
 
