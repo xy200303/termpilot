@@ -9,7 +9,7 @@ Current version **v0.8.6**. All packages are published on [GitHub Releases](http
 
 Linux x64 packages are built on Ubuntu 22.04 and require `glibc >= 2.35`; Ubuntu 22.04 / 24.04 work.
 
-<DownloadTable version="0.8.6" locale="en" />
+<DownloadTable version="0.8.6" />
 
 ## Installation notes
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { withBase } from 'vitepress'
 import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
@@ -7,7 +8,6 @@ import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './
 
 const VERSION = '0.8.6'
 const REPO = 'https://github.com/xy200303/termpilot'
-const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
 const DL = `${REPO}/releases/latest/download`
 const DOWNLOADS = {
@@ -16,191 +16,32 @@ const DOWNLOADS = {
   linux: `${DL}/TermPilot-${VERSION}.AppImage`
 }
 
-const announcement = {
+const { t, tm } = useI18n()
+
+const announcement = computed(() => ({
   version: `v${VERSION}`,
-  text: '修复 Ubuntu 22.04 的 GLIBC 兼容与无系统钥匙串启动问题',
+  text: t('home.announcement'),
   link: RELEASE_TAG
-}
+}))
 
 /* Hero 大标题：两行，第二行用强调色。逐字进场是纯 CSS（.hero-title .ch），
    脚本没加载完也不会留白。 */
-const heroLines = ['终端与桌面，', '助手都能接着用。']
-const heroOffset = heroLines[0].length
+const heroLines = computed(() => tm('home.hero.lines') as string[])
+const heroOffset = computed(() => heroLines.value[0].length)
 const heroEl = ref<HTMLElement | null>(null)
 const shotEl = ref<HTMLElement | null>(null)
 
-const stats = [
-  { value: '5', label: '类连接协议', note: 'SSH / Telnet / 串口 / VNC / RDP' },
-  { value: '35', label: '个 Agent 工具', note: '连接 / 终端 / exec / SFTP / 桌面 / 应用' },
-  { value: '0', label: '遥测上报', note: '没有统计、没有 crash 上报通道' },
-  { value: '6', label: '个安装包', note: 'Windows · macOS · Linux 各两种' }
-]
-
-const tracks = [
-  {
-    key: 'connect',
-    title: '连接',
-    summary: '五种协议一张表单。密码和私钥口令用系统钥匙串加密，只存本机。',
-    points: [
-      'SSH 支持密码 / 私钥、多跳跳板（ssh -J）、ProxyCommand',
-      'Telnet 与串口只有终端字节流，能力模型会提前说明',
-      'VNC 默认 5900，RDP 默认 3389；每个桌面连接只开一个窗口',
-      '可从 ~/.ssh/config 手动导入已有 Host，应用不写回该文件'
-    ]
-  },
-  {
-    key: 'desktop',
-    title: '桌面',
-    summary: 'VNC / RDP 内嵌在同一个窗口，剪贴板和 Agent 操作都能直接用。',
-    points: [
-      'VNC 使用 noVNC；RDP 默认 IronRDP，也可切 FreeRDP 原生窗口',
-      '截图网格、图片坐标点击、中文输入、滚动和批量操作',
-      '宿主机与远端双向共享文本剪贴板',
-      'Linux 可读 AT-SPI 控件树；性能浮层显示流量与包速率'
-    ]
-  },
-  {
-    key: 'operate',
-    title: '操作',
-    summary: '你登录好的会话，助手接着用。不用重连，不用把密码交出去。',
-    points: [
-      'exec 通道独立跑命令：stdout / stderr 分流、协议级退出码',
-      '同名 session 跨调用承接 cd 和 export，环境不丢',
-      'PTY 族工具发按键、读屏幕、截长图，TUI 和安装向导也能走',
-      '危险命令和删除操作暂停，在窗口里等你确认'
-    ]
-  },
-  {
-    key: 'transfer',
-    title: '传输',
-    summary: 'SFTP 文件面板和终端共用同一条 SSH，不掉线、不重登。',
-    points: [
-      '上传 / 下载 / 新建目录 / 改名 / 删除，单文件 512MB 以内',
-      '双击文本文件在线编辑，Ctrl+S 写回服务器',
-      '一次性授权的跳板机：文件通道设为复用，不拨第二次',
-      '目标机缺 SFTP 子系统时自动改 internal-sftp（可关）'
-    ]
-  }
-]
-
-const steps = [
-  { title: '新建连接', text: '填主机和账号，或从 ~/.ssh/config 导入。口令加密存本机。' },
-  { title: '打开终端', text: '双击连接即开标签。多跳跳板自动串起，登录只输一次。' },
-  { title: '日常操作', text: '终端与 VNC / RDP 桌面共用标签栏，右键复制或截图。' },
-  { title: '交给助手', text: '复制 Agent 指引完成接入；助手可在终端或桌面里继续操作。' },
-  { title: '传文件', text: '文件面板上传下载，文本文件双击直接在线改。' },
-  { title: '收工', text: '关掉标签。连接、终端标题和已绘制的行，下次启动还在。' }
-]
-
-const privacy = [
-  {
-    title: '凭据只存本机',
-    text: '密码和私钥口令用 Electron safeStorage 调系统钥匙串加密，写进本机 SQLite（%APPDATA%\\TermPilot\\termpilot.db）。没有服务端，没有账号体系。'
-  },
-  {
-    title: 'MCP 只听回环',
-    text: '内置 MCP Server 只绑定 127.0.0.1，每个请求要带 Bearer 令牌。令牌在本机 mcp.json 里，不给谁，谁就连不上。'
-  },
-  {
-    title: '没有遥测',
-    text: '源码里没有统计、没有 crash 上报。唯一的外联请求是你在设置页手动点「检查更新」时，读一次 GitHub 发布页。'
-  }
-]
-
-const shots = [
-  { src: '/shots/hero.png', title: '主窗口', text: '左侧连接与文件，右侧多标签终端。' },
-  { src: '/shots/connection.png', title: '新建连接', text: '三种协议一张表单，跳板和多跳在各自页签。' },
-  { src: '/shots/sftp.png', title: '文件面板', text: '远程目录按层展开，双击文本直接编辑。' },
-  { src: '/shots/import.png', title: '从 ssh_config 导入', text: '选中一个 Host，主机、私钥、跳板自动填好。' }
-]
-
-const compare = {
-  cols: ['手工敲 ssh 命令', '图形化终端（XShell 类）', 'TermPilot'],
-  rows: [
-    ['登录', '每次敲完整命令，密码靠 ssh-agent 兜底', '保存会话，双击连接', '保存连接，双击或由助手代开'],
-    ['中途交互', '菜单、向导、sudo 都要本人', '本人操作', '本人或助手代按，画面实时可见'],
-    ['继续下一步', '同一窗口继续', '同一窗口继续，助手进不来', '同一条会话助手接着做，不重连'],
-    ['批量与脚本', '自己写 shell 脚本', '基本靠手动', '35 个 MCP 工具 + 本机 CLI'],
-    ['凭据', 'ssh_config / ssh-agent', '软件内保存', '系统钥匙串加密，只存本机']
-  ]
-}
-
-const specs = [
-  ['连接协议', 'SSH / Telnet / 串口 / VNC / RDP'],
-  ['终端', 'xterm.js + WebGL 渲染；本机与远程同一标签栏；滚轮横滚、右键复制截图'],
-  ['图形桌面', 'VNC noVNC、RDP IronRDP 内嵌；RDP 可切 FreeRDP；双向文本剪贴板'],
-  ['桌面性能', '自动 / 画质 / 平衡 / 流畅；后台降载、缩放防抖、桥接合包与背压'],
-  ['通道', 'shell / exec（stdout、stderr 分流，协议级退出码）/ SFTP，同一条 SSH 复用'],
-  ['文件传输', '上传、下载、新建目录、改名、删除；单文件 512MB 以内；文本在线编辑'],
-  ['凭据存储', 'safeStorage 加密 → 本机 SQLite，不出本机'],
-  ['Agent 接口', '内置 MCP Server（35 个工具，只绑 127.0.0.1 + 令牌）；Go 写的本机 CLI'],
-  ['平台', 'Windows x64 / macOS（Apple Silicon）/ Linux x64'],
-  ['安装包', 'Windows Setup 146MB · macOS dmg 168MB · AppImage 167MB · deb 129MB'],
-  ['许可证', 'MIT']
-]
-
-const changelog = [
-  {
-    version: '0.8.6',
-    items: [
-      '图形桌面新增「中文键盘」接管，本机输入法可以直接往 VNC 里打中文',
-      '新增「发送文字」，整段写远端剪贴板再粘贴；两个入口都收进标签栏图标行'
-    ]
-  },
-  {
-    version: '0.8.5',
-    items: [
-      '合并重复工具：term_read 并入 term_lines，滚动截图并入 term_screenshot，工具总数 35',
-      '应用截图默认带 100px 网格；desktop_type 支持剪贴板粘贴，中文绕开远端输入法'
-    ]
-  },
-  {
-    version: '0.8.4',
-    items: [
-      '桌面截图返回 shotId，点击/滚动按它换算坐标，窗口或分辨率变化不再点偏',
-      'shotId 失效或跨桌面会明确报错，不会按错基准'
-    ]
-  }
-]
-
-const faqs = [
-  {
-    q: '密码和私钥口令存在哪里？',
-    a: '用 Electron safeStorage 调用系统钥匙串加密后，写进本机 SQLite 数据库（Windows 是 %APPDATA%\\TermPilot\\termpilot.db）。没有服务端同步，connection_list 等接口也不返回口令。'
-  },
-  {
-    q: '能连跳板机吗？',
-    a: '可以。支持 ssh -J 多跳、ProxyCommand，也能从 ~/.ssh/config 导入现成配置。跳板只授权一次转发时，把这条连接的「文件通道」设为复用终端连接，SFTP 就不会触发第二次拨号。'
-  },
-  {
-    q: 'VNC 和 RDP 能像终端一样交给 Agent 操作吗？',
-    a: '可以。助手可以看桌面截图、按图片坐标点击、输入文字和组合键、滚动、等待画面稳定并批量执行操作；VNC 和内嵌 RDP 还能双向共享文本剪贴板。每个桌面连接只保留一个窗口。'
-  },
-  {
-    q: 'Telnet 和串口能用 exec 通道和 SFTP 吗？',
-    a: '不能。这两种协议只有一条终端字节流，没有通道概念。对它们调用 term_exec 或 sftp_* 会返回明确的能力说明错误；term_pty、term_write、截图等屏幕族工具三种协议行为一致。'
-  },
-  {
-    q: '串口断了怎么办？',
-    a: '终端断开后用 term_reconnect（或界面上重连）恢复同一扇终端，编号、备注和已显示的内容都保留。建连接前先 serial_list 确认串口路径和参数。'
-  },
-  {
-    q: 'AI 助手能看到我的密码吗？',
-    a: '不能。口令只在拨号时于主进程内存里短暂解密，任何工具接口都不返回。MCP Server 只绑定 127.0.0.1，且每个请求要带本机 mcp.json 里的令牌。'
-  },
-  {
-    q: 'macOS Intel 芯片能用吗？',
-    a: '官方只发布 Apple Silicon（arm64）的 dmg 和 zip。Intel Mac 可以从源码自行构建：npm install 后跑 npm run dist:mac。'
-  },
-  {
-    q: '安装时提示未签名 / 未知发布者？',
-    a: '安装包没有做代码签名。Windows 在 SmartScreen 里选「仍要运行」，macOS 在访达里右键打开。介意签名的可以自己从源码构建，三条命令。'
-  },
-  {
-    q: 'TermPilot 会上传我的数据吗？',
-    a: '没有遥测、没有统计、没有 crash 上报。唯一的外联是在设置页手动点「检查更新」时读一次 GitHub 发布页，可以在源码 update-check.ts 里核实。'
-  }
-]
+const stats = computed(() => tm('home.stats') as Array<{ value: string; label: string; note: string }>)
+const tracks = computed(
+  () => tm('home.tracks') as Array<{ key: string; title: string; summary: string; points: string[] }>
+)
+const steps = computed(() => tm('home.steps') as Array<{ title: string; text: string }>)
+const privacy = computed(() => tm('home.privacy') as Array<{ title: string; text: string }>)
+const shots = computed(() => tm('home.shots') as Array<{ src: string; title: string; text: string }>)
+const compare = computed(() => tm('home.compare') as { cols: string[]; rows: string[][] })
+const specs = computed(() => tm('home.specs') as string[][])
+const changelog = computed(() => tm('home.changelog') as Array<{ version: string; items: string[] }>)
+const faqs = computed(() => tm('home.faqs') as Array<{ q: string; a: string }>)
 
 let observer: IntersectionObserver | null = null
 const teardowns: Array<() => void> = []
@@ -212,7 +53,7 @@ onMounted(async () => {
   ld.textContent = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    mainEntity: faqs.map((item) => ({
+    mainEntity: faqs.value.map((item) => ({
       '@type': 'Question',
       name: item.q,
       acceptedAnswer: { '@type': 'Answer', text: item.a }
@@ -312,18 +153,17 @@ onBeforeUnmount(() => {
           </span>
         </h1>
         <p class="hero-sub">
-          TermPilot 把 SSH / Telnet / 串口终端与 VNC / RDP 桌面放在同一个窗口。
-          你在窗口里登录后，AI 助手通过内置 MCP Server 接着同一条会话或同一个桌面继续操作——口令不出本机。
+          {{ t('home.hero.sub') }}
         </p>
         <div class="hero-cta">
           <a v-press class="btn primary" :href="withBase('/download')">
-            下载安装包
+            {{ t('home.cta.download') }}
             <span class="arw">→</span>
           </a>
-          <a v-press class="btn ghost" :href="withBase('/guide/quickstart')">使用文档</a>
-          <a v-press class="btn text" :href="REPO" target="_blank" rel="noopener">GitHub ↗</a>
+          <a v-press class="btn ghost" :href="withBase('/guide/quickstart')">{{ t('home.cta.docs') }}</a>
+          <a v-press class="btn text" :href="REPO" target="_blank" rel="noopener">{{ t('home.cta.github') }}</a>
         </div>
-        <p class="plat">Windows · macOS · Linux，MIT 开源</p>
+        <p class="plat">{{ t('home.plat') }}</p>
 
         <div class="hero-shot">
           <div ref="shotEl" class="shot-frame">
@@ -331,7 +171,7 @@ onBeforeUnmount(() => {
               <div class="window-bar"><i /><i /><i /><span class="window-url">TermPilot</span></div>
               <img
                 src="/shots/hero.png"
-                alt="TermPilot 主窗口：左侧连接列表，右侧多标签终端"
+                :alt="t('home.hero.alt')"
                 width="1280"
                 height="800"
               />
@@ -356,7 +196,7 @@ onBeforeUnmount(() => {
     <!-- 三条主线 -->
     <section class="section">
       <div class="wrap">
-        <h2 class="reveal">连接、桌面、操作、传输，四件事做扎实</h2>
+        <h2 class="reveal">{{ t('home.headings.tracks') }}</h2>
         <div class="tracks">
           <div v-for="t in tracks" :key="t.key" class="track reveal">
             <h3>{{ t.title }}</h3>
@@ -372,7 +212,7 @@ onBeforeUnmount(() => {
     <!-- 一条工作流 -->
     <section class="section dim">
       <div class="wrap">
-        <h2 class="reveal">从新建连接到关掉标签</h2>
+        <h2 class="reveal">{{ t('home.headings.steps') }}</h2>
         <ol class="steps">
           <li v-for="(s, i) in steps" :key="s.title" class="step reveal">
             <span class="step-no tnum">{{ i + 1 }}</span>
@@ -386,7 +226,7 @@ onBeforeUnmount(() => {
     <!-- 本地优先 / 隐私 -->
     <section class="section">
       <div class="wrap">
-        <h2 class="reveal">本地优先：口令存哪、谁在监听、何时外联</h2>
+        <h2 class="reveal">{{ t('home.headings.privacy') }}</h2>
         <div class="privacy">
           <div v-for="p in privacy" :key="p.title" class="privacy-item reveal">
             <h3>{{ p.title }}</h3>
@@ -399,7 +239,7 @@ onBeforeUnmount(() => {
     <!-- 界面 -->
     <section class="section dim">
       <div class="wrap">
-        <h2 class="reveal">界面</h2>
+        <h2 class="reveal">{{ t('home.headings.shots') }}</h2>
         <div class="shots">
           <figure v-for="s in shots" :key="s.src" v-lift="3" v-spot class="shot reveal">
             <img :src="s.src" :alt="s.title" width="1280" height="800" loading="lazy" />
@@ -415,7 +255,7 @@ onBeforeUnmount(() => {
     <!-- 对照表 -->
     <section class="section">
       <div class="wrap">
-        <h2 class="reveal">和同类的做法比一比</h2>
+        <h2 class="reveal">{{ t('home.headings.compare') }}</h2>
         <div class="table-scroll reveal">
           <table class="compare">
             <thead>
@@ -438,7 +278,7 @@ onBeforeUnmount(() => {
     <!-- 技术规格 -->
     <section class="section dim">
       <div class="wrap">
-        <h2 class="reveal">技术规格</h2>
+        <h2 class="reveal">{{ t('home.headings.specs') }}</h2>
         <table class="specs reveal">
           <tbody>
             <tr v-for="row in specs" :key="row[0]">
@@ -453,13 +293,12 @@ onBeforeUnmount(() => {
     <!-- 开源 -->
     <section class="section">
       <div class="wrap oss">
-        <h2 class="reveal">MIT 开源，自己构建只要三条命令</h2>
+        <h2 class="reveal">{{ t('home.headings.oss') }}</h2>
         <pre class="reveal"><code>git clone https://github.com/xy200303/termpilot.git
 cd termpilot
 npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
         <p class="reveal">
-          仓库：<a :href="REPO" target="_blank" rel="noopener">github.com/xy200303/termpilot</a>。
-          推送到 main 跑类型检查和构建，打 tag 自动出三端安装包并发布 Release。
+          {{ t('home.oss.lead') }}<a :href="REPO" target="_blank" rel="noopener">github.com/xy200303/termpilot</a>{{ t('home.oss.tail') }}
         </p>
       </div>
     </section>
@@ -467,7 +306,7 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
     <!-- 更新日志 -->
     <section class="section dim">
       <div class="wrap">
-        <h2 class="reveal">最近更新</h2>
+        <h2 class="reveal">{{ t('home.headings.changelog') }}</h2>
         <div class="changelog">
           <div v-for="c in changelog" :key="c.version" class="release reveal">
             <h3 class="tnum">v{{ c.version }}</h3>
@@ -477,8 +316,8 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
           </div>
         </div>
         <p class="more reveal">
-          <a href="/changelog">查看完整更新日志</a> ·
-          <a :href="`${REPO}/blob/main/CHANGELOG.md`" target="_blank" rel="noopener">仓库 CHANGELOG.md</a>
+          <a href="/changelog">{{ t('home.links.changelogMore') }}</a> ·
+          <a :href="`${REPO}/blob/main/CHANGELOG.md`" target="_blank" rel="noopener">{{ t('home.links.changelogRepo') }}</a>
         </p>
       </div>
     </section>
@@ -486,7 +325,7 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
     <!-- FAQ -->
     <section class="section">
       <div class="wrap">
-        <h2 class="reveal">常见问题</h2>
+        <h2 class="reveal">{{ t('home.headings.faqs') }}</h2>
         <div class="faqs">
           <details v-for="f in faqs" :key="f.q" class="faq reveal">
             <summary>{{ f.q }}</summary>
@@ -499,14 +338,14 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
     <!-- 收尾 -->
     <section class="final">
       <div class="wrap">
-        <h2 class="reveal">下载 TermPilot，把终端交给助手接着用</h2>
+        <h2 class="reveal">{{ t('home.headings.final') }}</h2>
         <div class="cta reveal">
-          <a v-press class="btn primary" :href="DOWNLOADS.win">Windows 版</a>
-          <a v-press class="btn primary" :href="DOWNLOADS.mac">macOS 版</a>
-          <a v-press class="btn primary" :href="DOWNLOADS.linux">Linux 版</a>
-          <a v-press class="btn text" href="/download">全部下载</a>
+          <a v-press class="btn primary" :href="DOWNLOADS.win">{{ t('home.final.win') }}</a>
+          <a v-press class="btn primary" :href="DOWNLOADS.mac">{{ t('home.final.mac') }}</a>
+          <a v-press class="btn primary" :href="DOWNLOADS.linux">{{ t('home.final.linux') }}</a>
+          <a v-press class="btn text" href="/download">{{ t('home.final.all') }}</a>
         </div>
-        <p class="fine reveal">MIT 协议 · Copyright © 2026 xy200303</p>
+        <p class="fine reveal">{{ t('home.final.fine') }}</p>
       </div>
     </section>
   </div>
@@ -613,6 +452,8 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
 }
 .hero-title .ch {
   display: inline-block;
+  /* 英文标题按单词内空格切分，空格字符也要占位，否则单词会粘在一起 */
+  white-space: pre;
   animation: tp-rise 0.92s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(var(--ci, 0) * 45ms + 0.12s);
   will-change: transform;
@@ -1205,6 +1046,13 @@ npm install && npm run dist:win  # dist:mac / dist:linux</code></pre>
   .hero-cta .btn.primary,
   .hero-cta .btn.ghost {
     flex: 1 1 auto;
+  }
+}
+
+/* 英文标题按字符切分后不能在字符间折行，窄屏只能靠字号保证一行放得下 */
+@media (max-width: 640px) {
+  .hero-title {
+    font-size: clamp(18px, 7.2vw, 30px);
   }
 }
 

@@ -9,7 +9,7 @@ description: TermPilot 三端安装包下载：Windows x64、macOS（Apple Silic
 
 Linux x64 包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubuntu 22.04 / 24.04。
 
-<DownloadTable version="0.8.6" locale="zh" />
+<DownloadTable version="0.8.6" />
 
 ## 安装提示
 

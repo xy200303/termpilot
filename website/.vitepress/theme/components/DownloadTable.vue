@@ -1,28 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
-const props = defineProps<{ version: string; locale?: 'zh' | 'en' }>()
+defineProps<{ version: string }>()
 
-const LABELS = {
-  zh: {
-    platform: '平台',
-    installer: '安装包',
-    portable: '免安装',
-    windows: 'Windows x64',
-    mac: 'macOS（Apple Silicon）',
-    linux: 'Linux x64'
-  },
-  en: {
-    platform: 'Platform',
-    installer: 'Installer',
-    portable: 'Portable',
-    windows: 'Windows x64',
-    mac: 'macOS (Apple Silicon)',
-    linux: 'Linux x64'
-  }
-}
-
-const labels = computed(() => LABELS[props.locale ?? 'zh'])
+const { t } = useI18n()
 const base = 'https://github.com/xy200303/termpilot/releases/latest/download'
 const file = (name: string) => `${base}/${name}`
 </script>
@@ -31,24 +12,24 @@ const file = (name: string) => `${base}/${name}`
   <table>
     <thead>
       <tr>
-        <th>{{ labels.platform }}</th>
-        <th>{{ labels.installer }}</th>
-        <th>{{ labels.portable }}</th>
+        <th>{{ t('download.table.platform') }}</th>
+        <th>{{ t('download.table.installer') }}</th>
+        <th>{{ t('download.table.portable') }}</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td>{{ labels.windows }}</td>
+        <td>{{ t('download.table.windows') }}</td>
         <td><a :href="file(`TermPilot.Setup.${version}.exe`)">TermPilot.Setup.{{ version }}.exe</a></td>
         <td><a :href="file(`TermPilot-${version}-win.zip`)">TermPilot-{{ version }}-win.zip</a></td>
       </tr>
       <tr>
-        <td>{{ labels.mac }}</td>
+        <td>{{ t('download.table.mac') }}</td>
         <td><a :href="file(`TermPilot-${version}-arm64.dmg`)">TermPilot-{{ version }}-arm64.dmg</a></td>
         <td><a :href="file(`TermPilot-${version}-arm64-mac.zip`)">TermPilot-{{ version }}-arm64-mac.zip</a></td>
       </tr>
       <tr>
-        <td>{{ labels.linux }}</td>
+        <td>{{ t('download.table.linux') }}</td>
         <td><a :href="file(`termpilot_${version}_amd64.deb`)">termpilot_{{ version }}_amd64.deb</a></td>
         <td><a :href="file(`TermPilot-${version}.AppImage`)">TermPilot-{{ version }}.AppImage</a></td>
       </tr>
