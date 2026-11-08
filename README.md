@@ -27,6 +27,8 @@ Windows · macOS · Linux
 </tr>
 </table>
 
+[English](README.en.md) · 中文
+
 ## Linux 兼容性
 
 官方 Linux x64 安装包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubuntu 22.04 / 24.04。发布流程会扫描 `node-pty`、串口和 SSH 加密原生模块，阻止更高 GLIBC 依赖进入安装包。
