@@ -55,10 +55,7 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
     const count = Array.from(input.text).length
     if (input.method === 'clipboard') {
       // VNC 没有文本通道：先把整段写进远端剪贴板，再让目标应用自己粘贴
-      rfb.clipboardPasteFrom(input.text)
-      await new Promise((resolve) => setTimeout(resolve, 150))
-      const combo = input.pasteKeys ?? 'ctrl-v'
-      sendCombo(rfb, combo)
+      const combo = await pasteIntoVnc(entry, input.text, input.pasteKeys)
       return { note: `已把 ${count} 个字符写入远端剪贴板，并发送 ${combo} 粘贴` }
     }
     for (const char of input.text) sendChar(rfb, char)
@@ -69,6 +66,48 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
   const point = canvasPoint(canvas, scaled.x, scaled.y)
   canvas.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: input.deltaY, clientX: point.x, clientY: point.y }))
   return { note: `已发送 VNC 滚动 ${input.deltaY}（画布显示宽度 ${Math.round(rect.width)}px）` }
+}
+
+/** 桌面标签里的「发送文字」入口：写远端剪贴板再粘贴，中文不经过远端输入法。 */
+export async function sendTextToVnc(viewId: string, text: string, pasteKeys = 'ctrl-v'): Promise<void> {
+  const entry = entries.get(viewId)
+  if (!entry) throw new Error('VNC 画面不存在或已断开')
+  if (entry.rfb.viewOnly) throw new Error('这条 VNC 连接是只观看模式，不能发送文字')
+  await pasteIntoVnc(entry, text, pasteKeys)
+}
+
+/** 中文键盘接管时逐字发字符（Unicode keysym）。 */
+export function sendVncChar(viewId: string, char: string): void {
+  const entry = entries.get(viewId)
+  if (!entry) throw new Error('VNC 画面不存在或已断开')
+  sendChar(entry.rfb, char)
+}
+
+/** 中文键盘接管时发特殊键，名字同 term 按键表（enter、backspace、up…）。 */
+export function sendVncKey(viewId: string, name: string): void {
+  const entry = entries.get(viewId)
+  if (!entry) throw new Error('VNC 画面不存在或已断开')
+  const special = SPECIAL[name]
+  if (!special) throw new Error(`不认识的按键 ${name}`)
+  entry.rfb.sendKey(special.keysym, special.code)
+}
+
+/** 中文键盘接管时发组合键，例如 ctrl-c、shift-tab。 */
+export function sendVncCombo(viewId: string, combo: string): void {
+  const entry = entries.get(viewId)
+  if (!entry) throw new Error('VNC 画面不存在或已断开')
+  sendCombo(entry.rfb, combo)
+}
+
+async function pasteIntoVnc(entry: Entry, text: string, pasteKeys?: string): Promise<string> {
+  const { rfb } = entry
+  rfb.focus()
+  rfb.clipboardPasteFrom(text)
+  // 等 cut-text 到远端，再让目标应用自己粘贴
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const combo = pasteKeys ?? 'ctrl-v'
+  sendCombo(rfb, combo)
+  return combo
 }
 
 function canvasPoint(canvas: HTMLCanvasElement, x: number, y: number): { x: number; y: number } {

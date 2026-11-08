@@ -1,6 +1,6 @@
 {
   "name": "termpilot",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "TermPilot - Agent 可操控的终端与图形桌面（SSH / Telnet / 串口 / VNC / RDP）",
   "main": "out/main/index.js",
   "license": "MIT",

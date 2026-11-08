@@ -1,5 +1,12 @@
 # 更新日志
 
+## 0.8.6
+
+- 图形桌面新增「中文键盘」接管：VNC 画布本身没有文本输入上下文，noVNC 会忽略输入法合成事件，手动打中文到不了远端。开启后用一个透明文本框接住本机输入法，合成结束逐字发 Unicode keysym，普通按键、组合键和方向键照常转发，Esc 退出。
+- 新增「发送文字」面板：在本机打完字后整段写远端剪贴板再粘贴，可选普通粘贴或终端粘贴（`ctrl-shift-v`）。
+
+安装包没有代码签名。
+
 ## 0.8.5
 
 - 合并重复工具：`term_screenshot_scrollback` 并入 `term_screenshot`，用 `scope=buffer` 截整段缓冲，给 `startLine` / `endLine` 时仍只裁那一段；`term_read` 并入 `term_lines`，不填范围就是当前画面。工具总数 37 → 35。

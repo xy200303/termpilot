@@ -46,6 +46,29 @@ export async function runRdpAgentById(viewId: string, input: DesktopAgentInput):
   return runRdpAgent(connection, input)
 }
 
+/** 桌面标签里的「发送文字」入口，走 RDP 剪贴板 + 粘贴快捷键。 */
+export async function sendTextToRdp(viewId: string, text: string, pasteKeys = 'ctrl-v'): Promise<void> {
+  const connection = connections.get(viewId)
+  if (!connection) throw new Error('RDP 画面不存在或已断开')
+  await pasteIntoRdp(connection, text, pasteKeys)
+}
+
+async function pasteIntoRdp(connection: RdpConnection, text: string, pasteKeys?: string): Promise<string> {
+  const { session, canvas } = connection
+  canvas.focus()
+  const data = new ClipboardData()
+  data.addText('text/plain', text)
+  try {
+    await session.onClipboardPaste(data)
+  } finally {
+    data.free()
+  }
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const combo = pasteKeys ?? 'ctrl-v'
+  sendCombo(session, combo)
+  return combo
+}
+
 export async function connectRdp(options: {
   url: string
   host: string
@@ -154,17 +177,7 @@ async function runRdpAgentUnsafe(
     canvas.focus()
     const count = Array.from(input.text).length
     if (input.method === 'clipboard') {
-      // RDP 剪贴板：先推给远端，再发粘贴快捷键
-      const data = new ClipboardData()
-      data.addText('text/plain', input.text)
-      try {
-        await session.onClipboardPaste(data)
-      } finally {
-        data.free()
-      }
-      await new Promise((resolve) => setTimeout(resolve, 150))
-      const combo = input.pasteKeys ?? 'ctrl-v'
-      sendCombo(session, combo)
+      const combo = await pasteIntoRdp({ session, canvas }, input.text, input.pasteKeys)
       return { note: `已把 ${count} 个字符写入远端剪贴板，并发送 ${combo} 粘贴` }
     }
     const events: DeviceEvent[] = []
