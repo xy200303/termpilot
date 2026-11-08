@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { t as mt } from '../i18n'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentTarget } from '../../shared/types'
@@ -66,7 +67,7 @@ export function buildAgentGuide(options: {
   const codex = `${CODEX_HEADER}
 url = ${JSON.stringify(options.url)}
 http_headers = { Authorization = ${JSON.stringify(auth)} }`
-  const paths = targets.map((target) => `- ${target.name}: ${target.file}（${target.configured ? '已检测到接入' : '尚未接入'}）`).join('\n')
+  const paths = targets.map((target) => mt('agentcfg.target_line', { name: target.name, file: target.file, status: target.configured ? mt('agentcfg.detected') : mt('agentcfg.not_connected') })).join('\n')
   return `# TermPilot Agent 接入指引
 
 请由你（Agent）直接完成 TermPilot 的 MCP 注册和 Skill 安装，不要要求用户手工改配置。
@@ -78,7 +79,7 @@ http_headers = { Authorization = ${JSON.stringify(auth)} }`
 - 名称：termpilot
 - 地址：${options.url}
 - 请求头：Authorization: ${auth}
-- 当前状态：${options.enabled ? '已启用' : '未启用。若配置后连接失败，请让用户先在 TermPilot 设置里启用 MCP 服务'}
+- 当前状态：${options.enabled ? mt('agentcfg.enabled') : mt('agentcfg.disabled_hint')}
 
 ## 第一步：安装 Skill
 
@@ -212,10 +213,10 @@ function parseJson(file: string): Record<string, unknown> {
   try {
     data = JSON.parse(readText(file))
   } catch {
-    throw new Error(`${file} 不是合法 JSON`)
+    throw new Error(mt('agentcfg.bad_json', { file }))
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error(`${file} 的内容无法读取`)
+    throw new Error(mt('agentcfg.unreadable', { file }))
   }
   return data as Record<string, unknown>
 }

@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { t as mt } from './i18n'
 import type { UpdateCheck } from '../shared/types'
 
 const LATEST = 'https://github.com/xy200303/termpilot/releases/latest'
@@ -14,14 +15,14 @@ export async function checkUpdate(): Promise<UpdateCheck> {
       signal: AbortSignal.timeout(15_000)
     })
   } catch {
-    throw new Error('连不上 GitHub')
+    throw new Error(mt('update.no_github'))
   }
   if (response.status === 404) return { current, latest: null, url: null, newer: false }
   const location = response.headers.get('location')
   if (!location) return { current, latest: null, url: null, newer: false }
   const url = releaseUrl(new URL(location, LATEST).toString())
   const latest = url?.match(/\/releases\/tag\/v?([^/]+)\/?$/)?.[1] ?? ''
-  if (!url || !latest) throw new Error('GitHub 没有返回发布信息')
+  if (!url || !latest) throw new Error(mt('update.no_release'))
   return { current, latest, url, newer: compare(latest, current) > 0 }
 }
 
@@ -49,6 +50,6 @@ function compare(left: string, right: string): number {
 
 function parts(version: string): [number, number, number] {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())
-  if (!match) throw new Error('无法识别版本号')
+  if (!match) throw new Error(mt('update.bad_version'))
   return [Number(match[1]), Number(match[2]), Number(match[3])]
 }

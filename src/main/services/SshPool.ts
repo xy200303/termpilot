@@ -1,4 +1,5 @@
 import { Client } from 'ssh2'
+import { t as mt } from '../i18n'
 import type { SessionConfig } from '../../shared/types'
 import { dialSsh, endJump } from '../ssh-config'
 
@@ -109,7 +110,7 @@ export class SshPool {
     })
     client.on('close', () => {
       if (this.slots.get(session.id) === slot) this.slots.delete(session.id)
-      fail(new Error('连接已断开'))
+      fail(new Error(mt('ssh.disconnected')))
     })
 
     try {

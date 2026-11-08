@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, shell } from 'electron'
+import { t as mt } from './i18n'
 import { setMainLocale } from './i18n'
 import { resolveUiLocale } from '../shared/types'
 import { randomBytes } from 'node:crypto'
@@ -84,7 +85,7 @@ export function registerIpc(
         proxyCommand: host.fields.proxyCommand
       }))
     } catch (error) {
-      console.error('[TermPilot] 读取 SSH 配置失败', error)
+      console.error(mt('ipc.ssh_config_failed'), error)
       return []
     }
   })
@@ -206,7 +207,7 @@ export function registerIpc(
 
   ipcMain.handle(IPC.capturePage, async (event, rect: CaptureRect) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) throw new Error('窗口不可用，无法截图')
+    if (!win) throw new Error(mt('ipc.window_capture'))
     assertRect(rect, win.getContentSize())
     const image = await event.sender.capturePage(rect)
     return image.toPNG().toString('base64')
@@ -214,7 +215,7 @@ export function registerIpc(
 
   ipcMain.handle(IPC.captureSave, (_event, pngs: string[]) => {
     if (!Array.isArray(pngs) || pngs.length === 0 || pngs.length > 40) {
-      throw new Error('没有可保存的截图')
+      throw new Error(mt('ipc.no_screenshot'))
     }
     const dir = screenshotsDir()
     mkdirSync(dir, { recursive: true })
@@ -264,7 +265,7 @@ export function registerIpc(
   ipcMain.handle(IPC.reverseStart, (_e, sessionId: string) => {
     const session = storage.list().find((s) => s.id === sessionId)
     if (!session || session.mode !== 'reverse' || !session.listenPort) {
-      throw new Error('这不是反向监听，或未设置本机端口')
+      throw new Error(mt('ipc.not_reverse'))
     }
     reverse.start(sessionId, session.listenPort)
   })
@@ -275,13 +276,13 @@ export function registerIpc(
   ipcMain.handle(IPC.appCheckUpdate, () => checkUpdate())
   ipcMain.handle(IPC.appOpenRelease, (_e, url: string) => {
     const target = releaseUrl(url)
-    if (!target) throw new Error('不是 TermPilot 的发布页')
+    if (!target) throw new Error(mt('ipc.not_release_page'))
     return shell.openExternal(target)
   })
 
   ipcMain.handle(IPC.appPickKeyFile, async () => {
     const picked = await dialog.showOpenDialog({
-      title: '选择私钥文件',
+      title: mt('ipc.pick_key'),
       defaultPath: join(homedir(), '.ssh'),
       properties: ['openFile', 'showHiddenFiles']
     })
@@ -297,7 +298,7 @@ function assertScreenshot(file: string): string {
   const dir = resolve(screenshotsDir())
   const target = resolve(file)
   const rel = relative(dir, target)
-  if (!rel || rel.startsWith('..')) throw new Error('不是已保存的截图')
+  if (!rel || rel.startsWith('..')) throw new Error(mt('ipc.not_saved_shot'))
   return target
 }
 
@@ -315,5 +316,5 @@ function assertRect(rect: CaptureRect, contentSize: number[]): void {
     rect.height <= 4000 &&
     rect.x + rect.width <= width + 1 &&
     rect.y + rect.height <= height + 1
-  if (!ok) throw new Error('截图区域超出窗口')
+  if (!ok) throw new Error(mt('ipc.region_outside'))
 }

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
+import { t as mt } from './i18n'
 import { followAppTheme, titleBarOverlay, watchSystemChrome, windowBackground } from './window-chrome'
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -58,7 +59,7 @@ function recoverBlankWindow(win: BrowserWindow): void {
   const reload = (why: string) => {
     if (win.isDestroyed() || reloads >= 2) return
     reloads += 1
-    console.error(`[TermPilot] 窗口没有画出来（${why}），重新加载`)
+    console.error(mt('app.window_blank', { why }))
     setTimeout(() => {
       if (!win.isDestroyed()) win.webContents.reload()
     }, 200)
@@ -92,9 +93,9 @@ function recoverBlankWindow(win: BrowserWindow): void {
             if (painted) return
             attempts += 1
             if (attempts < 3) verify()
-            else reload('画面是空的')
+            else reload(mt('app.blank'))
           })
-          .catch(() => reload('画面检查失败'))
+          .catch(() => reload(mt('app.check_failed')))
       }, attempts === 0 ? 600 : 800)
     }
     verify()

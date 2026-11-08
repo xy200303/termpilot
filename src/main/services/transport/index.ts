@@ -1,4 +1,5 @@
 import type { SessionConfig } from '../../../shared/types'
+import { t as mt } from '../../i18n'
 import { capabilitiesOf, TELNET_DEFAULT_PORT, type ProtocolCapabilities, type SessionProtocol } from '../../../shared/protocol'
 import { TelnetTransport } from './telnet'
 import { SerialTransport } from './serial'
@@ -41,7 +42,7 @@ const DIALERS: Partial<Record<SessionProtocol, (session: SessionConfig) => ByteT
 /** 从会话配置拨一条字节流。仅注册表里的协议（Telnet / 串口）走这里，SSH 仍走 SshPool。 */
 export function dialTransport(session: SessionConfig): ByteTransport {
   const dialer = DIALERS[session.protocol]
-  if (!dialer) throw new Error(`${session.protocol ?? 'ssh'} 不是字节流协议`)
+  if (!dialer) throw new Error(mt('transport.not_stream', { protocol: session.protocol ?? 'ssh' }))
   return dialer(session)
 }
 

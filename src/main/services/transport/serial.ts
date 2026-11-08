@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { t as mt } from '../../i18n'
 import { join } from 'node:path'
 import type { ByteTransport } from './index'
 import { SERIAL_DEFAULTS, type ProtocolCapabilities, type SerialParity } from '../../../shared/protocol'
@@ -16,12 +17,12 @@ try {
   serialport = req('serialport') as typeof import('serialport')
 } catch (e) {
   serialportLoadError = e instanceof Error ? e.message : String(e)
-  console.error('[TermPilot] serialport 加载失败（串口不可用）:', serialportLoadError)
+  console.error(mt('serial.load_failed'), serialportLoadError)
 }
 
 /** 本机可用串口，给 GUI 连接表单和 MCP 的 serial_list 探路用。 */
 export async function listSerialPorts(): Promise<SerialPortInfo[]> {
-  if (!serialport) throw new Error(`串口功能不可用: ${serialportLoadError ?? 'serialport 未安装'}`)
+  if (!serialport) throw new Error(mt('serial.unavailable', { reason: serialportLoadError ?? mt('serial.not_installed') }))
   const ports = await serialport.SerialPort.list()
   return ports.map((port) => ({
     path: port.path,
@@ -52,9 +53,9 @@ export class SerialTransport implements ByteTransport {
   constructor(private options: SerialOptions) {}
 
   dial(): Promise<void> {
-    if (!serialport) return Promise.reject(new Error(`串口功能不可用: ${serialportLoadError ?? 'serialport 未安装'}`))
+    if (!serialport) return Promise.reject(new Error(mt('serial.unavailable', { reason: serialportLoadError ?? mt('serial.not_installed') })))
     const path = this.options.path.trim()
-    if (!path) return Promise.reject(new Error('串口连接需要设备路径（COM3 / /dev/ttyUSB0）。先用 serial_list 看本机有哪些串口'))
+    if (!path) return Promise.reject(new Error(mt('serial.need_path')))
     return new Promise((resolve, reject) => {
       const dataBits = this.options.dataBits
       const stopBits = this.options.stopBits
@@ -72,7 +73,7 @@ export class SerialTransport implements ByteTransport {
       port.on('error', (error) => this.errorCb?.(error))
       port.open((error) => {
         if (error) {
-          reject(new Error(`打不开串口 ${path}: ${error.message}`))
+          reject(new Error(mt('serial.open_failed', { path, message: error.message })))
           return
         }
         resolve()

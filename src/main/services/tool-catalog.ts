@@ -1,5 +1,6 @@
 import { ZodError, z, type ZodRawShape, type ZodTypeAny } from 'zod'
 import { TERM_KEYS } from '../../shared/term-keys'
+import { t as mt } from '../i18n'
 
 export interface ToolDef {
   name: string
@@ -375,7 +376,7 @@ export const TOOLS: readonly ToolDef[] = [
 
 export function findTool(name: string): ToolDef {
   const tool = TOOLS.find((item) => item.name === name)
-  if (!tool) throw new Error(`未知命令: ${name}`)
+  if (!tool) throw new Error(mt('mcp.err_unknown_tool', { tool: name }))
   return tool
 }
 

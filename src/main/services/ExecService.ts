@@ -1,4 +1,5 @@
 import type { StorageService } from './StorageService'
+import { t as mt } from '../i18n'
 import type { SshHold, SshPool } from './SshPool'
 
 export interface ExecResult {
@@ -35,7 +36,7 @@ export class ExecService {
     const cached = this.conns.get(sessionId)
     if (cached) return cached
     const session = this.storage.list().find((item) => item.id === sessionId)
-    if (!session) throw new Error('这条连接已经删除了')
+    if (!session) throw new Error(mt('exec.connection_deleted'))
     const pending = this.sshPool.acquire(session, this.storage.getSecret(sessionId), this.storage.getJumpSecret(sessionId))
     this.conns.set(sessionId, pending)
     // 底层会话断开时主动丢掉缓存，下次 exec 重新拨号。
@@ -169,7 +170,7 @@ function clipStream(text: string, max: number): { text: string; truncated: boole
   const head = Math.floor(max / 2)
   const tail = max - head
   return {
-    text: `${text.slice(0, head)}\n…中间已截断，原长 ${text.length} 字符…\n${text.slice(-tail)}`,
+    text: mt('exec.clip_middle', { head: text.slice(0, head), length: text.length, tail: text.slice(-tail) }),
     truncated: true
   }
 }

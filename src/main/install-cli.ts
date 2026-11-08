@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { t as mt } from './i18n'
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -27,7 +28,7 @@ export function installCli(launch: { app: string; args: string[] }): string {
         if (existsSync(file)) unlinkSync(file)
       }
     } catch (error) {
-      console.error('[TermPilot] 没能更新命令', error)
+      console.error(mt('cli.update_failed'), error)
     }
   } else {
     console.error('[TermPilot] CLI binary missing:', source)
@@ -70,7 +71,7 @@ $items.Add($dir)
       windowsHide: true
     })
   } catch (error) {
-    console.error('[TermPilot] 没能写入用户 PATH', error)
+    console.error(mt('cli.path_failed'), error)
   }
 }
 
@@ -86,7 +87,7 @@ function linkUserBin(target: string): void {
   }
   if (current !== target) {
     if (existsSync(link) && !current) {
-      console.error('[TermPilot] ~/.local/bin/termpilot 已有别的文件，没有覆盖')
+      console.error(mt('cli.occupied'))
     } else {
       if (existsSync(link)) unlinkSync(link)
       symlinkSync(target, link)

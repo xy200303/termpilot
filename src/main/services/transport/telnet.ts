@@ -1,4 +1,5 @@
 import { Socket } from 'node:net'
+import { t as mt } from '../../i18n'
 import type { ByteTransport } from './index'
 import type { ProtocolCapabilities } from '../../../shared/protocol'
 
@@ -40,7 +41,7 @@ export class TelnetTransport implements ByteTransport {
   ) {}
 
   dial(): Promise<void> {
-    if (!this.host) return Promise.reject(new Error('Telnet 需要主机地址'))
+    if (!this.host) return Promise.reject(new Error(mt('telnet.need_host')))
     return new Promise((resolve, reject) => {
       const socket = new Socket()
       this.socket = socket

@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
+import { t as mt } from './i18n'
 import { existsSync, readFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { Duplex } from 'node:stream'
@@ -82,7 +83,7 @@ export function dialSsh(
     jump.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
       finish(prompts.map(() => hop.password ?? ''))
     })
-    jump.on('error', (error) => hopFail(new Error(`跳板连接失败: ${error.message}`)))
+    jump.on('error', (error) => hopFail(new Error(mt('sshconf.jump_failed', { message: error.message }))))
     jump.on('ready', () => {
       const next = index + 1 < hops.length ? hops[index + 1]! : { host: session.host, port: session.port || 22 }
       jump.forwardOut('127.0.0.1', 0, next.host, next.port, (error, stream) => {
@@ -95,7 +96,7 @@ export function dialSsh(
         if (last && opts?.onJumpShell) {
           jump.shell({ term: 'xterm-256color', cols: opts.cols ?? 80, rows: opts.rows ?? 24 }, (shellError, shell) => {
             if (shellError || !shell) {
-              hopFail(new Error(`跳板无法转到目标机: ${error?.message ?? shellError?.message ?? '未知原因'}`))
+              hopFail(new Error(mt('sshconf.jump_unreachable', { reason: error?.message ?? shellError?.message ?? mt('common.unknown') })))
               return
             }
             loginTargetFromJump(shell, session, secret)
@@ -103,7 +104,7 @@ export function dialSsh(
           })
           return
         }
-        hopFail(new Error(`跳板无法转到目标机: ${error?.message ?? '未知原因'}`))
+        hopFail(new Error(mt('sshconf.jump_unreachable', { reason: error?.message ?? mt('common.unknown') })))
       })
     })
     const cfg: ConnectConfig = {

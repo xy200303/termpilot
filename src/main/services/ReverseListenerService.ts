@@ -1,4 +1,5 @@
 import net from 'node:net'
+import { t as mt } from '../i18n'
 import type { WebContents } from 'electron'
 import { newTermId } from '../../shared/ids'
 import { IPC } from '../../shared/ipc-channels'
@@ -25,7 +26,7 @@ export class ReverseListenerService {
   start(sessionId: string, port: number): void {
     if (this.servers.has(sessionId)) return
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      this.emitState({ sessionId, listening: false, port, peers: 0, error: '端口无效' })
+      this.emitState({ sessionId, listening: false, port, peers: 0, error: mt('reverse.bad_port') })
       return
     }
 
