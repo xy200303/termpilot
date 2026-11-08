@@ -6,7 +6,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.8.6'
+const VERSION = '0.9.0'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
 const DL = `${REPO}/releases/latest/download`

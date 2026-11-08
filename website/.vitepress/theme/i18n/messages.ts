@@ -3,7 +3,7 @@
 export const messages = {
   "zh-CN": {
     "home": {
-      "announcement": "修复 Ubuntu 22.04 的 GLIBC 兼容与无系统钥匙串启动问题",
+      "announcement": "界面新增跟随系统的中英文切换，官网同步提供英文页面",
       "hero": {
         "lines": [
           "终端与桌面，",
@@ -247,6 +247,14 @@ export const messages = {
       ],
       "changelog": [
         {
+          "version": "0.9.0",
+          "items": [
+            "界面新增语言设置：跟随系统 / 简体中文 / English，主进程消息一并切换",
+            "MCP 工具名、描述与参数说明统一英文，接入指引也固定英文",
+            "官网提供中英文页面，首页按系统语言选择落地页"
+          ]
+        },
+        {
           "version": "0.8.6",
           "items": [
             "图形桌面新增「中文键盘」接管，本机输入法可以直接往 VNC 里打中文",
@@ -258,13 +266,6 @@ export const messages = {
           "items": [
             "合并重复工具：term_read 并入 term_lines，滚动截图并入 term_screenshot，工具总数 35",
             "应用截图默认带 100px 网格；desktop_type 支持剪贴板粘贴，中文绕开远端输入法"
-          ]
-        },
-        {
-          "version": "0.8.4",
-          "items": [
-            "桌面截图返回 shotId，点击/滚动按它换算坐标，窗口或分辨率变化不再点偏",
-            "shotId 失效或跨桌面会明确报错，不会按错基准"
           ]
         }
       ],
@@ -335,7 +336,7 @@ export const messages = {
   },
   "en": {
     "home": {
-      "announcement": "Fixes GLIBC compatibility on Ubuntu 22.04 and startup without a system keychain",
+      "announcement": "Bilingual UI that follows your system language, plus English pages on the website",
       "hero": {
         "lines": [
           "Terminals and desktops,",
@@ -579,6 +580,14 @@ export const messages = {
       ],
       "changelog": [
         {
+          "version": "0.9.0",
+          "items": [
+            "New language setting: follow the system, Simplified Chinese or English, including main-process messages",
+            "MCP tool names, descriptions and parameter docs are English, and so is the agent guide",
+            "The website has English pages and the homepage follows your system language"
+          ]
+        },
+        {
           "version": "0.8.6",
           "items": [
             "Graphical desktops gain a “Chinese keyboard” takeover, so your local IME can type Chinese into VNC",
@@ -590,13 +599,6 @@ export const messages = {
           "items": [
             "Merged duplicate tools: term_read into term_lines and scrollback capture into term_screenshot, 35 tools in total",
             "App screenshots carry a 100px grid by default; desktop_type pastes through the clipboard so CJK input bypasses remote IMEs"
-          ]
-        },
-        {
-          "version": "0.8.4",
-          "items": [
-            "Desktop screenshots return a shotId, and clicks and scrolls convert coordinates with it, so resizing no longer misses",
-            "An expired or cross-desktop shotId fails loudly instead of clicking on the wrong base"
           ]
         }
       ],

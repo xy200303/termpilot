@@ -7,6 +7,13 @@ description: TermPilot 最近三个版本的更新内容，与仓库 CHANGELOG.m
 
 这里只同步最近三个版本。完整历史见仓库 [CHANGELOG.md](https://github.com/xy200303/termpilot/blob/main/CHANGELOG.md)。安装包均未做代码签名。
 
+## 0.9.0
+
+- 界面新增语言设置：跟随系统 / 简体中文 / English，界面文字、菜单、提示与主进程消息随之切换。
+- MCP 工具名、工具描述与参数说明统一为英文；工具结果和错误提示仍跟随界面语言。
+- Agent 接入指引固定为英文，覆盖注册 MCP、安装 Skill、本机配置路径与校验步骤。
+- 官网首页、下载与快速开始提供英文版本，首页按系统语言选择落地页。
+
 ## 0.8.6
 
 - 图形桌面新增「中文键盘」接管：用透明文本框接住本机输入法，合成结束逐字发 Unicode keysym，解决 VNC 下手打中文到不了远端的问题；普通键、组合键、方向键照常转发，Esc 退出。
@@ -17,10 +24,5 @@ description: TermPilot 最近三个版本的更新内容，与仓库 CHANGELOG.m
 - 合并重复工具：`term_read` 并入 `term_lines`，滚动截图并入 `term_screenshot`（`scope=buffer`），工具总数 37 → 35。
 - `app_screenshot` 默认叠加 100px 坐标网格；终端截图不加网格，避免挡住文字。
 - `desktop_type` 新增 `method=clipboard`：写远端剪贴板再发粘贴快捷键（终端用 `ctrl-shift-v`），中文绕开远端输入法。
-
-## 0.8.4
-
-- 桌面截图返回 `shotId`，`desktop_click` / `desktop_scroll` 传回它就按那张截图的坐标空间等比换算；窗口缩放、VNC 分辨率切换或 RDP 重新协商后不再点偏。
-- 不传 `shotId` 时用该桌面最近一张截图，也可以显式传 `imageWidth` / `imageHeight`；编号失效或跨桌面会明确报错。
 
 [下载最新版](/download){ .vp-button }
