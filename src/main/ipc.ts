@@ -1,4 +1,6 @@
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, shell } from 'electron'
+import { setMainLocale } from './i18n'
+import { resolveUiLocale } from '../shared/types'
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -165,6 +167,7 @@ export function registerIpc(
 
   ipcMain.handle(IPC.appearanceSave, (event, input: Appearance) => {
     const saved = storage.saveAppearance(input)
+    setMainLocale(resolveUiLocale(saved.language, app.getLocale()))
     paintFromContents(event.sender, saved.app)
     return saved
   })

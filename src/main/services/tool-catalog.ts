@@ -14,47 +14,47 @@ const sessionFields: ZodRawShape = {
   protocol: z
     .enum(['ssh', 'telnet', 'serial', 'rdp', 'vnc'])
     .optional()
-    .describe('连接协议，默认 ssh。telnet/serial 只有终端字节流；rdp/vnc 是独立图形桌面，没有 exec 和 SFTP'),
-  mode: z.enum(['forward', 'reverse']).optional().describe('仅 ssh 有效：forward 主动连服务器；reverse 只在 127.0.0.1 监听'),
-  host: z.string().optional().describe('正向 SSH / Telnet / RDP / VNC 的主机'),
+    .describe('Connection protocol, ssh by default. telnet/serial carry a terminal stream only; rdp/vnc are standalone desktops with no exec or SFTP'),
+  mode: z.enum(['forward', 'reverse']).optional().describe('SSH only: forward dials the server; reverse listens on 127.0.0.1 only'),
+  host: z.string().optional().describe('Host for SSH, Telnet, RDP or VNC'),
   port: z.number().int().min(1).max(65535).optional().describe('SSH 22，Telnet 23，RDP 3389，VNC 5900'),
-  username: z.string().optional().describe('SSH 登录用户'),
+  username: z.string().optional().describe('SSH login user'),
   authType: z.enum(['password', 'key']).optional().describe('password 或 key'),
   keyPath: z.string().optional().describe('私钥文件的本机绝对路径'),
   secret: z
     .string()
     .optional()
-    .describe('密码或私钥口令。加密保存，之后不会再返回。留空表示不修改'),
-  serialPath: z.string().optional().describe('串口设备路径（protocol = serial），例如 COM3 或 /dev/ttyUSB0。先用 serial_list 看本机有哪些串口'),
-  baudRate: z.number().int().optional().describe('串口波特率，默认 115200'),
-  dataBits: z.number().int().min(5).max(8).optional().describe('串口数据位，默认 8'),
-  stopBits: z.number().int().min(1).max(2).optional().describe('串口停止位，默认 1'),
-  parity: z.enum(['none', 'even', 'odd', 'mark', 'space']).optional().describe('串口校验，默认 none'),
-  listenPort: z.number().int().min(1).max(65535).optional().describe('反向监听端口（仅 ssh）'),
+    .describe('Password or key passphrase. Stored encrypted and never returned; leave empty to keep the current one'),
+  serialPath: z.string().optional().describe('Serial device path (protocol = serial), e.g. COM3 or /dev/ttyUSB0. Use serial_list to see local ports first'),
+  baudRate: z.number().int().optional().describe('Serial baud rate, default 115200'),
+  dataBits: z.number().int().min(5).max(8).optional().describe('Serial data bits, default 8'),
+  stopBits: z.number().int().min(1).max(2).optional().describe('Serial stop bits, default 1'),
+  parity: z.enum(['none', 'even', 'odd', 'mark', 'space']).optional().describe('Serial parity, default none'),
+  listenPort: z.number().int().min(1).max(65535).optional().describe('Reverse listener port (SSH only)'),
   sftpMode: z
     .enum(['auto', 'shared', 'fresh'])
     .optional()
     .describe(
-      '仅正向 ssh：文件通道（sftp_*）走哪条 SSH。auto 默认（目标机缺 SFTP 子系统时自动改 internal-sftp 并单独拨号）；shared 只复用终端那条连接，不改 sshd 也不单独拨号（跳板只授权一次转发的机器选这个）；fresh 总是单独拨号'
+      'Forward SSH only: which SSH carries the file channel (sftp_*). auto (default) switches the target to internal-sftp and dials separately when SFTP is missing; shared reuses the terminal connection without touching sshd or dialing again (use it when the jump host authorizes a single forwarding); fresh always dials separately'
     ),
-  viewOnly: z.boolean().optional().describe('仅 VNC：只观看，不发送鼠标键盘'),
-  width: z.number().int().min(320).max(7680).optional().describe('RDP / VNC 桌面宽度，留空跟随窗口'),
-  height: z.number().int().min(240).max(4320).optional().describe('RDP / VNC 桌面高度，留空跟随窗口'),
-  nativeClient: z.boolean().optional().describe('仅 RDP：true 使用 FreeRDP 原生窗口；默认 false，内嵌 IronRDP'),
-  clipboard: z.boolean().optional().describe('仅 VNC / 内嵌 RDP：是否与本机双向共享文本剪贴板，默认 true'),
-  performance: z.enum(['auto', 'quality', 'balanced', 'speed']).optional().describe('仅 VNC / RDP：自动、画质优先、平衡或流畅优先，默认 balanced'),
-  group: z.string().optional().describe('侧边栏分组，留空归入未分组'),
-  remark: z.string().optional().describe('备注')
+  viewOnly: z.boolean().optional().describe('VNC only: view only, do not send mouse or keyboard'),
+  width: z.number().int().min(320).max(7680).optional().describe('Desktop width for RDP / VNC; leave empty to follow the window'),
+  height: z.number().int().min(240).max(4320).optional().describe('Desktop height for RDP / VNC; leave empty to follow the window'),
+  nativeClient: z.boolean().optional().describe('RDP only: true uses the FreeRDP native window; false (default) uses embedded IronRDP'),
+  clipboard: z.boolean().optional().describe('VNC / embedded RDP only: share the text clipboard both ways with this machine, default true'),
+  performance: z.enum(['auto', 'quality', 'balanced', 'speed']).optional().describe('VNC / RDP only: auto, quality, balanced or speed; default balanced'),
+  group: z.string().optional().describe('Sidebar group; leave empty for ungrouped'),
+  remark: z.string().optional().describe('Note')
 }
 
-const connId = z.string().describe('连接编号，conn- 开头。不要填名称或备注，也不要填 term- 开头的终端编号')
-const termId = z.string().describe('终端编号，term- 开头')
-const viewId = z.string().describe('图形桌面编号，view- 开头。先 desktop_list 或 connection_open 获取')
+const connId = z.string().describe('Connection id, starts with conn-. Do not pass a name, a note, or a term- id')
+const termId = z.string().describe('Terminal id, starts with term-')
+const viewId = z.string().describe('Desktop id, starts with view-. Get it from desktop_list or connection_open')
 
 const lineFields: ZodRawShape = {
   termId,
-  startLine: z.number().int().min(0).optional().describe('起始行，包含。0 是最旧的一行'),
-  endLine: z.number().int().min(0).optional().describe('结束行，包含')
+  startLine: z.number().int().min(0).optional().describe('Start line, inclusive. 0 is the oldest line'),
+  endLine: z.number().int().min(0).optional().describe('End line, inclusive')
 }
 
 /** MCP 注册和命令行 tools / schema / call 共用这一份。 */

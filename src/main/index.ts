@@ -16,6 +16,8 @@ if (!existsSync(databaseFile) && !existsSync(currentSessions) && existsSync(lega
   copyFileSync(legacySessions, currentSessions)
 }
 import { StorageService } from './services/StorageService'
+import { setMainLocale } from './i18n'
+import { resolveUiLocale } from '../shared/types'
 import { TerminalService } from './services/TerminalService'
 import { ReverseListenerService } from './services/ReverseListenerService'
 import { SftpService } from './services/SftpService'
@@ -199,6 +201,7 @@ if (!single) {
     watchSystemChrome()
     const sessions = new StorageService()
     storage = sessions
+    setMainLocale(resolveUiLocale(sessions.getAppearance().language, app.getLocale()))
     sessions.setLaunch(process.execPath, app.isPackaged ? [] : [app.getAppPath()])
     installCli({ app: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] })
     createWindow(sessions)
