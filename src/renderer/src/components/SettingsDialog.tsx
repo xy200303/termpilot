@@ -23,11 +23,11 @@ import { terminalPalette, terminalPalettes } from '../theme/terminalThemes'
 type Pane = 'appearance' | 'mcp' | 'agents' | 'audit' | 'about'
 
 const panes: { id: Pane; label: string; icon: typeof Server }[] = [
-  { id: 'appearance', label: '外观', icon: Palette },
-  { id: 'mcp', label: 'MCP 服务', icon: Server },
-  { id: 'agents', label: 'Agent 接入', icon: Blocks },
-  { id: 'audit', label: '调用记录', icon: ScrollText },
-  { id: 'about', label: '关于', icon: Info }
+  { id: 'appearance', label: 'settings.pane_appearance', icon: Palette },
+  { id: 'mcp', label: 'settings.pane_mcp', icon: Server },
+  { id: 'agents', label: 'settings.pane_agents', icon: Blocks },
+  { id: 'audit', label: 'settings.pane_audit', icon: ScrollText },
+  { id: 'about', label: 'settings.pane_about', icon: Info }
 ]
 
 const appThemes: { id: AppTheme; label: string }[] = [
@@ -100,7 +100,7 @@ export function SettingsDialog() {
       setCopied(kind)
       window.setTimeout(() => setCopied((cur) => (cur === kind ? null : cur)), 1500)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '复制失败')
+      setError(e instanceof Error ? e.message : t('common.copy_failed'))
     }
   }
 
@@ -116,11 +116,11 @@ export function SettingsDialog() {
 
   const persist = async (): Promise<boolean> => {
     if (!Number.isInteger(form.port) || form.port < 1 || form.port > 65535) {
-      setError('端口需要在 1–65535')
+      setError(t('settings.port_range'))
       return false
     }
     if (form.token.trim().length < 16) {
-      setError('令牌至少 16 位')
+      setError(t('settings.token_min'))
       return false
     }
     try {
@@ -149,7 +149,7 @@ export function SettingsDialog() {
       setUpdate(await window.api.app.checkUpdate())
     } catch (e) {
       setUpdate(null)
-      setUpdateError(e instanceof Error ? e.message : '检查更新失败')
+      setUpdateError(e instanceof Error ? e.message : t('settings.update_check_failed'))
     } finally {
       setChecking(false)
     }
@@ -159,7 +159,7 @@ export function SettingsDialog() {
     try {
       await window.api.app.openRelease(url)
     } catch (e) {
-      setUpdateError(e instanceof Error ? e.message : '打开发布页失败')
+      setUpdateError(e instanceof Error ? e.message : t('settings.open_release_failed'))
     }
   }
 
@@ -170,7 +170,7 @@ export function SettingsDialog() {
       setGuide(text)
       await copy('guide', text)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '生成接入指引失败')
+      setError(e instanceof Error ? e.message : t('settings.guide_failed'))
     }
   }
 
@@ -180,10 +180,10 @@ export function SettingsDialog() {
         showCloseButton={false}
         className="flex h-[min(640px,85vh)] w-[min(880px,calc(100%-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
       >
-        <DialogTitle className="sr-only">设置</DialogTitle>
+        <DialogTitle className="sr-only">{t('settings.title')}</DialogTitle>
         <div className="flex min-h-0 flex-1">
           <nav className="flex w-44 shrink-0 flex-col gap-1 border-r bg-muted/40 p-3">
-            <div className="px-2 py-1.5 text-sm font-medium">设置</div>
+            <div className="px-2 py-1.5 text-sm font-medium">{t('settings.title')}</div>
             {panes.map((item) => (
               <button
                 key={item.id}
@@ -207,7 +207,7 @@ export function SettingsDialog() {
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex justify-end px-3 pt-3">
               <DialogClose asChild>
-                <Button variant="ghost" size="icon-sm" title="关闭">
+                <Button variant="ghost" size="icon-sm" title={t('common.close')}>
                   <X />
                 </Button>
               </DialogClose>
@@ -277,7 +277,7 @@ export function SettingsDialog() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="auto">{t('settings.follow_system')}</SelectItem>
-                        <SelectItem value="zh">中文</SelectItem>
+                        <SelectItem value="zh">{t('settings.language_zh')}</SelectItem>
                         <SelectItem value="en">English</SelectItem>
                       </SelectContent>
                     </Select>
@@ -290,14 +290,14 @@ export function SettingsDialog() {
             {pane === 'mcp' && (
               <section className="grid gap-4">
                 <div>
-                  <h2 className="text-base font-medium">MCP 服务</h2>
+                  <h2 className="text-base font-medium">{t('settings.mcp_title')}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    只监听 {MCP_HOST}，Agent 必须带 Bearer 令牌。
+                    {t('settings.mcp_only_local', { host: MCP_HOST })}
                     {runtime.running
-                      ? ` 正在监听 ${MCP_HOST}:${runtime.port}${runtime.clients > 0 ? `，${runtime.clients} 个客户端` : ''}。`
+                      ? t('settings.mcp_listening', { host: MCP_HOST, port: runtime.port, clients: runtime.clients > 0 ? t('settings.mcp_clients', { count: runtime.clients }) : '' })
                       : runtime.error
                         ? ` ${runtime.error}`
-                        : ' 当前没有监听。'}
+                         : t('settings.mcp_not_listening')}
                   </p>
                 </div>
 
@@ -305,13 +305,13 @@ export function SettingsDialog() {
                   <Row
                     title={
                       <span className="inline-flex items-center gap-2">
-                        合成算法
+                        {t('settings.compose')}
                         <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
-                          实验性算法
+                          {t('settings.experimental')}
                         </span>
                       </span>
                     }
-                    detail="打开后，当前画面、滚动缓冲、选中的行，以及助手发起的截图，都按缓冲拼成图片，不滚动正在看的画面。关闭后改为逐屏拍摄。拨动立刻生效。"
+                    detail={t('settings.compose_detail')}
                   >
                     <Switch
                       checked={appearance.experimentalScreenshot}
@@ -325,15 +325,15 @@ export function SettingsDialog() {
 
                 <Card>
                   <Row
-                    title="启用"
-                    detail={`保存后立刻在 ${MCP_HOST} 监听。关掉再保存就停止。`}
+                    title={t('settings.enabled')}
+                    detail={t('settings.enabled_detail', { host: MCP_HOST })}
                   >
                     <Switch
                       checked={form.enabled}
                       onCheckedChange={(enabled) => setForm((f) => ({ ...f, enabled }))}
                     />
                   </Row>
-                  <Row title="危险操作需确认" detail="Agent 删除文件或写入系统路径时先弹窗。">
+                  <Row title={t('settings.confirm_dangerous')} detail={t('settings.confirm_dangerous_detail')}>
                     <Switch
                       checked={form.confirmDangerous}
                       onCheckedChange={(confirmDangerous) => setForm((f) => ({ ...f, confirmDangerous }))}
@@ -344,10 +344,10 @@ export function SettingsDialog() {
                 <Card>
                   <div className="grid gap-3 px-4 py-3">
                     <div className="grid grid-cols-[1fr_6rem] gap-2">
-                      <Field label="监听地址">
+                      <Field label={t('settings.listen_address')}>
                         <Input value={MCP_HOST} readOnly />
                       </Field>
-                      <Field label="端口">
+                      <Field label={t('settings.port')}>
                         <Input
                           type="number"
                           value={form.port}
@@ -355,21 +355,21 @@ export function SettingsDialog() {
                         />
                       </Field>
                     </div>
-                    <Field label="端点">
+                    <Field label={t('settings.endpoint')}>
                       <div className="flex gap-2">
                         <Input className="min-w-0 flex-1" value={endpoint} readOnly />
                         <Button
                           type="button"
                           variant="outline"
                           size="icon"
-                          title="复制端点"
+                          title={t('settings.copy_endpoint')}
                           onClick={() => copy('endpoint', endpoint)}
                         >
                           {copied === 'endpoint' ? <Check /> : <Copy />}
                         </Button>
                       </div>
                     </Field>
-                    <Field label="Bearer 令牌">
+                    <Field label={t('settings.bearer_token')}>
                       <div className="flex gap-2">
                         <Input
                           className="min-w-0 flex-1"
@@ -378,18 +378,18 @@ export function SettingsDialog() {
                           onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))}
                         />
                         <Button type="button" variant="outline" size="sm" onClick={() => setShowToken((v) => !v)}>
-                          {showToken ? '隐藏' : '显示'}
+                          {showToken ? t('settings.hide') : t('settings.show')}
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
                           size="icon"
-                          title="复制令牌"
+                          title={t('settings.copy_token')}
                           onClick={() => copy('token', form.token)}
                         >
                           {copied === 'token' ? <Check /> : <Copy />}
                         </Button>
-                        <Button type="button" variant="outline" size="icon" title="重新生成" onClick={regenerate}>
+                        <Button type="button" variant="outline" size="icon" title={t('settings.regenerate')} onClick={regenerate}>
                           <RefreshCw />
                         </Button>
                       </div>
@@ -399,7 +399,7 @@ export function SettingsDialog() {
 
                 {error && <p className="text-xs text-destructive">{error}</p>}
                 <div className="flex justify-end">
-                  <Button onClick={() => void persist()}>保存</Button>
+                  <Button onClick={() => void persist()}>{t('common.save')}</Button>
                 </div>
               </section>
             )}
@@ -407,14 +407,14 @@ export function SettingsDialog() {
             {pane === 'agents' && (
               <section className="grid gap-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-base font-medium">Agent 接入</h2>
+                  <h2 className="text-base font-medium">{t('settings.agents_title')}</h2>
                   <Button size="sm" onClick={() => void copyGuide()}>
-                    {copied === 'guide' ? '已复制' : '复制接入指引'}
+                    {copied === 'guide' ? t('settings.copied') : t('settings.copy_guide')}
                   </Button>
                 </div>
                 <Card>
                   <pre className="max-h-[440px] select-all overflow-auto whitespace-pre-wrap bg-muted p-3 font-mono text-[11px] leading-5 text-muted-foreground">
-                    {guide || '正在生成接入指引…'}
+                    {guide || t('settings.guide_loading')}
                   </pre>
                 </Card>
                 {error && <p className="text-xs text-destructive">{error}</p>}
@@ -424,24 +424,24 @@ export function SettingsDialog() {
             {pane === 'about' && (
               <section className="grid gap-4">
                 <div>
-                  <h2 className="text-base font-medium">关于</h2>
+                  <h2 className="text-base font-medium">{t('settings.about_title')}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    当前安装的版本。检查更新会查看 GitHub 上的最新发布，不在这里下载。
+                    {t('settings.about_detail')}
                   </p>
                 </div>
                 <Card>
-                  <Row title="当前版本" detail="安装包里的版本号">
+                  <Row title={t('settings.version')} detail={t('settings.version_detail')}>
                     <span className="text-sm tabular-nums">{version ? `v${version}` : '…'}</span>
                   </Row>
-                  <Row title="检查更新" detail={updateDetail(update, updateError)}>
+                  <Row title={t('settings.check_updates')} detail={updateDetail(t, update, updateError)}>
                     <div className="flex items-center gap-2">
                       {update?.newer && update.url && (
                         <Button type="button" size="sm" variant="outline" onClick={() => void openRelease(update.url!)}>
-                          去 GitHub 下载
+                          {t('settings.download_release')}
                         </Button>
                       )}
                       <Button type="button" size="sm" disabled={checking} onClick={() => void checkUpdate()}>
-                        {checking ? '正在检查' : '检查更新'}
+                        {checking ? t('settings.checking') : t('settings.check_updates')}
                       </Button>
                     </div>
                   </Row>
@@ -452,14 +452,14 @@ export function SettingsDialog() {
             {pane === 'audit' && (
               <section className="grid gap-4">
                 <div>
-                  <h2 className="text-base font-medium">调用记录</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">最近的 MCP 工具调用，失败的会标出来。</p>
+                  <h2 className="text-base font-medium">{t('settings.audit_title')}</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">{t('settings.audit_detail')}</p>
                 </div>
                 <div className="max-h-[28rem] overflow-auto rounded-xl border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
-                  {audit.length === 0 && <p className="text-muted-foreground">还没有记录</p>}
+                  {audit.length === 0 && <p className="text-muted-foreground">{t('settings.audit_empty')}</p>}
                   {audit.map((row, index) => (
                     <p key={`${row.at}-${index}`} className={row.ok ? '' : 'text-destructive'}>
-                      {new Date(row.at).toLocaleString()} {row.ok ? '成功' : '失败'} {row.tool}
+                      {new Date(row.at).toLocaleString()} {row.ok ? t('settings.success') : t('settings.failed')} {row.tool}
                       {row.detail ? ` ${row.detail}` : ''}
                     </p>
                   ))}
@@ -498,12 +498,12 @@ function TerminalPreview(props: { id: TerminalThemeId }) {
   )
 }
 
-function updateDetail(update: UpdateCheck | null, error: string): string {
+function updateDetail(t: (key: string, params?: Record<string, string | number>) => string, update: UpdateCheck | null, error: string): string {
   if (error) return error
-  if (!update) return '对照 GitHub 上的最新发布'
-  if (!update.latest) return '还没有可下载的发布'
-  if (update.newer) return `最新是 v${update.latest}`
-  return '已是最新版本'
+  if (!update) return t('settings.update_idle')
+  if (!update.latest) return t('settings.update_none')
+  if (update.newer) return t('settings.update_newer', { version: update.latest })
+  return t('settings.update_current')
 }
 
 function Card(props: { children: React.ReactNode }) {
