@@ -64,11 +64,11 @@ export class DesktopAgentService {
       wc.send(IPC.desktopAgentRun, { id, viewId, input: action, protocol })
     })
     if (reply.error) throw new Error(reply.error)
-    if (reply.pngBase64) {
+    if (reply.png) {
       const dir = join(app.getPath('userData'), 'screenshots')
       mkdirSync(dir, { recursive: true })
       const file = join(dir, `desktop-${viewId}-${Date.now()}.png`)
-      writeFileSync(file, Buffer.from(reply.pngBase64, 'base64'))
+      writeFileSync(file, Buffer.from(reply.png))
       pruneScreenshots()
       const done = await decorate(this.sender(), file, grid, region)
       if (done.width > 0 && done.height > 0) this.lastShot.set(viewId, { width: done.width, height: done.height })

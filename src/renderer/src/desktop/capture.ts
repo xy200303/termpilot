@@ -5,13 +5,14 @@ const tr = (key: string, params?: Record<string, string | number>): string =>
   String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))
 
 export interface CanvasCapture {
-  pngBase64: string
+  /** PNG 字节，直接过 IPC；不再在渲染进程里编码成 base64 字符串 */
+  png: Uint8Array
   width: number
   height: number
 }
 
 /** 只取原始画面；坐标网格统一由主进程合成，三种桌面来源保持一致。 */
-export function captureCanvas(canvas: HTMLCanvasElement): CanvasCapture {
+export async function captureCanvas(canvas: HTMLCanvasElement): Promise<CanvasCapture> {
   if (canvas.width === 0 || canvas.height === 0) throw new Error(tr('capture.not_ready'))
   const output = document.createElement('canvas')
   output.width = canvas.width
@@ -19,8 +20,10 @@ export function captureCanvas(canvas: HTMLCanvasElement): CanvasCapture {
   const context = output.getContext('2d')
   if (!context) throw new Error(tr('capture.canvas_failed'))
   context.drawImage(canvas, 0, 0)
+  const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/png'))
+  if (!blob) throw new Error(tr('capture.canvas_failed'))
   return {
-    pngBase64: output.toDataURL('image/png').split(',')[1],
+    png: new Uint8Array(await blob.arrayBuffer()),
     width: output.width,
     height: output.height
   }

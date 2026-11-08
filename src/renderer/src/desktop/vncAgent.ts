@@ -22,14 +22,14 @@ export function unregisterVnc(viewId: string): void {
   entries.delete(viewId)
 }
 
-export async function runVncAgent(viewId: string, input: DesktopAgentInput): Promise<{ pngBase64?: string; note: string }> {
+export async function runVncAgent(viewId: string, input: DesktopAgentInput): Promise<{ png?: Uint8Array; note: string }> {
   const entry = entries.get(viewId)
   if (!entry) throw new Error(tr('common.vnc_desktop_not_found_or_disconnected_open_the_v'))
   const { rfb, canvas } = entry
   if (input.action === 'screenshot') {
-    const shot = captureCanvas(canvas)
+    const shot = await captureCanvas(canvas)
     return {
-      pngBase64: shot.pngBase64,
+      png: shot.png,
       note: tr('common.vnc_screen_captured_w_h', { w: shot.width, h: shot.height })
     }
   }

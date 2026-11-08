@@ -59,6 +59,7 @@ export type DesktopAgentInput =
 export interface DesktopAgentReply {
   id: string
   error?: string
-  pngBase64?: string
+  /** PNG 字节，经 IPC 结构化克隆传回主进程，避免 base64 多一份拷贝 */
+  png?: Uint8Array
   note?: string
 }

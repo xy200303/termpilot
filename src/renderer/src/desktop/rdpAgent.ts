@@ -44,7 +44,7 @@ export function unregisterRdp(viewId: string): void {
   connections.delete(viewId)
 }
 
-export async function runRdpAgentById(viewId: string, input: DesktopAgentInput): Promise<{ pngBase64?: string; note: string }> {
+export async function runRdpAgentById(viewId: string, input: DesktopAgentInput): Promise<{ png?: Uint8Array; note: string }> {
   const connection = connections.get(viewId)
   if (!connection) throw new Error(tr('common.rdp_desktop_not_found_or_disconnected_open_the_r'))
   if (input.action === 'wait') return waitForCanvas(connection.canvas, input)
@@ -141,7 +141,7 @@ function textFromClipboard(data: ClipboardData): string | null {
 export async function runRdpAgent(
   connection: RdpConnection,
   input: Exclude<DesktopAgentInput, { action: 'wait' }>
-): Promise<{ pngBase64?: string; note: string }> {
+): Promise<{ png?: Uint8Array; note: string }> {
   try {
     return await runRdpAgentUnsafe(connection, input)
   } catch (error) {
@@ -152,12 +152,12 @@ export async function runRdpAgent(
 async function runRdpAgentUnsafe(
   connection: RdpConnection,
   input: Exclude<DesktopAgentInput, { action: 'wait' }>
-): Promise<{ pngBase64?: string; note: string }> {
+): Promise<{ png?: Uint8Array; note: string }> {
   const { session, canvas } = connection
   if (input.action === 'screenshot') {
-    const shot = captureCanvas(canvas)
+    const shot = await captureCanvas(canvas)
     return {
-      pngBase64: shot.pngBase64,
+      png: shot.png,
       note: tr('common.rdp_screen_captured_w_h', { w: shot.width, h: shot.height })
     }
   }
