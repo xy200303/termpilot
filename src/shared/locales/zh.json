@@ -652,5 +652,9 @@
   "serial.need_path": "串口连接需要设备路径（COM3 / /dev/ttyUSB0）。先用 serial_list 看本机有哪些串口",
   "serial.open_failed": "打不开串口 {{path}}: {{message}}",
   "telnet.need_host": "Telnet 需要主机地址",
-  "captureDialog.copy_image": "复制图片"
+  "captureDialog.copy_image": "复制图片",
+  "rdp.rdp_component_not_registered": "RDP 组件没有注册",
+  "rdp.rdp_component_not_ready": "RDP 组件没有就绪",
+  "rdp.rdp_connect_timeout": "RDP 连接超时",
+  "rdp.rdp_canvas_not_visible": "RDP 画面没有显示，请先打开桌面标签"
 }

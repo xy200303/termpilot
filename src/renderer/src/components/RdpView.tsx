@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '../stores/useAppStore'
-import i18n, { useT } from '../i18n'
+import { useT } from '../i18n'
 import type { SessionConfig } from '../../../shared/types'
-import { connectRdp, registerRdp, unregisterRdp, attachRdpInput, type RdpConnection } from '../desktop/rdpAgent'
+import { connectRdp, registerRdp, unregisterRdp, runIronRdp, rdpErrorText, type RdpConnection } from '../desktop/rdpAgent'
 import { DesktopPerfHud } from './DesktopPerfHud'
 
 export function RdpView(props: { viewId: string; session: SessionConfig; active: boolean }) {
   const t = useT()
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const hostRef = useRef<HTMLDivElement>(null)
+  const connectionRef = useRef<RdpConnection | null>(null)
+  const retries = useRef(0)
   const [attempt, setAttempt] = useState(0)
   const status = useAppStore((s) => s.desktopState[props.viewId])
   const desktopPerformance = useAppStore((s) => s.desktopPerformance)
@@ -16,15 +18,28 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
 
   useEffect(() => {
     let connection: RdpConnection | null = null
-    let detachInput: (() => void) | null = null
     let disposed = false
+    let settleTimer: ReturnType<typeof setTimeout> | null = null
+    // xrdp 在客户端突然断开后重新连入时，首个 fast-path 帧会解析失败，画面停在空白。
+    // 关掉旧桥接、稍等一秒再连一次即可恢复，不必让用户手动点「重新连接」。
+    const retryLater = (): boolean => {
+      if (retries.current >= 1) return false
+      retries.current += 1
+      onStatus({ viewId: props.viewId, sessionId: props.session.id, status: 'connecting' })
+      void window.api.desktop.close(props.viewId).catch(() => undefined).then(() => {
+        setTimeout(() => {
+          if (!disposed) setAttempt((value) => value + 1)
+        }, 1500)
+      })
+      return true
+    }
     const connect = async () => {
       onStatus({ viewId: props.viewId, sessionId: props.session.id, status: 'connecting' })
       try {
         const result = await window.api.desktop.open(props.viewId, props.session.id)
-        if (disposed || !canvasRef.current) return
+        if (disposed || !hostRef.current) return
         if (result.mode !== 'embedded') throw new Error(t('rdp.rdp_did_not_enter_embedded_mode'))
-        const size = rdpDesktopSize(props.session, canvasRef.current.parentElement)
+        const size = rdpDesktopSize(props.session, hostRef.current)
         const opened = await connectRdp({
           url: result.url,
           host: props.session.host,
@@ -33,23 +48,21 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
           password: result.password,
           width: size.width,
           height: size.height,
-          canvas: canvasRef.current,
-          clipboard: props.session.desktopOptions?.clipboard === false
-            ? undefined
-            : {
-                read: () => window.api.desktop.clipboard.read(),
-                write: (text) => window.api.desktop.clipboard.write(text)
-              }
+          container: hostRef.current,
+          clipboard: props.session.desktopOptions?.clipboard !== false
         })
         if (disposed) {
-          opened.session.shutdown()
+          opened.shutdown()
           return
         }
         connection = opened
-        registerRdp(props.viewId, connection)
-        detachInput = attachRdpInput(canvasRef.current, connection.session)
+        connectionRef.current = opened
+        registerRdp(props.viewId, opened)
         onStatus({ viewId: props.viewId, sessionId: props.session.id, status: 'connected' })
-        void connection.session.run().then((info) => {
+        settleTimer = setTimeout(() => {
+          retries.current = 0
+        }, 5000)
+        void runIronRdp(opened).then((info) => {
           if (disposed) return
           const reason = info.reason()
           onStatus({
@@ -60,6 +73,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
           })
         }).catch((error) => {
           if (disposed) return
+          if (retryLater()) return
           onStatus({
             viewId: props.viewId,
             sessionId: props.session.id,
@@ -68,36 +82,37 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
           })
         })
       } catch (error) {
-        if (!disposed) {
-          onStatus({
-            viewId: props.viewId,
-            sessionId: props.session.id,
-            status: 'error',
-            message: rdpErrorText(error)
-          })
-        }
+        if (disposed) return
+        if (retryLater()) return
+        onStatus({
+          viewId: props.viewId,
+          sessionId: props.session.id,
+          status: 'error',
+          message: rdpErrorText(error)
+        })
       }
     }
     void connect()
     return () => {
       disposed = true
+      if (settleTimer) clearTimeout(settleTimer)
       unregisterRdp(props.viewId)
-      detachInput?.()
-      connection?.session.shutdown()
+      connectionRef.current = null
+      connection?.shutdown()
     }
   }, [props.viewId, props.session.id, attempt])
 
   const error = status?.status === 'error'
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
-      <canvas ref={canvasRef} tabIndex={0} className="max-h-full max-w-full outline-none" />
+      <div ref={hostRef} className="flex h-full w-full items-center justify-center" />
       {desktopPerformance && (
         <DesktopPerfHud
           viewId={props.viewId}
           protocol="rdp"
           active={props.active}
           performance={props.session.desktopOptions?.performance}
-          canvas={() => canvasRef.current}
+          canvas={() => connectionRef.current?.canvas() ?? null}
         />
       )}
       {status?.status !== 'connected' && (
@@ -106,7 +121,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
             {status?.status === 'connecting' ? t('rdp.connecting_to_rdp') : error ? t('rdp.rdp_connection_failed') : t('rdp.rdp_disconnected')}
           </div>
           {status?.error && <pre className="max-w-2xl whitespace-pre-wrap text-xs text-destructive">{status.error}</pre>}
-          <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>
+          <Button variant="outline" size="sm" onClick={() => { retries.current = 0; setAttempt((value) => value + 1) }}>
             {t('common.reconnect')}
           </Button>
         </div>
@@ -127,17 +142,4 @@ function rdpDesktopSize(session: SessionConfig, host: HTMLElement | null): { wid
   const width = options?.width ?? Math.min(cap.width, Math.max(800, Math.floor(host?.clientWidth || fallback.width)))
   const height = options?.height ?? Math.min(cap.height, Math.max(600, Math.floor(host?.clientHeight || fallback.height)))
   return { width: width - (width % 2), height: height - (height % 2) }
-}
-
-function rdpErrorText(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (error && typeof error === 'object') {
-    const candidate = error as { backtrace?: () => string; reason?: () => string; kind?: () => number }
-    const backtrace = typeof candidate.backtrace === 'function' ? candidate.backtrace() : ''
-    if (typeof candidate.kind === 'function') return String(i18n.t('rdp.error_kind', { kind: String(candidate.kind()), detail: backtrace ? String(i18n.t('rdp.error_detail', { text: backtrace })) : '', defaultValue: 'RDP error' }))
-    if (backtrace) return backtrace
-    if (typeof candidate.reason === 'function') return candidate.reason()
-    return JSON.stringify(error)
-  }
-  return String(error)
 }

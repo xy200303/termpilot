@@ -24,6 +24,8 @@
     "ws": "^8.22.1"
   },
   "devDependencies": {
+    "@devolutions/iron-remote-desktop": "file:vendor/iron-remote-desktop",
+    "@devolutions/iron-remote-desktop-rdp": "file:vendor/iron-remote-desktop-rdp",
     "@electron/rebuild": "^4.2.1",
     "@modelcontextprotocol/sdk": "^1.30.1",
     "@monaco-editor/react": "^4.7.0",
@@ -44,7 +46,6 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "i18next": "^27.0.1",
-    "ironrdp-wasm": "^1.3.0",
     "lucide-react": "^1.47.0",
     "material-icon-theme": "^5.38.1",
     "monaco-editor": "^0.56.0",

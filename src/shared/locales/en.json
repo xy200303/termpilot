@@ -655,5 +655,9 @@
   "serial.need_path": "A serial connection needs a device path (COM3 / /dev/ttyUSB0). Use serial_list to see local ports first",
   "serial.open_failed": "Could not open serial port {{path}}: {{message}}",
   "telnet.need_host": "Telnet needs a host address",
-  "captureDialog.copy_image": "Copy image"
+  "captureDialog.copy_image": "Copy image",
+  "rdp.rdp_component_not_registered": "RDP component is not registered",
+  "rdp.rdp_component_not_ready": "RDP component did not become ready",
+  "rdp.rdp_connect_timeout": "RDP connection timed out",
+  "rdp.rdp_canvas_not_visible": "RDP screen is not visible; open the desktop tab first"
 }

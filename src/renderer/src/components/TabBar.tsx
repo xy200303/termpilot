@@ -17,7 +17,6 @@ import { captureTerminalView, type CaptureDone } from '../terminal/captureView'
 import { CaptureDialog } from './CaptureDialog'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { sendTextToVnc } from '../desktop/vncAgent'
-import { sendTextToRdp } from '../desktop/rdpAgent'
 import { useT } from '../i18n'
 
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
@@ -92,7 +91,7 @@ export function TabBar() {
     setSayBusy(true)
     try {
       if (activeTab.kind === 'vnc') await sendTextToVnc(activeTab.id, sayText, pasteKeys)
-      else await sendTextToRdp(activeTab.id, sayText, pasteKeys)
+      else await (await import('../desktop/rdpAgent')).sendTextToRdp(activeTab.id, sayText, pasteKeys)
       setSayOpen(false)
       setSayText('')
       setNotice(pasteKeys === 'ctrl-shift-v' ? tr('tabbar.pasted_as_terminal_input') : tr('tabbar.pasted_to_desktop'))

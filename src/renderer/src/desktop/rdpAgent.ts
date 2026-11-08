@@ -1,16 +1,9 @@
-import init, {
-  DesktopSize,
-  DeviceEvent,
-  InputTransaction,
-  Session,
-  SessionBuilder,
-  ClipboardData,
-  RotationUnit,
-  Extension,
-  setup as setupRdpLogging
-} from 'ironrdp-wasm'
-import type { ClipboardItem } from 'ironrdp-wasm'
-import wasmUrl from '../../../../node_modules/ironrdp-wasm/pkg/rdp_client_bg.wasm?url'
+import {
+  connectIronRdp,
+  runIronRdp,
+  type IronRdpConnection,
+  type IronRdpOptions
+} from './ironRdp'
 import type { DesktopAgentInput } from '../../../shared/desktop-agent'
 import { captureCanvas, scaleToCanvas, waitForCanvas } from './capture'
 import i18n from '../i18n'
@@ -18,21 +11,7 @@ import i18n from '../i18n'
 const tr = (key: string, params?: Record<string, string | number>): string =>
   String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))
 
-
-let wasmReady: Promise<unknown> | null = null
-
-function ready(): Promise<unknown> {
-  wasmReady ??= init(wasmUrl).then((module) => {
-    setupRdpLogging('warn')
-    return module
-  })
-  return wasmReady
-}
-
-export interface RdpConnection {
-  session: Session
-  canvas: HTMLCanvasElement
-}
+export type RdpConnection = IronRdpConnection
 
 const connections = new Map<string, RdpConnection>()
 
@@ -44,10 +23,29 @@ export function unregisterRdp(viewId: string): void {
   connections.delete(viewId)
 }
 
+export async function connectRdp(options: Omit<IronRdpOptions, 'width' | 'height'> & { width?: number; height?: number }): Promise<RdpConnection> {
+  return connectIronRdp({ ...options, width: options.width ?? 1280, height: options.height ?? 720 })
+}
+
+export { runIronRdp }
+
+function requireCanvas(connection: RdpConnection): HTMLCanvasElement {
+  const canvas = connection.canvas()
+  if (!canvas) throw new Error(tr('common.rdp_desktop_not_found_or_disconnected'))
+  return canvas
+}
+
+function requireVisibleCanvas(connection: RdpConnection): HTMLCanvasElement {
+  const canvas = requireCanvas(connection)
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width < 1 || rect.height < 1) throw new Error(tr('rdp.rdp_canvas_not_visible'))
+  return canvas
+}
+
 export async function runRdpAgentById(viewId: string, input: DesktopAgentInput): Promise<{ png?: Uint8Array; note: string }> {
   const connection = connections.get(viewId)
   if (!connection) throw new Error(tr('common.rdp_desktop_not_found_or_disconnected_open_the_r'))
-  if (input.action === 'wait') return waitForCanvas(connection.canvas, input)
+  if (input.action === 'wait') return waitForCanvas(requireCanvas(connection), input)
   return runRdpAgent(connection, input)
 }
 
@@ -59,83 +57,20 @@ export async function sendTextToRdp(viewId: string, text: string, pasteKeys = 'c
 }
 
 async function pasteIntoRdp(connection: RdpConnection, text: string, pasteKeys?: string): Promise<string> {
-  const { session, canvas } = connection
-  canvas.focus()
-  const data = new ClipboardData()
-  data.addText('text/plain', text)
-  try {
-    await session.onClipboardPaste(data)
-  } finally {
-    data.free()
-  }
+  requireCanvas(connection).focus({ preventScroll: true })
+  // 组件通过 navigator.clipboard 读本机剪贴板，先写入要发送的文字；
+  // 粘贴完成前不能还原，否则远端读到的会是还原后的旧内容。
+  await window.api.desktop.clipboard.write(text)
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await connection.ui.sendClipboardData()
   await new Promise((resolve) => setTimeout(resolve, 150))
   const combo = pasteKeys ?? 'ctrl-v'
-  sendCombo(session, combo)
+  if (combo === 'ctrl-v' || combo === 'ctrl+shift-v') {
+    connection.ui.ctrlV()
+  } else {
+    sendCombo(connection, combo)
+  }
   return combo
-}
-
-export async function connectRdp(options: {
-  url: string
-  host: string
-  port: number
-  username: string
-  password?: string
-  width?: number
-  height?: number
-  canvas: HTMLCanvasElement
-  clipboard?: {
-    read: () => Promise<string>
-    write: (text: string) => void | Promise<void>
-  }
-}): Promise<RdpConnection> {
-  await ready()
-  let session: Session | null = null
-  let builder = new SessionBuilder()
-  builder = builder.destination(`${options.host}:${options.port}`)
-  builder = builder.proxyAddress(options.url)
-  builder = builder.authToken(new URL(options.url).searchParams.get('token') ?? 'termpilot')
-  builder = builder.extension(new Extension('enable_credssp', true))
-  builder = builder.username(options.username)
-  if (options.password) builder = builder.password(options.password)
-  builder = builder.desktopSize(new DesktopSize(options.width ?? 1280, options.height ?? 720))
-  builder = builder.renderCanvas(options.canvas)
-  builder = builder.setCursorStyleCallback((style: string) => {
-    options.canvas.style.cursor = style
-  })
-  builder = builder.setCursorStyleCallbackContext(null)
-  if (options.clipboard) {
-    const clipboard = options.clipboard
-    builder = builder.remoteClipboardChangedCallback((data: ClipboardData) => {
-      const text = textFromClipboard(data)
-      if (text !== null) void Promise.resolve(clipboard.write(text)).catch(() => undefined)
-    })
-    builder = builder.forceClipboardUpdateCallback(() => {
-      void (async () => {
-        const text = await clipboard.read()
-        if (!text || !session) return
-        const data = new ClipboardData()
-        data.addText('text/plain', text)
-        try {
-          await session.onClipboardPaste(data)
-        } finally {
-          data.free()
-        }
-      })().catch((error) => console.error('[RDP] clipboard sync failed', error))
-    })
-  }
-  session = await builder.connect()
-  return { session, canvas: options.canvas }
-}
-
-function textFromClipboard(data: ClipboardData): string | null {
-  for (const item of data.items() as ClipboardItem[]) {
-    const mime = item.mimeType()
-    if (!mime.includes('text') && mime !== 'UTF8_STRING') continue
-    const value = item.value()
-    if (typeof value === 'string') return value
-    if (value instanceof Uint8Array) return new TextDecoder().decode(value)
-  }
-  return null
 }
 
 export async function runRdpAgent(
@@ -153,184 +88,182 @@ async function runRdpAgentUnsafe(
   connection: RdpConnection,
   input: Exclude<DesktopAgentInput, { action: 'wait' }>
 ): Promise<{ png?: Uint8Array; note: string }> {
-  const { session, canvas } = connection
   if (input.action === 'screenshot') {
-    const shot = await captureCanvas(canvas)
+    const shot = await captureCanvas(requireCanvas(connection))
     return {
       png: shot.png,
       note: tr('common.rdp_screen_captured_w_h', { w: shot.width, h: shot.height })
     }
   }
   if (input.action === 'click') {
-    canvas.focus()
-    const button = input.button === 'right' ? 2 : input.button === 'middle' ? 1 : 0
+    const canvas = requireVisibleCanvas(connection)
+    canvas.focus({ preventScroll: true })
     const target = scaleToCanvas(canvas, input.x, input.y, input.fromWidth, input.fromHeight)
-    const point = rdpPoint(canvas, target.x, target.y)
-    const events: DeviceEvent[] = [DeviceEvent.mouseMove(point.x, point.y)]
+    const point = clientPoint(canvas, target.x, target.y)
+    const button = input.button === 'right' ? 2 : input.button === 'middle' ? 1 : 0
+    dispatchMouse(canvas, 'mousemove', point, button)
     for (let i = 0; i < (input.double ? 2 : 1); i++) {
-      events.push(DeviceEvent.mouseButtonPressed(button), DeviceEvent.mouseButtonReleased(button))
+      dispatchMouse(canvas, 'mousedown', point, button)
+      dispatchMouse(canvas, 'mouseup', point, button)
     }
-    applyEvents(session, events)
     return { note: tr('common.rdp_click_sent_image_coordinates_x_y_scaled', { x: target.x, y: target.y, scaled: target.scaled ? tr('common.scaled_from_the_screenshot_size') : '' }) }
   }
   if (input.action === 'key') {
-    canvas.focus()
-    sendCombo(session, input.keys)
+    const canvas = requireVisibleCanvas(connection)
+    canvas.focus({ preventScroll: true })
+    sendCombo(connection, input.keys)
     return { note: tr('common.rdp_key_sent_keys', { keys: input.keys }) }
   }
   if (input.action === 'type') {
-    canvas.focus()
+    const canvas = requireVisibleCanvas(connection)
+    canvas.focus({ preventScroll: true })
     const count = Array.from(input.text).length
     if (input.method === 'clipboard') {
-      const combo = await pasteIntoRdp({ session, canvas }, input.text, input.pasteKeys)
+      const combo = await pasteIntoRdp(connection, input.text, input.pasteKeys)
       return { note: tr('common.wrote_count_characters_to_the_remote_clipboard_a', { count, combo }) }
     }
-    const events: DeviceEvent[] = []
-    for (const char of input.text) {
-      const needsShift = /[A-Z~!@#$%^&*()_+{}|:"<>?]/.test(char)
-      if (needsShift) events.push(DeviceEvent.keyPressed(0x2a))
-      events.push(DeviceEvent.unicodePressed(char), DeviceEvent.unicodeReleased(char))
-      if (needsShift) events.push(DeviceEvent.keyReleased(0x2a))
-    }
-    applyEvents(session, events)
+    typeText(input.text)
     return { note: tr('common.typed_count_characters', { count }) }
   }
-  const events: DeviceEvent[] = []
+  const canvas = requireVisibleCanvas(connection)
+  canvas.focus({ preventScroll: true })
   if (input.x !== undefined && input.y !== undefined) {
     const scaled = scaleToCanvas(canvas, input.x, input.y, input.fromWidth, input.fromHeight)
-    const point = rdpPoint(canvas, scaled.x, scaled.y)
-    events.push(DeviceEvent.mouseMove(point.x, point.y))
+    const point = clientPoint(canvas, scaled.x, scaled.y)
+    if (point.clientX >= 0) dispatchMouse(canvas, 'mousemove', point, 0)
   }
-  const amount = input.deltaY > 0 ? -1 : 1
-  events.push(DeviceEvent.wheelRotations(true, amount, RotationUnit.Line))
-  applyEvents(session, events)
+  const delta = input.deltaY > 0 ? 120 : -120
+  canvas.dispatchEvent(
+    new WheelEvent('wheel', { bubbles: true, cancelable: true, composed: true, deltaY: delta, deltaMode: 1 })
+  )
   return { note: tr('common.rdp_scroll_sent_delta', { delta: input.deltaY }) }
 }
 
-function rdpPoint(canvas: HTMLCanvasElement, x: number, y: number): { x: number; y: number } {
+function clientPoint(canvas: HTMLCanvasElement, x: number, y: number): { clientX: number; clientY: number } {
   if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
     throw new Error(tr('common.coordinates_x_y_are_outside_the_image_w_h', { x, y, w: canvas.width, h: canvas.height }))
   }
-  return { x: Math.round(x), y: Math.round(y) }
-}
-
-function apply(session: Session, event: DeviceEvent): void {
-  applyEvents(session, [event])
-}
-
-function applyEvents(session: Session, events: DeviceEvent[]): void {
-  if (events.length === 0) return
-  try {
-    const transaction = new InputTransaction()
-    for (const event of events) transaction.addEvent(event)
-    session.applyInputs(transaction)
-  } catch (error) {
-    const candidate = error as { kind?: () => number; backtrace?: () => string }
-    const kind = typeof candidate.kind === 'function' ? candidate.kind() : -1
-    const backtrace = typeof candidate.backtrace === 'function' ? candidate.backtrace() : ''
-    console.error(`[RDP] applyInputs failed kind=${kind} backtrace=${backtrace}`)
-    throw error
+  const rect = canvas.getBoundingClientRect()
+  return {
+    clientX: rect.left + (x / canvas.width) * rect.width,
+    clientY: rect.top + (y / canvas.height) * rect.height
   }
 }
 
-const SPECIAL: Record<string, number> = {
-  enter: 0x1c,
-  esc: 0x01,
-  escape: 0x01,
-  tab: 0x0f,
-  space: 0x39,
-  backspace: 0x0e,
-  delete: 0xe053,
-  up: 0xe048,
-  down: 0xe050,
-  left: 0xe04b,
-  right: 0xe04d,
-  home: 0xe047,
-  end: 0xe04f,
-  pageup: 0xe049,
-  pagedown: 0xe051,
-  insert: 0xe052,
-  minus: 0x0c,
-  equal: 0x0d,
-  slash: 0x35,
-  backslash: 0x2b,
-  comma: 0x33,
-  period: 0x34,
-  semicolon: 0x27,
-  quote: 0x28,
-  backquote: 0x29,
-  bracketleft: 0x1a,
-  bracketright: 0x1b
+function dispatchMouse(
+  canvas: HTMLCanvasElement,
+  type: 'mousemove' | 'mousedown' | 'mouseup',
+  point: { clientX: number; clientY: number },
+  button: number
+): void {
+  const buttons = type === 'mousedown' ? [1, 4, 2][button] ?? 1 : 0
+  canvas.dispatchEvent(
+    new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: point.clientX,
+      clientY: point.clientY,
+      button,
+      buttons
+    })
+  )
 }
 
-const MODIFIERS: Record<string, number> = {
-  ctrl: 0x1d,
-  control: 0x1d,
-  alt: 0x38,
-  shift: 0x2a,
-  meta: 0xe05b,
-  win: 0xe05b
+/** 组件在 window 上抓键盘，事件必须能冒泡到 window；key 是单字符时走 unicode 输入。 */
+function dispatchKey(type: 'keydown' | 'keyup', init: KeyboardEventInit): void {
+  window.dispatchEvent(new KeyboardEvent(type, { bubbles: true, cancelable: true, ...init }))
 }
 
-const LETTERS: Record<string, number> = {
-  a: 0x1e,
-  b: 0x30,
-  c: 0x2e,
-  d: 0x20,
-  e: 0x12,
-  f: 0x21,
-  g: 0x22,
-  h: 0x23,
-  i: 0x17,
-  j: 0x24,
-  k: 0x25,
-  l: 0x26,
-  m: 0x32,
-  n: 0x31,
-  o: 0x18,
-  p: 0x19,
-  q: 0x10,
-  r: 0x13,
-  s: 0x1f,
-  t: 0x14,
-  u: 0x16,
-  v: 0x2f,
-  w: 0x11,
-  x: 0x2d,
-  y: 0x15,
-  z: 0x2c
+const NAMED_CODES: Record<string, string> = {
+  enter: 'Enter',
+  esc: 'Escape',
+  escape: 'Escape',
+  tab: 'Tab',
+  space: 'Space',
+  backspace: 'Backspace',
+  delete: 'Delete',
+  insert: 'Insert',
+  up: 'ArrowUp',
+  down: 'ArrowDown',
+  left: 'ArrowLeft',
+  right: 'ArrowRight',
+  home: 'Home',
+  end: 'End',
+  pageup: 'PageUp',
+  pagedown: 'PageDown',
+  minus: 'Minus',
+  equal: 'Equal',
+  slash: 'Slash',
+  backslash: 'Backslash',
+  comma: 'Comma',
+  period: 'Period',
+  semicolon: 'Semicolon',
+  quote: 'Quote',
+  backquote: 'Backquote',
+  bracketleft: 'BracketLeft',
+  bracketright: 'BracketRight'
 }
 
-const DIGITS: Record<string, number> = {
-  '1': 0x02,
-  '2': 0x03,
-  '3': 0x04,
-  '4': 0x05,
-  '5': 0x06,
-  '6': 0x07,
-  '7': 0x08,
-  '8': 0x09,
-  '9': 0x0a,
-  '0': 0x0b
+const MODIFIER_CODES: Record<string, { code: string; key: string; flag: 'ctrlKey' | 'altKey' | 'shiftKey' | 'metaKey' }> = {
+  ctrl: { code: 'ControlLeft', key: 'Control', flag: 'ctrlKey' },
+  control: { code: 'ControlLeft', key: 'Control', flag: 'ctrlKey' },
+  alt: { code: 'AltLeft', key: 'Alt', flag: 'altKey' },
+  shift: { code: 'ShiftLeft', key: 'Shift', flag: 'shiftKey' },
+  meta: { code: 'MetaLeft', key: 'Meta', flag: 'metaKey' },
+  win: { code: 'MetaLeft', key: 'Meta', flag: 'metaKey' }
 }
 
-function sendCombo(session: Session, combo: string): void {
+function mainKeyCode(name: string): { code: string; key: string } | null {
+  if (NAMED_CODES[name]) return { code: NAMED_CODES[name], key: NAMED_CODES[name] === 'Space' ? ' ' : NAMED_CODES[name] }
+  if (/^[a-z]$/.test(name)) return { code: `Key${name.toUpperCase()}`, key: name }
+  if (/^[0-9]$/.test(name)) return { code: `Digit${name}`, key: name }
+  if (/^f([1-9]|1[0-2])$/.test(name)) return { code: name.toUpperCase(), key: name.toUpperCase() }
+  return null
+}
+
+function sendCombo(connection: RdpConnection, combo: string): void {
   const parts = combo.toLowerCase().split('-').filter(Boolean)
   const main = parts.pop()
   if (!main) throw new Error(tr('common.key_cannot_be_empty'))
-  const events: DeviceEvent[] = []
-  for (const modifier of parts) {
-    const scancode = MODIFIERS[modifier]
-    if (!scancode) throw new Error(tr('common.unknown_modifier_key', { key: modifier }))
-    events.push(DeviceEvent.keyPressed(scancode))
+  const modifiers = parts.map((modifier) => {
+    const found = MODIFIER_CODES[modifier]
+    if (!found) throw new Error(tr('common.unknown_modifier_key', { key: modifier }))
+    return found
+  })
+  const target = mainKeyCode(main)
+  if (!target) throw new Error(tr('common.unknown_key_key', { key: main }))
+
+  const flags: KeyboardEventInit = {}
+  for (const modifier of modifiers) {
+    const label = modifier.code
+    dispatchKey('keydown', { code: label, key: modifier.key, ...flags })
+    Object.assign(flags, { [modifier.flag]: true })
   }
-  const scancode = SPECIAL[main] ?? LETTERS[main] ?? DIGITS[main]
-  if (!scancode) throw new Error(tr('common.unknown_key_key', { key: main }))
-  events.push(DeviceEvent.keyPressed(scancode), DeviceEvent.keyReleased(scancode))
-  for (const modifier of [...parts].reverse()) {
-    events.push(DeviceEvent.keyReleased(MODIFIERS[modifier]))
+  dispatchKey('keydown', { ...flags, code: target.code, key: target.key })
+  dispatchKey('keyup', { ...flags, code: target.code, key: target.key })
+  for (const modifier of [...modifiers].reverse()) {
+    dispatchKey('keyup', { code: modifier.code, key: modifier.key, ...flags })
   }
-  applyEvents(session, events)
+}
+
+const LINE_BREAKS: Record<string, { code: string; key: string }> = {
+  '\n': { code: 'Enter', key: 'Enter' },
+  '\r': { code: 'Enter', key: 'Enter' },
+  '\t': { code: 'Tab', key: 'Tab' }
+}
+
+function typeText(text: string): void {
+  for (const char of text) {
+    const named = LINE_BREAKS[char]
+    if (named) {
+      dispatchKey('keydown', { code: named.code, key: named.key })
+      dispatchKey('keyup', { code: named.code, key: named.key })
+      continue
+    }
+    dispatchKey('keydown', { code: '', key: char })
+    dispatchKey('keyup', { code: '', key: char })
+  }
 }
 
 function rdpErrorText(error: unknown): string {
@@ -346,147 +279,4 @@ function rdpErrorText(error: unknown): string {
   return String(error)
 }
 
-const DIRECT_KEY_CODES: Record<string, number> = {
-  Backspace: 0x0e,
-  Tab: 0x0f,
-  Enter: 0x1c,
-  NumpadEnter: 0xe01c,
-  Escape: 0x01,
-  Space: 0x39,
-  Delete: 0xe053,
-  Insert: 0xe052,
-  ArrowUp: 0xe048,
-  ArrowDown: 0xe050,
-  ArrowLeft: 0xe04b,
-  ArrowRight: 0xe04d,
-  Home: 0xe047,
-  End: 0xe04f,
-  PageUp: 0xe049,
-  PageDown: 0xe051,
-  ControlLeft: 0x1d,
-  ControlRight: 0xe01d,
-  ShiftLeft: 0x2a,
-  ShiftRight: 0x36,
-  AltLeft: 0x38,
-  AltRight: 0xe038,
-  MetaLeft: 0xe05b,
-  MetaRight: 0xe05c,
-  ContextMenu: 0xe05d,
-  CapsLock: 0x3a,
-  NumLock: 0x45,
-  ScrollLock: 0x46,
-  Backquote: 0x29,
-  Minus: 0x0c,
-  Equal: 0x0d,
-  BracketLeft: 0x1a,
-  BracketRight: 0x1b,
-  Backslash: 0x2b,
-  Semicolon: 0x27,
-  Quote: 0x28,
-  Comma: 0x33,
-  Period: 0x34,
-  Slash: 0x35,
-  IntlBackslash: 0x56,
-  Numpad0: 0x52,
-  Numpad1: 0x4f,
-  Numpad2: 0x50,
-  Numpad3: 0x51,
-  Numpad4: 0x4b,
-  Numpad5: 0x4c,
-  Numpad6: 0x4d,
-  Numpad7: 0x47,
-  Numpad8: 0x48,
-  Numpad9: 0x49,
-  NumpadDecimal: 0x53,
-  NumpadDivide: 0xe035,
-  NumpadMultiply: 0x37,
-  NumpadSubtract: 0x4a,
-  NumpadAdd: 0x4e,
-  F1: 0x3b,
-  F2: 0x3c,
-  F3: 0x3d,
-  F4: 0x3e,
-  F5: 0x3f,
-  F6: 0x40,
-  F7: 0x41,
-  F8: 0x42,
-  F9: 0x43,
-  F10: 0x44,
-  F11: 0x57,
-  F12: 0x58
-}
-
-function directScancode(code: string): number | null {
-  if (DIRECT_KEY_CODES[code]) return DIRECT_KEY_CODES[code]
-  if (code.startsWith('Key')) return LETTERS[code.slice(3).toLowerCase()] ?? null
-  if (code.startsWith('Digit')) return DIGITS[code.slice(5)] ?? null
-  return null
-}
-
-/** 用户在 RDP 画面里的直接输入，和 Agent 共用同一套 PS/2 事件。 */
-export function attachRdpInput(canvas: HTMLCanvasElement, session: Session): () => void {
-  const onMouseMove = (event: MouseEvent) => {
-    const rect = canvas.getBoundingClientRect()
-    const x = Math.round((event.clientX - rect.left) * (canvas.width / rect.width))
-    const y = Math.round((event.clientY - rect.top) * (canvas.height / rect.height))
-    apply(session, DeviceEvent.mouseMove(x, y))
-  }
-  const onMouseDown = (event: MouseEvent) => {
-    event.preventDefault()
-    canvas.focus()
-    apply(session, DeviceEvent.mouseButtonPressed(event.button))
-  }
-  const onMouseUp = (event: MouseEvent) => {
-    event.preventDefault()
-    apply(session, DeviceEvent.mouseButtonReleased(event.button))
-  }
-  const onWheel = (event: WheelEvent) => {
-    event.preventDefault()
-    const amount = event.deltaY > 0 ? -1 : 1
-    apply(session, DeviceEvent.wheelRotations(true, amount, RotationUnit.Line))
-  }
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.isComposing) return
-    event.preventDefault()
-    event.stopPropagation()
-    const scancode = directScancode(event.code)
-    if (scancode) apply(session, DeviceEvent.keyPressed(scancode))
-  }
-  const onKeyUp = (event: KeyboardEvent) => {
-    if (event.isComposing) return
-    event.preventDefault()
-    event.stopPropagation()
-    const scancode = directScancode(event.code)
-    if (scancode) apply(session, DeviceEvent.keyReleased(scancode))
-  }
-  const onBlur = () => session.releaseAllInputs()
-  const onContextMenu = (event: Event) => event.preventDefault()
-  const onCompositionEnd = (event: CompositionEvent) => {
-    for (const char of event.data) {
-      apply(session, DeviceEvent.unicodePressed(char))
-      apply(session, DeviceEvent.unicodeReleased(char))
-    }
-  }
-
-  canvas.addEventListener('mousemove', onMouseMove)
-  canvas.addEventListener('mousedown', onMouseDown)
-  canvas.addEventListener('mouseup', onMouseUp)
-  canvas.addEventListener('wheel', onWheel, { passive: false })
-  canvas.addEventListener('keydown', onKeyDown)
-  canvas.addEventListener('keyup', onKeyUp)
-  canvas.addEventListener('blur', onBlur)
-  canvas.addEventListener('contextmenu', onContextMenu)
-  canvas.addEventListener('compositionend', onCompositionEnd)
-  return () => {
-    session.releaseAllInputs()
-    canvas.removeEventListener('mousemove', onMouseMove)
-    canvas.removeEventListener('mousedown', onMouseDown)
-    canvas.removeEventListener('mouseup', onMouseUp)
-    canvas.removeEventListener('wheel', onWheel)
-    canvas.removeEventListener('keydown', onKeyDown)
-    canvas.removeEventListener('keyup', onKeyUp)
-    canvas.removeEventListener('blur', onBlur)
-    canvas.removeEventListener('contextmenu', onContextMenu)
-    canvas.removeEventListener('compositionend', onCompositionEnd)
-  }
-}
+export { rdpErrorText }

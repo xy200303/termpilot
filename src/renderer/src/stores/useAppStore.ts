@@ -22,7 +22,6 @@ import { newTermId, newViewId } from '../../../shared/ids'
 import { dropBuffer, editorKey } from '../editor/editorBuffers'
 import i18n from '../i18n'
 import { terminalPool } from '../terminal/TerminalPool'
-import { unregisterRdp } from '../desktop/rdpAgent'
 import { applyAppearance, readCachedAppearance, resolveAppTheme, type ResolvedAppTheme } from '../theme/applyAppearance'
 
 export interface EditorTab {
@@ -476,7 +475,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const desktopState = { ...get().desktopState }
     delete desktopState[tabId]
     set({ tabs, activeTabId, termState, desktopState })
-    if (tab?.kind === 'rdp') unregisterRdp(tabId)
+    if (tab?.kind === 'rdp') void import('../desktop/rdpAgent').then((m) => m.unregisterRdp(tabId))
     if (tab && isDesktopProtocol(tab.kind)) window.api.desktop.close(tabId)
     else window.api.term.close(tabId)
     terminalPool.dispose(tabId)

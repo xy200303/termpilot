@@ -257,7 +257,11 @@ export function registerIpc(
   ipcMain.handle(IPC.desktopOpen, (_event, viewId: string, sessionId: string) => desktop.open(viewId, sessionId))
   ipcMain.handle(IPC.desktopClose, (_event, viewId: string) => desktop.close(viewId))
   ipcMain.handle(IPC.desktopClipboardRead, () => clipboard.readText())
-  ipcMain.handle(IPC.desktopClipboardWrite, (_event, text: string) => clipboard.writeText(text))
+  ipcMain.handle(IPC.desktopClipboardWrite, (event, text: string) => {
+    // 远端剪贴板注入要读 navigator.clipboard，Chromium 要求文档有焦点
+    BrowserWindow.fromWebContents(event.sender)?.focus()
+    clipboard.writeText(text)
+  })
   ipcMain.handle(IPC.desktopMetrics, (_event, viewId: string) => desktop.metrics(viewId))
   ipcMain.handle(IPC.desktopAgent, (_event, viewId: string, input: DesktopAgentInput) =>
     desktopAgent.run(viewId, input)
