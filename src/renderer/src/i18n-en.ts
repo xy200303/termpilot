@@ -101,8 +101,8 @@ export const EN: Record<string, string> = {
   失败: 'Failed',
 
   // 连接树补充
-  '给「{name}」写一句，方便以后认出它。留空就是清掉。': 'Add a note for "{name}". Leave empty to clear.',
-  '给「{name}」换个名字。': 'Rename "{name}".',
+  '给「{{name}}」写一句，方便以后认出它。留空就是清掉。': 'Add a note for "{{name}}". Leave empty to clear.',
+  '给「{{name}}」换个名字。': 'Rename "{{name}}".',
   '复制为 Agent 提示词': 'Copy as agent prompt',
   '复制这条连接': 'Duplicate connection',
   '关闭桌面窗口': 'Close desktop window',

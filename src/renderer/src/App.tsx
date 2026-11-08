@@ -21,6 +21,7 @@ import { terminalPool } from './terminal/TerminalPool'
 import { startRecording, stopRecording } from './terminal/windowRecorder'
 import { runVncAgent } from './desktop/vncAgent'
 import { runRdpAgentById } from './desktop/rdpAgent'
+import { syncLanguage } from './i18n'
 
 export default function App() {
   const loadSessions = useAppStore((s) => s.loadSessions)
@@ -40,11 +41,16 @@ export default function App() {
   const tabs = useAppStore((s) => s.tabs)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const remoteEditor = useAppStore((s) => s.activeEditorKey)
+  const locale = useAppStore((s) => s.locale)
   const editorTabs = useAppStore((s) => s.editorTabs)
 
   useEffect(() => {
     document.documentElement.dataset.appReady = 'true'
   }, [])
+
+  useEffect(() => {
+    syncLanguage(locale)
+  }, [locale])
 
   useEffect(() => window.api.capture.onRun((job) => void runCapture(job)), [])
 
