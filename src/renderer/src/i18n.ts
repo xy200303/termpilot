@@ -12,6 +12,9 @@ if (!i18n.isInitialized) {
     lng: 'zh',
     fallbackLng: 'zh',
     supportedLngs: ['zh', 'en'],
+    // 中文原文当 key：不要按 . 或 : 拆命名空间
+    keySeparator: false,
+    nsSeparator: false,
     interpolation: { escapeValue: false },
     returnNull: false,
     debug: false
