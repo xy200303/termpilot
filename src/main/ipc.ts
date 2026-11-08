@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
+import { pruneScreenshots } from './services/screenshotFiles'
 import { IPC } from '../shared/ipc-channels'
 import {
   MCP_HOST,
@@ -221,11 +222,13 @@ export function registerIpc(
     mkdirSync(dir, { recursive: true })
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, '').replace('T', '-')
     const batch = randomBytes(3).toString('hex')
-    return pngs.map((png, index) => {
+    const written = pngs.map((png, index) => {
       const file = join(dir, `${stamp}-${batch}-${String(index + 1).padStart(2, '0')}.png`)
       writeFileSync(file, Buffer.from(png, 'base64'))
       return file
     })
+    pruneScreenshots()
+    return written
   })
 
   ipcMain.handle(IPC.captureReveal, (_event, file: string) => {

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { app } from 'electron'
 import type { DesktopAgentInput } from '../../../shared/desktop-agent'
+import { pruneScreenshots } from '../screenshotFiles'
 
 const execFileAsync = promisify(execFile)
 
@@ -108,6 +109,7 @@ $g.Dispose()
 $bmp.Save('${file.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
 `)
+    pruneScreenshots()
     return { note: mt('native.captured'), file }
   }
 

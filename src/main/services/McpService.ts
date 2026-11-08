@@ -9,6 +9,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { parseToolArgs, schemaText, TOOLS, toolsText } from './tool-catalog'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { t as mt } from '../i18n'
+import { pruneScreenshots } from './screenshotFiles'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { IPC } from '../../shared/ipc-channels'
 import { renderGrid } from './desktop/gridRender'
@@ -939,6 +940,7 @@ export class McpService {
     mkdirSync(dir, { recursive: true })
     const file = join(dir, `app-${stamp()}.png`)
     writeFileSync(file, png)
+    pruneScreenshots()
     return mt('mcp.app_saved', { grid: drawn !== image ? mt('mcp.app_saved_grid', { step }) : '', file })
   }
 

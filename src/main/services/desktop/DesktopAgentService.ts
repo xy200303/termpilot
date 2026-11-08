@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { app, nativeImage } from 'electron'
 import type { WebContents } from 'electron'
 import { IPC } from '../../../shared/ipc-channels'
+import { pruneScreenshots } from '../screenshotFiles'
 import type { DesktopAgentInput, DesktopAgentReply, DesktopRegion } from '../../../shared/desktop-agent'
 import type { DesktopService } from './DesktopService'
 import { NativeAgentService } from './NativeAgentService'
@@ -68,6 +69,7 @@ export class DesktopAgentService {
       mkdirSync(dir, { recursive: true })
       const file = join(dir, `desktop-${viewId}-${Date.now()}.png`)
       writeFileSync(file, Buffer.from(reply.pngBase64, 'base64'))
+      pruneScreenshots()
       const done = await decorate(this.sender(), file, grid, region)
       if (done.width > 0 && done.height > 0) this.lastShot.set(viewId, { width: done.width, height: done.height })
       const note = reply.note ?? mt('desktop.captured', { label })
