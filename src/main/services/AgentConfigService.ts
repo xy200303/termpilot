@@ -67,81 +67,84 @@ export function buildAgentGuide(options: {
   const codex = `${CODEX_HEADER}
 url = ${JSON.stringify(options.url)}
 http_headers = { Authorization = ${JSON.stringify(auth)} }`
-  const paths = targets.map((target) => mt('agentcfg.target_line', { name: target.name, file: target.file, status: target.configured ? mt('agentcfg.detected') : mt('agentcfg.not_connected') })).join('\n')
-  return `# TermPilot Agent 接入指引
+  const paths = targets
+    .map((target) => `- ${target.name}: ${target.file} (${target.configured ? 'connected' : 'not connected'})`)
+    .join('\n')
+  /* 这份指引是给 Agent 读的，固定英文：不随界面语言变，避免中文指令被下游模型理解偏差 */
+  return `# TermPilot agent access guide
 
-请由你（Agent）直接完成 TermPilot 的 MCP 注册和 Skill 安装，不要要求用户手工改配置。
+You (the agent) should complete TermPilot's MCP registration and skill installation yourself. Do not ask the user to edit configuration by hand.
 
-安全要求：下面的令牌只用于本机接入。不要把它写进回复、日志、仓库或截图，也不要发给其他服务。
+Security: the token below is for local access only. Never write it into replies, logs, repositories or screenshots, and never send it to another service.
 
-## MCP 服务
+## MCP server
 
-- 名称：termpilot
-- 地址：${options.url}
-- 请求头：Authorization: ${auth}
-- 当前状态：${options.enabled ? mt('agentcfg.enabled') : mt('agentcfg.disabled_hint')}
+- Name: termpilot
+- URL: ${options.url}
+- Header: Authorization: ${auth}
+- Status: ${options.enabled ? 'Enabled' : 'Not enabled. If connections fail after setup, ask the user to enable the MCP server in TermPilot settings first'}
 
-## 第一步：安装 Skill
+## Step 1: install the skill
 
-读取这个本机文件：
+Read this local file:
 ${options.skillFile}
 
-按照文件里的“安装”章节，把 TermPilot Skill 安装到你自己的用户级 skills 目录，目录名使用 termpilot。只安装这一份，不要修改其他 Skill。
+Follow its "Install" section and put the TermPilot skill into your own user-level skills directory, using \`termpilot\` as the directory name. Install only this one skill and leave the other skills untouched.
 
-常见目标位置：
-- Claude Code：~/.claude/skills/termpilot/SKILL.md
-- Kimi Code：~/.kimi-code/skills/termpilot/SKILL.md
-- Codex：~/.codex/skills/termpilot/SKILL.md
-- Cursor：~/.cursor/skills/termpilot/SKILL.md
-- WorkBuddy：~/.workbuddy/skills/termpilot/SKILL.md
-- CodeBuddy：~/.codebuddy/skills/termpilot/SKILL.md
+Common target locations:
+- Claude Code: ~/.claude/skills/termpilot/SKILL.md
+- Kimi Code: ~/.kimi-code/skills/termpilot/SKILL.md
+- Codex: ~/.codex/skills/termpilot/SKILL.md
+- Cursor: ~/.cursor/skills/termpilot/SKILL.md
+- WorkBuddy: ~/.workbuddy/skills/termpilot/SKILL.md
+- CodeBuddy: ~/.codebuddy/skills/termpilot/SKILL.md
 
-## 第二步：注册 MCP
+## Step 2: register the MCP server
 
-只新增或更新名为 termpilot 的这一条，其他 MCP 服务器保持原样。桌面版和命令行经常读取不同文件，优先修改下面检测到的本机路径。
+Add or update only the entry named \`termpilot\` and leave the other MCP servers as they are. Desktop apps and CLIs often read different files, so prefer the local path detected below.
 
-检测到的本机配置：
+Detected local configuration:
 ${paths}
 
-Claude Code / CodeBuddy 的 JSON 结构：
+JSON shape for Claude Code / CodeBuddy:
 \`\`\`json
 ${jsonHttp}
 \`\`\`
 
-Cursor 的 JSON 结构：
+JSON shape for Cursor:
 \`\`\`json
 ${jsonCursor}
 \`\`\`
 
-Kimi Code 的 JSON 结构：
+JSON shape for Kimi Code:
 \`\`\`json
 ${jsonKimi}
 \`\`\`
 
-WorkBuddy 的 JSON 结构：
+JSON shape for WorkBuddy:
 \`\`\`json
 ${jsonTransport}
 \`\`\`
 
-Codex 的 TOML 结构：
+TOML shape for Codex:
 \`\`\`toml
 ${codex}
 \`\`\`
 
-注意事项：
-- Claude Code 读 ~/.claude.json 里的 mcpServers，不读 ~/.claude/settings.json。
-- Kimi Code 的桌面版和命令行共用 ~/.kimi-code/mcp.json。
-- Codex 的节名必须是 [mcp_servers.termpilot]。
-- Cursor 的用户级配置是 ~/.cursor/mcp.json，不是项目里的 .cursor/mcp.json。
-- CodeBuddy 读 ~/.codebuddy/mcp.json，不是 ~/.codebuddy/.mcp.json。
-- 不要写进 connectors 目录，那个文件由 TermPilot 自己重写。
-- Authorization 的值必须完整包含 "Bearer " 前缀。
+Notes:
+- Claude Code reads \`mcpServers\` from ~/.claude.json, not ~/.claude/settings.json.
+- Kimi Code's desktop app and CLI share ~/.kimi-code/mcp.json.
+- Codex requires the section name [mcp_servers.termpilot].
+- Cursor's user-level config is ~/.cursor/mcp.json, not the project-level .cursor/mcp.json.
+- CodeBuddy reads ~/.codebuddy/mcp.json, not ~/.codebuddy/.mcp.json.
+- Do not write into the connectors directory; TermPilot rewrites that file itself.
+- The Authorization value must include the full "Bearer " prefix.
 
-## 第三步：检查
+## Step 3: verify
 
-1. 重新打开对应的 Agent 程序。
-2. 调用 MCP 工具 connection_list，确认能返回 TermPilot 连接列表。
-3. 如果失败，先确认 TermPilot 正在运行且 MCP 已启用，再检查配置文件路径和令牌。
+1. Restart the agent application.
+2. Call the MCP tool connection_list and confirm it returns TermPilot's connection list.
+3. If that fails, first confirm TermPilot is running with MCP enabled, then check the config path and the token.
 `
 }
 
