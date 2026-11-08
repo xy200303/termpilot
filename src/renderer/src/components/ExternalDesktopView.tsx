@@ -42,7 +42,7 @@ export function ExternalDesktopView(props: { viewId: string; session: SessionCon
         )}
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void open()}>
           <RotateCw />
-          {busy ? t('正在打开…') : status?.status === 'connected' ? t('重新打开原生窗口') : t('打开原生窗口')}
+          {busy ? t('Opening…') : status?.status === 'connected' ? t('Reopen native window') : t('Open native window')}
         </Button>
         <p className="text-xs leading-5 text-muted-foreground">
           关闭这个标签会结束对应的原生客户端进程。画面不进入 Electron，因此整窗截图和录屏不包含原生窗口内容。

@@ -31,9 +31,9 @@ const panes: { id: Pane; label: string; icon: typeof Server }[] = [
 ]
 
 const appThemes: { id: AppTheme; label: string }[] = [
-  { id: 'light', label: '浅色' },
-  { id: 'dark', label: '深色' },
-  { id: 'system', label: '跟随系统' }
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+  { id: 'system', label: 'Follow system' }
 ]
 
 const empty = (): McpSettingsInput => ({
@@ -216,13 +216,13 @@ export function SettingsDialog() {
             {pane === 'appearance' && (
               <section className="grid gap-4">
                 <div>
-                  <h2 className="text-base font-medium">{t('外观')}</h2>
+                  <h2 className="text-base font-medium">{t('Appearance')}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t('应用和终端分开配色，改完立刻生效。')}
+                    {t('App and terminal themes are independent; changes apply immediately.')}
                   </p>
                 </div>
                 <Card>
-                  <Row title={t('应用主题')} detail={t('侧边栏、设置和文件编辑器')}>
+                  <Row title={t('App theme')} detail={t('Sidebar, settings and file editor')}>
                     <Select
                       value={appearance.app}
                       onValueChange={(value) => void changeAppearance({ app: value as AppTheme })}
@@ -244,8 +244,8 @@ export function SettingsDialog() {
                   <div className="grid gap-3 px-4 py-3">
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <div className="text-sm">{t('终端主题')}</div>
-                        <div className="text-xs text-muted-foreground">{t('只影响终端画面，不跟着应用主题走')}</div>
+                        <div className="text-sm">{t('Terminal theme')}</div>
+                        <div className="text-xs text-muted-foreground">{t('Only affects terminals, independent of the app theme')}</div>
                       </div>
                       <Select
                         value={appearance.terminal}
@@ -267,7 +267,7 @@ export function SettingsDialog() {
                   </div>
                 </Card>
                 <Card>
-                  <Row title={t('界面语言')} detail={t('跟随系统或手动指定')}>
+                  <Row title={t('Language')} detail={t('Follow the system or choose one')}>
                     <Select
                       value={appearance.language}
                       onValueChange={(value) => void changeAppearance({ language: value as 'auto' | 'zh' | 'en' })}
@@ -276,7 +276,7 @@ export function SettingsDialog() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="auto">{t('跟随系统')}</SelectItem>
+                        <SelectItem value="auto">{t('Follow system')}</SelectItem>
                         <SelectItem value="zh">中文</SelectItem>
                         <SelectItem value="en">English</SelectItem>
                       </SelectContent>

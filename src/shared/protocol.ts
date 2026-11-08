@@ -32,10 +32,10 @@ export function capabilitiesOf(protocol: SessionProtocol | undefined): ProtocolC
   return protocol === 'telnet' || protocol === 'serial' ? STREAM_CAPABILITIES : SSH_CAPABILITIES
 }
 
-/** 错误提示和界面里用的中文名。 */
+/** 界面和错误提示里的协议名；英文作为 i18n key，中文在 zh.json 里映射。 */
 export function protocolLabel(protocol: SessionProtocol | undefined): string {
   if (protocol === 'telnet') return 'Telnet'
-  if (protocol === 'serial') return '串口'
+  if (protocol === 'serial') return 'Serial'
   if (protocol === 'rdp') return 'RDP'
   if (protocol === 'vnc') return 'VNC'
   return 'SSH'

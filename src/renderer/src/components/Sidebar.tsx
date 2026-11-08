@@ -71,7 +71,7 @@ function SidebarBrand(props: { collapsed: boolean; onToggle: () => void }) {
         variant="ghost"
         size="icon-sm"
         className={props.collapsed ? '' : 'ml-auto'}
-        title={props.collapsed ? t('展开侧边栏') : t('收纳侧边栏')}
+        title={props.collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
         style={noDrag}
         onClick={props.onToggle}
       >
@@ -122,8 +122,8 @@ export function AppSidebar() {
         {!collapsed && (
           <Tabs value={pane} onValueChange={(v) => setPane(v as 'connect' | 'files')}>
             <TabsList className="w-full">
-              <TabsTrigger value="connect">{t('连接')}</TabsTrigger>
-              <TabsTrigger value="files">{t('文件')}</TabsTrigger>
+              <TabsTrigger value="connect">{t('Connections')}</TabsTrigger>
+              <TabsTrigger value="files">{t('Files')}</TabsTrigger>
             </TabsList>
           </Tabs>
         )}
@@ -133,7 +133,7 @@ export function AppSidebar() {
           <Button
             variant={pane === 'connect' ? 'secondary' : 'ghost'}
             size="icon-sm"
-            title={t('连接')}
+            title={t('Connections')}
             onClick={() => setPane('connect')}
           >
             <Monitor />
@@ -141,7 +141,7 @@ export function AppSidebar() {
           <Button
             variant={pane === 'files' ? 'secondary' : 'ghost'}
             size="icon-sm"
-            title={t('文件')}
+            title={t('Files')}
             onClick={() => setPane('files')}
           >
             <Folder />
@@ -150,7 +150,7 @@ export function AppSidebar() {
             <Button variant="ghost" size="icon-sm" title="GitHub" onClick={openRepo}>
               <GithubMark />
             </Button>
-            <Button variant="ghost" size="icon-sm" title={t('设置')} onClick={() => setSettingsOpen(true)}>
+            <Button variant="ghost" size="icon-sm" title={t('Settings')} onClick={() => setSettingsOpen(true)}>
               <Settings />
             </Button>
           </div>
@@ -165,7 +165,7 @@ export function AppSidebar() {
               onClick={() => setSettingsOpen(true)}
             >
               <Settings className="size-4" />
-              {t('设置')}
+              {t('Settings')}
             </button>
             <button
               type="button"
@@ -207,14 +207,14 @@ function ConnectTree() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('搜索连接')}
+            placeholder={t('Search connections')}
             className="min-w-0 flex-1 bg-transparent text-[13px] text-sidebar-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
       </div>
       <ModeRoot
         mode="forward"
-        title={t('正向 SSH')}
+        title={t('SSH')}
         sessions={filtered.filter((s) => (s.mode ?? 'forward') === 'forward' && (s.protocol ?? 'ssh') === 'ssh')}
       />
       <ModeRoot
@@ -226,7 +226,7 @@ function ConnectTree() {
       <ModeRoot
         mode="forward"
         protocol="serial"
-        title={t('串口')}
+        title={t('Serial')}
         sessions={filtered.filter((s) => s.protocol === 'serial')}
       />
       <ModeRoot
@@ -243,7 +243,7 @@ function ConnectTree() {
       />
       <ModeRoot
         mode="reverse"
-        title={t('反向监听')}
+        title={t('Reverse listener')}
         sessions={filtered.filter((s) => s.mode === 'reverse')}
       />
       <LocalRoot />
@@ -260,11 +260,11 @@ const PROTOCOL_ICONS: Record<SessionProtocol, ReactNode> = {
 }
 
 const PROTOCOL_TITLES: Record<SessionProtocol, string> = {
-  ssh: '新建正向 SSH',
-  telnet: '新建 Telnet',
-  serial: '新建串口',
-  rdp: '新建 RDP',
-  vnc: '新建 VNC'
+  ssh: 'New SSH connection',
+  telnet: 'New Telnet connection',
+  serial: 'New serial connection',
+  rdp: 'New RDP connection',
+  vnc: 'New VNC connection'
 }
 
 function ModeRoot(props: { mode: ConnectMode; protocol?: SessionProtocol; title: string; sessions: SessionConfig[] }) {
@@ -282,7 +282,7 @@ function ModeRoot(props: { mode: ConnectMode; protocol?: SessionProtocol; title:
         <SectionHead
           icon={props.protocol ? PROTOCOL_ICONS[props.protocol] : props.mode === 'forward' ? <Monitor /> : <Radio />}
           title={t(props.title)}
-          actionTitle={t(props.protocol ? PROTOCOL_TITLES[props.protocol] : props.mode === 'forward' ? '新建正向 SSH' : '新建反向监听')}
+          actionTitle={t(props.protocol ? PROTOCOL_TITLES[props.protocol] : props.mode === 'forward' ? 'New SSH connection' : 'New reverse listener')}
           onAdd={() => setEditing({ action: 'create', mode: props.mode, protocol: props.protocol })}
         />
         <CollapsibleContent className="min-w-0 overflow-hidden">
@@ -319,7 +319,7 @@ function LocalRoot() {
   return (
     <Collapsible className="min-w-0" open={open} onOpenChange={() => toggleGroup(key)}>
       <SidebarGroup className="px-2 py-0.5">
-        <SectionHead icon={<TerminalSquare />} title={t('本机终端')} actionTitle={t('新建本机终端')} onAdd={openLocalTab} />
+        <SectionHead icon={<TerminalSquare />} title={t('Local terminal')} actionTitle={t('New local terminal')} onAdd={openLocalTab} />
         <CollapsibleContent className="min-w-0 overflow-hidden">
           <SidebarGroupContent className="grid min-w-0 gap-0.5">
             {locals.map((tab) => (
@@ -374,24 +374,24 @@ function HostNode(props: { hostKey: string; host: string; sessions: SessionConfi
             </CollapsibleTrigger>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem onClick={() => openAfterMenu(() => setEditingNote(true))}>{t('备注')}</ContextMenuItem>
+            <ContextMenuItem onClick={() => openAfterMenu(() => setEditingNote(true))}>{t('Note')}</ContextMenuItem>
             <ContextMenuItem
               variant="destructive"
               onClick={() => {
                 for (const session of props.sessions) void deleteSession(session.id)
               }}
             >
-              {t('删除')}
+              {t('Delete')}
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       </div>
       <RemarkDialog
         open={editingNote}
-        title={t('备注')}
+        title={t('Note')}
         description={t('给「{name}」写一句，方便以后认出它。留空就是清掉。', { name: props.host })}
         initial={note}
-        placeholder={t('这台机器是干什么的')}
+        placeholder={t('What is this machine for')}
         onOpenChange={setEditingNote}
         onSave={(value) => {
           setEditingNote(false)
@@ -447,7 +447,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           ? session.username
           : `${session.username}:${session.port}`
   const remark = session.remark?.trim() ?? ''
-  const jump = !isReverse && !isSerial && !isTelnet && !isDesktop && session.jumpHost ? t('经跳板') : ''
+  const jump = !isReverse && !isSerial && !isTelnet && !isDesktop && session.jumpHost ? t('via jump host') : ''
   const meta = [account, jump].filter(Boolean).join(' ')
   const active =
     tabs.some((tab) => tab.id === activeTabId && tab.sessionId === session.id) ||
@@ -473,28 +473,28 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => void copyAgentPrompt(connectionAgentPrompt(session), setNotice)}>
-            {t('复制为 Agent 提示词')}
+            {t('Copy as agent prompt')}
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => (isReverse ? void toggleListen(session) : openSessionTab(session))}>
-            {isReverse ? (listener?.listening ? t('停止监听') : t('开始监听')) : t('打开')}
+            {isReverse ? (listener?.listening ? t('Stop listening') : t('Start listening')) : t('Open')}
           </ContextMenuItem>
           {isReverse ? (
-            <ContextMenuItem onClick={() => void duplicateSessions([session.id])}>{t('复制这条连接')}</ContextMenuItem>
+            <ContextMenuItem onClick={() => void duplicateSessions([session.id])}>{t('Duplicate connection')}</ContextMenuItem>
           ) : isDesktop ? (
             desktopTab && (
-              <ContextMenuItem onClick={() => closeTab(desktopTab.id)}>{t('关闭桌面窗口')}</ContextMenuItem>
+              <ContextMenuItem onClick={() => closeTab(desktopTab.id)}>{t('Close desktop window')}</ContextMenuItem>
             )
           ) : (
-            <ContextMenuItem onClick={() => openSessionTab(session, true)}>{t('新开一扇终端')}</ContextMenuItem>
+            <ContextMenuItem onClick={() => openSessionTab(session, true)}>{t('Open another terminal')}</ContextMenuItem>
           )}
           {nested.length > 0 && (
             <ContextMenuItem onClick={() => nested.forEach((tab) => closeTab(tab.id))}>
-              {t('关闭全部窗口')}
+              {t('Close all windows')}
             </ContextMenuItem>
           )}
-          <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>{t('备注')}</ContextMenuItem>
-          <ContextMenuItem onClick={() => setEditing({ action: 'edit', session })}>{t('编辑')}</ContextMenuItem>
+          <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>{t('Note')}</ContextMenuItem>
+          <ContextMenuItem onClick={() => setEditing({ action: 'edit', session })}>{t('Edit')}</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onClick={() => deleteSession(session.id)}>
             删除
@@ -503,10 +503,10 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
       </ContextMenu>
       <RemarkDialog
         open={editingRemark}
-        title={t('备注')}
+        title={t('Note')}
         description={t('给「{name}」写一句，方便以后认出它。留空就是清掉。', { name: session.name })}
         initial={remark}
-        placeholder={t('这条连接是干什么的')}
+        placeholder={t('What is this connection for')}
         onOpenChange={setEditingRemark}
         onSave={(value) => {
           setEditingRemark(false)
@@ -549,13 +549,13 @@ function TermRow(props: { tab: Tab; session: SessionConfig | null; depth: number
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => void copyAgentPrompt(termAgentPrompt(tab, props.session), setNotice)}>
-            {t('复制为 Agent 提示词')}
+            {t('Copy as agent prompt')}
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => openAfterMenu(() => setRenaming(true))}>{t('重命名')}</ContextMenuItem>
-          <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>{t('备注')}</ContextMenuItem>
-          {down ? <ContextMenuItem onClick={() => reconnectTab(tab.id)}>{t('重新连接')}</ContextMenuItem> : null}
+          <ContextMenuItem onClick={() => openAfterMenu(() => setRenaming(true))}>{t('Rename')}</ContextMenuItem>
+          <ContextMenuItem onClick={() => openAfterMenu(() => setEditingRemark(true))}>{t('Note')}</ContextMenuItem>
+          {down ? <ContextMenuItem onClick={() => reconnectTab(tab.id)}>{t('Reconnect')}</ContextMenuItem> : null}
           <ContextMenuSeparator />
-          <ContextMenuItem onClick={() => closeTab(tab.id)}>{t('关闭')}</ContextMenuItem>
+          <ContextMenuItem onClick={() => closeTab(tab.id)}>{t('Close')}</ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
       <RemarkDialog
@@ -563,7 +563,7 @@ function TermRow(props: { tab: Tab; session: SessionConfig | null; depth: number
         title="重命名"
         description={t('给「{name}」换个名字。', { name: tab.title })}
         initial={tab.title}
-        placeholder={t('窗口名称')}
+        placeholder={t('Window name')}
         onOpenChange={setRenaming}
         onSave={(value) => {
           setRenaming(false)
@@ -572,10 +572,10 @@ function TermRow(props: { tab: Tab; session: SessionConfig | null; depth: number
       />
       <RemarkDialog
         open={editingRemark}
-        title={t('备注')}
+        title={t('Note')}
         description={t('给「{name}」写一句，方便以后认出它。留空就是清掉。', { name: tab.title })}
         initial={remark}
-        placeholder={t('这扇窗口在做什么')}
+        placeholder={t('What is this window doing')}
         onOpenChange={setEditingRemark}
         onSave={(value) => {
           setEditingRemark(false)

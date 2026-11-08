@@ -51,7 +51,7 @@ export function composeTerminalRange(term: Terminal, start: number, end: number,
   canvas.width = device.cellW * cols
   canvas.height = device.cellH * rows
   const ctx = canvas.getContext('2d', { alpha: false })
-  if (!ctx) throw new Error(String(i18n.t('字形图没有建成', { defaultValue: '字形图没有建成' })))
+  if (!ctx) throw new Error(String(i18n.t('Could not build the glyph atlas', { defaultValue: '字形图没有建成' })))
   ctx.imageSmoothingEnabled = false
   const masks = new Map<string, HTMLCanvasElement>()
 
@@ -120,7 +120,7 @@ export function composeTerminalRange(term: Terminal, start: number, end: number,
 
   const url = canvas.toDataURL('image/png')
   const comma = url.indexOf(',')
-  if (comma < 0) throw new Error(String(i18n.t('合成没有画出来', { defaultValue: '合成没有画出来' })))
+  if (comma < 0) throw new Error(String(i18n.t('Compositing produced no image', { defaultValue: '合成没有画出来' })))
   return url.slice(comma + 1)
 }
 
@@ -183,7 +183,7 @@ function glyphMask(
   canvas.width = slotW
   canvas.height = device.cellH
   const ctx = canvas.getContext('2d', { alpha: true })
-  if (!ctx) throw new Error(String(i18n.t('字形图没有建成', { defaultValue: '字形图没有建成' })))
+  if (!ctx) throw new Error(String(i18n.t('Could not build the glyph atlas', { defaultValue: '字形图没有建成' })))
   ctx.clearRect(0, 0, slotW, device.cellH)
   ctx.font = fontOf(term, cell, device.dpr, look)
   ctx.textBaseline = 'ideographic'

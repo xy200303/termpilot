@@ -83,7 +83,7 @@ export function EditorTabBar(props: { tabs: EditorTab[]; activeKey: string | nul
             </button>
             <button
               type="button"
-              title={t('关闭')}
+              title={t('Close')}
               className="flex size-4 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-foreground/10 hover:opacity-100"
               onClick={() => close(tab)}
               onMouseDown={(e) => e.stopPropagation()}
@@ -97,20 +97,20 @@ export function EditorTabBar(props: { tabs: EditorTab[]; activeKey: string | nul
     <Dialog open={pending !== null} onOpenChange={(open) => !open && !saving && setPending(null)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('文件尚未保存')}</DialogTitle>
+          <DialogTitle>{t('File not saved')}</DialogTitle>
           <DialogDescription>
-            {t('{name} 有未保存的修改。关闭后这些内容会丢失。', { name: pending?.name ?? '' })}
+            {t('{name} has unsaved changes. Closing will lose them.', { name: pending?.name ?? '' })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" disabled={saving} onClick={() => setPending(null)}>
-            {t('取消')}
+            {t('Cancel')}
           </Button>
           <Button variant="destructive" disabled={saving} onClick={discard}>
-            {t('不保存')}
+            {t('Don\'t save')}
           </Button>
           <Button disabled={saving} onClick={() => void saveAndClose()}>
-            {t('保存')}
+            {t('Save')}
           </Button>
         </DialogFooter>
       </DialogContent>

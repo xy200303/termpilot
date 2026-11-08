@@ -18,36 +18,36 @@ export function StatusBar() {
   const session = tab?.sessionId ? sessions.find((s) => s.id === tab.sessionId) : null
   const state = tab ? termState[tab.id] : undefined
 
-  let statusText = t('就绪')
+  let statusText = t('Ready')
   if (tab?.kind === 'reverse' && session) {
     const listen = listeners[session.id]
     statusText = listen?.listening
-      ? `${t('反向 shell 已接入')} · 127.0.0.1:${session.listenPort}`
-      : t('反向连接已断开')
+      ? `${t('Reverse shell connected')} · 127.0.0.1:${session.listenPort}`
+      : t('Reverse connection closed')
   } else if (tab?.kind === 'local') {
-    statusText = state?.status === 'connected' ? t('本地终端') : t('本地终端未连接')
+    statusText = state?.status === 'connected' ? t('Local terminal') : t('Local terminal not connected')
   } else if (tab) {
     switch (state?.status) {
       case 'connected':
-        statusText = `${t('正向 SSH')} ${session ? `${session.username}@${session.host}:${session.port}` : ''}`
+        statusText = `${t('SSH')} ${session ? `${session.username}@${session.host}:${session.port}` : ''}`
         break
       case 'connecting':
-        statusText = `${t('正在连接')} ${session?.host ?? ''}…`
+        statusText = `${t('Connecting to')} ${session?.host ?? ''}…`
         break
       case 'error':
-        statusText = state.error ?? t('连接失败')
+        statusText = state.error ?? t('Connection failed')
         break
       default:
-        statusText = t('未连接')
+        statusText = t('Not connected')
     }
   }
 
-  let mcpText = t('MCP 未启用')
+  let mcpText = t('MCP disabled')
   if (mcp?.enabled) {
-    if (mcpRuntime.running && mcpRuntime.clients > 0) mcpText = `${t('MCP 已连接')} ${mcpRuntime.clients}`
-    else if (mcpRuntime.running) mcpText = t('MCP 监听中')
-    else if (mcpRuntime.error) mcpText = t('MCP 启动失败')
-    else mcpText = t('MCP 未启动')
+    if (mcpRuntime.running && mcpRuntime.clients > 0) mcpText = `${t('MCP clients')} ${mcpRuntime.clients}`
+    else if (mcpRuntime.running) mcpText = t('MCP listening')
+    else if (mcpRuntime.error) mcpText = t('MCP failed to start')
+    else mcpText = t('MCP not running')
   }
 
   return (

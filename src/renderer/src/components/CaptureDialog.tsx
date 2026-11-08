@@ -80,9 +80,9 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
     <Dialog open={props.shot !== null} onOpenChange={(open) => !open && props.onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('截图已保存')}</DialogTitle>
+          <DialogTitle>{t('Screenshot saved')}</DialogTitle>
           <DialogDescription>
-            {count > 1 ? t('共 {count} 张，下面是最后一张。', { count }) : t('已经保存到截图目录。')}
+            {count > 1 ? t('{count} images; showing the last one.', { count }) : t('Saved to the screenshots folder.')}
             {props.shot?.note ? ` ${props.shot.note}` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -95,9 +95,9 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
         {error && <p className="text-xs text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => void reveal()}>
-            {t('打开所在目录')}
+            {t('Open containing folder')}
           </Button>
-          <Button onClick={() => void copy()}>{copied ? t('已复制') : t('复制图片')}</Button>
+          <Button onClick={() => void copy()}>{copied ? t('Copied') : t('复制图片')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

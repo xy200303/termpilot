@@ -75,8 +75,8 @@ const solarized: ITheme = {
 }
 
 export const terminalPalettes: TerminalPalette[] = [
-  { id: 'light', label: '浅色', theme: light },
-  { id: 'dark', label: '深色', theme: dark },
+  { id: 'light', label: 'Light', theme: light },
+  { id: 'dark', label: 'Dark', theme: dark },
   {
     id: 'solarized-light',
     label: 'Solarized Light',

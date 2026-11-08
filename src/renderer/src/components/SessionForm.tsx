@@ -206,7 +206,7 @@ export function SessionForm() {
   const applyCommand = (text: string) => {
     const parsed = parseSshCommand(text)
     if (!parsed) {
-      setError(t('认不出这条 SSH 命令'))
+      setError(t('Could not parse this ssh command'))
       return
     }
     setError('')
@@ -258,7 +258,7 @@ export function SessionForm() {
     if (mode === 'forward' && protocol === 'ssh' && command.trim() && (!form.host.trim() || !form.username.trim())) {
       const parsed = parseSshCommand(command)
       if (!parsed) {
-        setError(t('认不出这条 SSH 命令'))
+        setError(t('Could not parse this ssh command'))
         return
       }
       next = {
@@ -283,37 +283,37 @@ export function SessionForm() {
       next = { ...next, name: synced.name, host: synced.host }
     }
     if (!next.name.trim()) {
-      reject(t('名称不能为空'), 'connect')
+      reject(t('Name is required'), 'connect')
       return
     }
     if (mode === 'forward') {
       if (protocol === 'serial') {
         if (!next.serialPath?.trim()) {
-          reject(t('串口路径不能为空，例如 COM3 或 /dev/ttyUSB0'), 'connect')
+          reject(t('Serial path is required, e.g. COM3 or /dev/ttyUSB0'), 'connect')
           return
         }
       } else {
         if (!next.host.trim()) {
-          reject(t('主机不能为空'), 'connect')
+          reject(t('Host is required'), 'connect')
           return
         }
         if (protocol === 'ssh') {
           if (!next.username.trim()) {
-            reject(t('用户名不能为空'), 'auth')
+            reject(t('Username is required'), 'auth')
             return
           }
           if (creating && next.authType === 'password' && !next.secret) {
-            reject(t('密码认证需要填写密码'), 'auth')
+            reject(t('Password is required for password authentication'), 'auth')
             return
           }
           if (next.jumpHost?.trim() && !next.jumpUsername?.trim()) {
-            reject(t('跳板需要用户名'), 'jump')
+            reject(t('Jump host username is required'), 'jump')
             return
           }
         }
       }
     } else if (!next.listenPort || next.listenPort < 1 || next.listenPort > 65535) {
-      setError(t('监听端口需要在 1–65535'))
+      setError(t('Listen port must be between 1 and 65535'))
       return
     }
     try {
@@ -347,30 +347,30 @@ export function SessionForm() {
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {lockedHost ? t('在 {host} 上新建连接', { host: lockedHost }) : creating ? t('新建') : t('编辑')}
-            {!lockedHost && (mode === 'forward' ? (protocol === 'ssh' ? t('正向 SSH') : t(protocolLabel(protocol))) : '反向监听')}
+            {lockedHost ? t('New connection on {host}', { host: lockedHost }) : creating ? t('New') : t('Edit')}
+            {!lockedHost && (mode === 'forward' ? (protocol === 'ssh' ? t('SSH') : t(protocolLabel(protocol))) : t('Reverse listener'))}
           </DialogTitle>
           <DialogDescription>
             {lockedHost
-              ? t('主机已经确定，只要填写这条连接的账号。')
+              ? t('Host is fixed; just fill in the account for this connection.')
               : mode === 'forward'
                 ? protocol === 'ssh'
-                  ? t('本机作为客户端，主动 SSH 到有地址的服务器。')
+                  ? t('This machine connects out to a reachable SSH server.')
                   : protocol === 'telnet'
-                    ? t('Telnet 是明文协议，只在内网或受信任链路使用。登录在打开的终端里完成。')
+                    ? t('Telnet is plaintext; use it only on trusted networks. Sign-in happens in the terminal.')
                     : protocol === 'serial'
-                      ? t('直连本机串口设备。只有终端字节流，没有文件传输；波特率等参数要和设备一致。')
+                      ? t('Connect to a local serial device. Byte stream only, no file transfer; match the device baud rate.')
                       : protocol === 'rdp'
-                        ? t('默认使用内嵌 IronRDP 连接远程桌面，也可切换 FreeRDP 原生窗口。')
-                        : t('使用内嵌 noVNC 连接远程桌面，画面直接显示在标签里。')
-                : t('本机只在 127.0.0.1 上等待 shell 连入。公网地址用 cpolar 把这个端口映射出去。')}
+                        ? t('Uses embedded IronRDP by default; FreeRDP native window is optional.')
+                        : t('Uses embedded noVNC; the desktop is shown in the tab.')
+                : t('Listens on 127.0.0.1 for an incoming shell; expose the port with a tunnel for public access.')}
           </DialogDescription>
         </DialogHeader>
 
         {mode === 'forward' ? (
           <>
             {!lockedHost && (
-              <Field label={t('协议')}>
+              <Field label={t('Protocol')}>
                 <Select value={protocol} onValueChange={(v) => switchProtocol(v as SessionProtocol)}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -378,7 +378,7 @@ export function SessionForm() {
                   <SelectContent>
                     <SelectItem value="ssh">SSH</SelectItem>
                     <SelectItem value="telnet">Telnet</SelectItem>
-                    <SelectItem value="serial">{t('串口')}</SelectItem>
+                    <SelectItem value="serial">{t('Serial')}</SelectItem>
                     <SelectItem value="rdp">RDP</SelectItem>
                     <SelectItem value="vnc">VNC</SelectItem>
                   </SelectContent>
@@ -387,13 +387,13 @@ export function SessionForm() {
             )}
             {protocol !== 'ssh' ? (
               <div className="grid min-h-52 content-start gap-3">
-                <Field label={t('名称')}>
+                <Field label={t('Name')}>
                   <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
                 </Field>
-                <Field label={t('备注')}>
+                <Field label={t('Note')}>
                   <Input
                     value={form.remark ?? ''}
-                    placeholder={t('这条连接是干什么的，仅自己看')}
+                    placeholder={t('What this connection is for (only you see it)')}
                     onChange={(e) => set('remark', e.target.value)}
                   />
                 </Field>
@@ -401,14 +401,14 @@ export function SessionForm() {
                   <DesktopFields protocol={protocol} form={form} set={set} />
                 ) : protocol === 'telnet' ? (
                   <div className="grid grid-cols-[1fr_6rem] gap-2">
-                    <Field label={t('主机')}>
+                    <Field label={t('Host')}>
                       <Input
                         value={form.host}
-                        placeholder={t('IP 或域名')}
+                        placeholder={t('IP or hostname')}
                         onChange={(e) => set('host', e.target.value)}
                       />
                     </Field>
-                    <Field label={t('端口')}>
+                    <Field label={t('Port')}>
                       <Input
                         type="number"
                         value={form.port}
@@ -418,19 +418,19 @@ export function SessionForm() {
                   </div>
                 ) : (
                   <>
-                    <Field label={t('串口路径')}>
+                    <Field label={t('Serial path')}>
                       {manualPath ? (
                         <div className="flex gap-2">
                           <Input
                             value={form.serialPath ?? ''}
-                            placeholder={t('COM3 或 /dev/ttyUSB0')}
+                            placeholder={t('COM3 or /dev/ttyUSB0')}
                             onChange={(e) => set('serialPath', e.target.value)}
                           />
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            title={t('重新扫描并选择串口')}
+                            title={t('Rescan and pick a serial port')}
                             onClick={() => {
                               scanSerial()
                               setManualPath(false)
@@ -451,10 +451,10 @@ export function SessionForm() {
                               <SelectValue
                                 placeholder={
                                   serialPorts === null
-                                    ? t('正在扫描串口…')
+                                    ? t('Scanning serial ports…')
                                     : serialPorts.length
-                                      ? t('选择串口')
-                                      : t('没有检测到串口')
+                                      ? t('Select a serial port')
+                                      : t('No serial port found')
                                 }
                               />
                             </SelectTrigger>
@@ -470,17 +470,17 @@ export function SessionForm() {
                               {form.serialPath &&
                                 !(serialPorts ?? []).some((port) => port.path === form.serialPath) && (
                                   <SelectItem value={form.serialPath}>
-                                    {form.serialPath}{t('（当前未检测到）')}
+                                    {form.serialPath}{t(' (not detected now)')}
                                   </SelectItem>
                                 )}
-                              <SelectItem value={MANUAL_SERIAL}>{t('手动输入…')}</SelectItem>
+                              <SelectItem value={MANUAL_SERIAL}>{t('Enter manually…')}</SelectItem>
                             </SelectContent>
                           </Select>
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            title={t('重新扫描串口')}
+                            title={t('Rescan serial ports')}
                             onClick={scanSerial}
                           >
                             <RefreshCw />
@@ -489,14 +489,14 @@ export function SessionForm() {
                       )}
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
-                      <Field label={t('波特率')}>
+                      <Field label={t('Baud rate')}>
                         <Input
                           type="number"
                           value={form.baudRate ?? SERIAL_DEFAULTS.baudRate}
                           onChange={(e) => set('baudRate', Number(e.target.value) || SERIAL_DEFAULTS.baudRate)}
                         />
                       </Field>
-                      <Field label={t('数据位')}>
+                      <Field label={t('Data bits')}>
                         <Select
                           value={String(form.dataBits ?? SERIAL_DEFAULTS.dataBits)}
                           onValueChange={(v) => set('dataBits', Number(v))}
@@ -513,7 +513,7 @@ export function SessionForm() {
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field label={t('停止位')}>
+                      <Field label={t('Stop bits')}>
                         <Select
                           value={String(form.stopBits ?? SERIAL_DEFAULTS.stopBits)}
                           onValueChange={(v) => set('stopBits', Number(v))}
@@ -527,7 +527,7 @@ export function SessionForm() {
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field label={t('校验')}>
+                      <Field label={t('Parity')}>
                         <Select
                           value={form.parity ?? SERIAL_DEFAULTS.parity}
                           onValueChange={(v) => set('parity', v as SessionInput['parity'])}
@@ -536,9 +536,9 @@ export function SessionForm() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">{t('无')}</SelectItem>
-                            <SelectItem value="even">{t('偶校验')}</SelectItem>
-                            <SelectItem value="odd">{t('奇校验')}</SelectItem>
+                            <SelectItem value="none">{t('None')}</SelectItem>
+                            <SelectItem value="even">{t('Even')}</SelectItem>
+                            <SelectItem value="odd">{t('Odd')}</SelectItem>
                             <SelectItem value="mark">Mark</SelectItem>
                             <SelectItem value="space">Space</SelectItem>
                           </SelectContent>
@@ -551,17 +551,17 @@ export function SessionForm() {
             ) : (
           <Tabs value={page} onValueChange={setPage}>
             <TabsList className="w-full">
-              <TabsTrigger value="connect">{t('连接')}</TabsTrigger>
-              <TabsTrigger value="auth">{t('认证')}</TabsTrigger>
-              <TabsTrigger value="jump">{t('跳板')}</TabsTrigger>
-              <TabsTrigger value="advanced">{t('高级')}</TabsTrigger>
+              <TabsTrigger value="connect">{t('Connections')}</TabsTrigger>
+              <TabsTrigger value="auth">{t('Authentication')}</TabsTrigger>
+              <TabsTrigger value="jump">{t('Jump host')}</TabsTrigger>
+              <TabsTrigger value="advanced">{t('Advanced')}</TabsTrigger>
             </TabsList>
             <TabsContent value="connect" className="grid min-h-52 gap-3">
               {creating && configHosts.length > 0 && (
-                <Field label={t('从 ssh_config 导入')}>
+                <Field label={t('Import from ssh_config')}>
                   <Select value="" onValueChange={applyImport}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t('选择 ~/.ssh/config 里的 Host，自动填表')} />
+                      <SelectValue placeholder={t('Pick a Host from ~/.ssh/config to fill the form')} />
                     </SelectTrigger>
                     <SelectContent>
                       {configHosts.map((host) => (
@@ -574,7 +574,7 @@ export function SessionForm() {
                 </Field>
               )}
               {!lockedHost && (
-                <Field label={t('粘贴命令')}>
+                <Field label={t('Paste command')}>
                   <Input
                     value={command}
                     placeholder="ssh -J user@jump:22 user@host -p 22"
@@ -597,27 +597,27 @@ export function SessionForm() {
                   />
                 </Field>
               )}
-              <Field label={t('名称')}>
+              <Field label={t('Name')}>
                 <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
               </Field>
-              <Field label={t('备注')}>
+              <Field label={t('Note')}>
                 <Input
                   value={form.remark ?? ''}
-                  placeholder={t('这条连接是干什么的，仅自己看')}
+                  placeholder={t('What this connection is for (only you see it)')}
                   onChange={(e) => set('remark', e.target.value)}
                 />
               </Field>
               <div className={lockedHost ? '' : 'grid grid-cols-[1fr_6rem] gap-2'}>
                 {!lockedHost && (
-                  <Field label={t('主机')}>
+                  <Field label={t('Host')}>
                     <Input
                       value={form.host}
-                      placeholder={t('IP 或域名')}
+                      placeholder={t('IP or hostname')}
                       onChange={(e) => set('host', e.target.value)}
                     />
                   </Field>
                 )}
-                <Field label={t('端口')}>
+                <Field label={t('Port')}>
                   <Input
                     type="number"
                     value={form.port}
@@ -627,22 +627,22 @@ export function SessionForm() {
               </div>
             </TabsContent>
             <TabsContent value="auth" className="grid min-h-52 gap-3">
-              <Field label={t('用户名')}>
+              <Field label={t('Username')}>
                 <Input value={form.username} onChange={(e) => set('username', e.target.value)} />
               </Field>
-              <Field label={t('认证')}>
+              <Field label={t('Authentication')}>
                 <Select value={form.authType} onValueChange={(v) => set('authType', v as AuthType)}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="password">{t('密码')}</SelectItem>
-                    <SelectItem value="key">{t('私钥')}</SelectItem>
+                    <SelectItem value="password">{t('Password')}</SelectItem>
+                    <SelectItem value="key">{t('Private key')}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
               {form.authType === 'key' && (
-                <Field label={t('私钥')}>
+                <Field label={t('Private key')}>
                   <div className="flex gap-2">
                     <Input
                       value={form.keyPath}
@@ -664,18 +664,18 @@ export function SessionForm() {
                   </div>
                 </Field>
               )}
-              <Field label={form.authType === 'key' ? t('私钥口令') : t('密码')}>
+              <Field label={form.authType === 'key' ? t('Key passphrase') : t('Password')}>
                 <Input
                   type="password"
                   value={form.secret}
                   placeholder={
                     form.authType === 'key'
                       ? creating
-                        ? t('私钥没有口令就留空')
-                        : t('留空则不修改')
+                        ? t('Leave empty if the key has no passphrase')
+                        : t('Leave empty to keep current')
                       : creating
                         ? ''
-                        : t('留空则不修改')
+                        : t('Leave empty to keep current')
                   }
                   onChange={(e) => set('secret', e.target.value)}
                 />
@@ -683,17 +683,17 @@ export function SessionForm() {
             </TabsContent>
             <TabsContent value="jump" className="grid min-h-52 gap-3">
               <p className="text-xs text-muted-foreground">
-                {t('对应 ssh -J。用户名保留冒号后的整段。不经过跳板就留空。目标机密码在「认证」里。')}
+                {t('Same as ssh -J. Keep everything after the colon in the username. Leave empty to connect directly. The target password goes under Authentication.')}
               </p>
               <div className="grid grid-cols-[1fr_6rem] gap-2">
-                <Field label={t('跳板主机')}>
+                <Field label={t('Jump host')}>
                   <Input
                     value={form.jumpHost ?? ''}
-                    placeholder={t('IP 或域名')}
+                    placeholder={t('IP or hostname')}
                     onChange={(e) => set('jumpHost', e.target.value)}
                   />
                 </Field>
-                <Field label={t('端口')}>
+                <Field label={t('Port')}>
                   <Input
                     type="number"
                     value={form.jumpPort ?? 22}
@@ -701,14 +701,14 @@ export function SessionForm() {
                   />
                 </Field>
               </div>
-              <Field label={t('跳板用户名')}>
+              <Field label={t('Jump username')}>
                 <Input value={form.jumpUsername ?? ''} onChange={(e) => set('jumpUsername', e.target.value)} />
               </Field>
-              <Field label={t('跳板密码')}>
+              <Field label={t('Jump password')}>
                 <Input
                   type="password"
                   value={form.jumpSecret ?? ''}
-                  placeholder={creating ? t('跳板另有口令才填') : session?.hasJumpSecret ? t('留空则不修改') : ''}
+                  placeholder={creating ? t('Fill only if the jump host needs a password') : session?.hasJumpSecret ? t('Leave empty to keep current') : ''}
                   onChange={(e) => set('jumpSecret', e.target.value)}
                 />
               </Field>
@@ -720,24 +720,24 @@ export function SessionForm() {
             </TabsContent>
             <TabsContent value="advanced" className="grid min-h-52 gap-3">
               <div className="grid grid-cols-2 gap-2">
-                <Field label={t('连接超时（秒）')}>
+                <Field label={t('Connect timeout (s)')}>
                   <Input
                     type="number"
                     value={secondsOf(options?.readyTimeoutMs)}
-                    placeholder={t('默认 15')}
+                    placeholder={t('Default 15')}
                     onChange={(e) => setOption('readyTimeoutMs', secondsToMs(e.target.value))}
                   />
                 </Field>
-                <Field label={t('保活间隔（秒）')}>
+                <Field label={t('Keepalive interval (s)')}>
                   <Input
                     type="number"
                     value={secondsOf(options?.keepaliveIntervalMs)}
-                    placeholder={t('默认 15，0 为关闭')}
+                    placeholder={t('Default 15, 0 disables')}
                     onChange={(e) => setOption('keepaliveIntervalMs', secondsToMs(e.target.value))}
                   />
                 </Field>
               </div>
-              <Field label={t('主机密钥')}>
+              <Field label={t('Host key')}>
                 <Select
                   value={hostKey}
                   onValueChange={(v) => setOption('strictHostKeyChecking', v === 'skip' ? 'no' : undefined)}
@@ -746,13 +746,13 @@ export function SessionForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">{t('按默认核对')}</SelectItem>
-                    <SelectItem value="skip">{t('不核对')}</SelectItem>
+                    <SelectItem value="default">{t('Verify with defaults')}</SelectItem>
+                    <SelectItem value="skip">{t('Do not verify')}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label={t('地址')}>
+                <Field label={t('Address family')}>
                   <Select
                     value={family}
                     onValueChange={(v) => setOption('family', v === '4' ? 4 : v === '6' ? 6 : undefined)}
@@ -761,13 +761,13 @@ export function SessionForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="any">{t('自动')}</SelectItem>
-                      <SelectItem value="4">{t('只走 IPv4')}</SelectItem>
-                      <SelectItem value="6">{t('只走 IPv6')}</SelectItem>
+                      <SelectItem value="any">{t('Auto')}</SelectItem>
+                      <SelectItem value="4">{t('IPv4 only')}</SelectItem>
+                      <SelectItem value="6">{t('IPv6 only')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label={t('压缩')}>
+                <Field label={t('Compression')}>
                   <Select
                     value={options?.compress ? 'on' : 'off'}
                     onValueChange={(v) => setOption('compress', v === 'on' ? true : undefined)}
@@ -776,13 +776,13 @@ export function SessionForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="off">{t('关闭')}</SelectItem>
-                      <SelectItem value="on">{t('打开')}</SelectItem>
+                      <SelectItem value="off">{t('Close')}</SelectItem>
+                      <SelectItem value="on">{t('Open')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
               </div>
-              <Field label={t('文件通道')}>
+              <Field label={t('File channel')}>
                 <Select
                   value={form.sftpMode ?? 'auto'}
                   onValueChange={(v) => set('sftpMode', v as SessionInput['sftpMode'])}
@@ -791,19 +791,19 @@ export function SessionForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto">{t('自动（缺子系统时单独拨号）')}</SelectItem>
-                    <SelectItem value="shared">{t('复用终端连接')}</SelectItem>
-                    <SelectItem value="fresh">{t('总是单独拨号')}</SelectItem>
+                    <SelectItem value="auto">{t('Auto (dial separately when SFTP is missing)')}</SelectItem>
+                    <SelectItem value="shared">{t('Reuse terminal connection')}</SelectItem>
+                    <SelectItem value="fresh">{t('Always dial separately')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {t('跳板只授权一次转发的机器选「复用」，单独拨号会被跳板拒绝。')}
+                  {t('For jump hosts that authorize a single forwarding, choose Reuse; a separate dial will be rejected.')}
                 </p>
               </Field>
               <Field label="ProxyCommand">
                 <Input
                   value={options?.proxyCommand ?? ''}
-                  placeholder={t('没有跳板时，用本地命令代替直连')}
+                  placeholder={t('Local command used instead of a direct connection when there is no jump host')}
                   onChange={(e) => setOption('proxyCommand', e.target.value.trim() ? e.target.value : undefined)}
                 />
               </Field>
@@ -814,20 +814,20 @@ export function SessionForm() {
           </>
         ) : (
           <div className="grid gap-3">
-            <Field label={t('名称')}>
+            <Field label={t('Name')}>
               <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
             </Field>
-            <Field label={t('本机端口')}>
+            <Field label={t('Local port')}>
               <Input
                 type="number"
                 value={form.listenPort}
                 onChange={(e) => set('listenPort', Number(e.target.value) || 0)}
               />
             </Field>
-            <Field label={t('备注')}>
+            <Field label={t('Note')}>
               <Input
                 value={form.remark}
-                placeholder={t('这条连接是干什么的，或公网地址，仅自己看')}
+                placeholder={t('What this connection is for, or its public address')}
                 onChange={(e) => set('remark', e.target.value)}
               />
             </Field>
@@ -838,9 +838,9 @@ export function SessionForm() {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setEditing(null)}>
-            {t('取消')}
+            {t('Cancel')}
           </Button>
-          <Button onClick={submit}>{t('保存')}</Button>
+          <Button onClick={submit}>{t('Save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

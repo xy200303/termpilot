@@ -1,16 +1,15 @@
 import i18n from 'i18next'
 import { initReactI18next, useTranslation } from 'react-i18next'
-import { EN } from './i18n-en'
+import zh from './locales/zh.json'
 
 /**
- * 中文原文就是 key；en 只提供映射。切到 zh 时 i18next 查不到资源会原样返回 key，
- * 所以不用维护一份中文资源，新增文案只改代码即可。
+ * 英文原文就是 key（i18next 标准资源格式），zh.json 提供中文映射，en 直接返回 key。
  */
 if (!i18n.isInitialized) {
   void i18n.use(initReactI18next).init({
-    resources: { en: { translation: EN } },
-    lng: 'zh',
-    fallbackLng: 'zh',
+    resources: { zh: { translation: zh } },
+    lng: 'en',
+    fallbackLng: 'en',
     supportedLngs: ['zh', 'en'],
     // 中文原文当 key：不要按 . 或 : 拆命名空间
     keySeparator: false,

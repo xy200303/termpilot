@@ -20,10 +20,10 @@ export function DesktopFields(props: {
   return (
     <>
       <div className="grid grid-cols-[1fr_6rem] gap-2">
-        <Field label={t('主机')}>
-          <Input value={form.host} placeholder={t('IP 或域名')} onChange={(e) => set('host', e.target.value)} />
+        <Field label={t('Host')}>
+          <Input value={form.host} placeholder={t('IP or hostname')} onChange={(e) => set('host', e.target.value)} />
         </Field>
-        <Field label={t('端口')}>
+        <Field label={t('Port')}>
           <Input
             type="number"
             value={form.port}
@@ -31,33 +31,33 @@ export function DesktopFields(props: {
           />
         </Field>
       </div>
-      <Field label={protocol === 'rdp' ? t('用户名') : t('VNC 密码')}>
+      <Field label={protocol === 'rdp' ? t('Username') : t('VNC password')}>
         <Input
           type={protocol === 'rdp' ? 'text' : 'password'}
           value={protocol === 'rdp' ? form.username : (form.secret ?? '')}
-          placeholder={protocol === 'rdp' ? t('登录账号，密码由 FreeRDP 窗口询问') : t('无密码可留空')}
+          placeholder={protocol === 'rdp' ? t('Account name; FreeRDP asks for the password') : t('Leave empty if there is no password')}
           onChange={(e) => set(protocol === 'rdp' ? 'username' : 'secret', e.target.value)}
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label={t('桌面宽度（可选）')}>
+        <Field label={t('Desktop width (optional)')}>
           <Input
             type="number"
             value={options.width ?? ''}
-            placeholder={t('跟随窗口')}
+            placeholder={t('Follow window')}
             onChange={(e) => setOptions({ width: Number(e.target.value) || undefined })}
           />
         </Field>
-        <Field label={t('桌面高度（可选）')}>
+        <Field label={t('Desktop height (optional)')}>
           <Input
             type="number"
             value={options.height ?? ''}
-            placeholder={t('跟随窗口')}
+            placeholder={t('Follow window')}
             onChange={(e) => setOptions({ height: Number(e.target.value) || undefined })}
           />
         </Field>
       </div>
-      <Field label={t('性能模式')}>
+      <Field label={t('Performance mode')}>
         <Select
           value={options.performance ?? 'balanced'}
           onValueChange={(value) => setOptions({ performance: value as DesktopOptions['performance'] })}
@@ -67,9 +67,9 @@ export function DesktopFields(props: {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="auto">自动</SelectItem>
-            <SelectItem value="quality">{t('画质优先')}</SelectItem>
-            <SelectItem value="balanced">{t('平衡')}</SelectItem>
-            <SelectItem value="speed">{t('流畅优先')}</SelectItem>
+            <SelectItem value="quality">{t('Quality')}</SelectItem>
+            <SelectItem value="balanced">{t('Balanced')}</SelectItem>
+            <SelectItem value="speed">{t('Speed')}</SelectItem>
           </SelectContent>
         </Select>
       </Field>
@@ -79,7 +79,7 @@ export function DesktopFields(props: {
           checked={options.clipboard !== false}
           onChange={(e) => setOptions({ clipboard: e.target.checked })}
         />
-        {t('与本机共享文本剪贴板')}
+        {t('Share text clipboard with this machine')}
       </Label>
       {protocol === 'vnc' && (
         <Label className="flex items-center gap-2 text-sm font-normal">
@@ -88,7 +88,7 @@ export function DesktopFields(props: {
             checked={options.viewOnly === true}
             onChange={(e) => setOptions({ viewOnly: e.target.checked })}
           />
-          {t('只观看，不发送鼠标键盘')}
+          {t('View only, do not send mouse or keyboard')}
         </Label>
       )}
       {protocol === 'rdp' && (
@@ -98,7 +98,7 @@ export function DesktopFields(props: {
             checked={options.nativeClient === true}
             onChange={(e) => setOptions({ nativeClient: e.target.checked })}
           />
-          {t('改用 FreeRDP 原生窗口（默认内嵌 IronRDP）')}
+          {t('Use the FreeRDP native window (embedded IronRDP by default)')}
         </Label>
       )}
     </>

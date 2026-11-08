@@ -51,21 +51,21 @@ export function SftpInstallDialog() {
           <DialogTitle>文件通道</DialogTitle>
           <DialogDescription>
             {status === 'running'
-              ? t('正在改成 sshd 自带的 SFTP。')
+              ? t('Switching to the built-in SFTP subsystem.')
               : status === 'ok'
-                ? t('已经改成内置 SFTP，正在连接。')
-                : t('文件通道没有打开，下面是这台机器的输出。')}
+                ? t('Switched to the built-in SFTP; connecting.')
+                : t('The file channel did not open; output from the machine follows.')}
           </DialogDescription>
         </DialogHeader>
         <pre
           ref={box}
           className="max-h-80 min-h-40 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-5 whitespace-pre-wrap"
         >
-          {view?.lines.join('\n') || t('等待远程输出…')}
+          {view?.lines.join('\n') || t('Waiting for remote output…')}
         </pre>
         <DialogFooter>
           <Button variant="outline" onClick={() => setView((current) => current && { ...current, open: false })}>
-            {status === 'running' ? t('隐藏') : t('关闭')}
+            {status === 'running' ? t('Hide') : t('Close')}
           </Button>
         </DialogFooter>
       </DialogContent>
