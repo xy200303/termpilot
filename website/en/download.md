@@ -5,11 +5,11 @@ description: Download TermPilot for Windows x64, macOS (Apple Silicon) and Linux
 
 # Download
 
-Current version **v0.9.0**. All packages are published on [GitHub Releases](https://github.com/xy200303/termpilot/releases/latest); release notes are in the [changelog](/changelog).
+Current version **v0.9.1**. All packages are published on [GitHub Releases](https://github.com/xy200303/termpilot/releases/latest); release notes are in the [changelog](/changelog).
 
 Linux x64 packages are built on Ubuntu 22.04 and require `glibc >= 2.35`; Ubuntu 22.04 / 24.04 work.
 
-<DownloadTable version="0.9.0" />
+<DownloadTable version="0.9.1" />
 
 ## Installation notes
 

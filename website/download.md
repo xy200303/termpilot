@@ -5,11 +5,11 @@ description: TermPilot 三端安装包下载：Windows x64、macOS（Apple Silic
 
 # 下载
 
-当前版本 **v0.9.0**。所有安装包发布在 [GitHub Releases](https://github.com/xy200303/termpilot/releases/latest)，版本说明见[更新日志](/changelog)。
+当前版本 **v0.9.1**。所有安装包发布在 [GitHub Releases](https://github.com/xy200303/termpilot/releases/latest)，版本说明见[更新日志](/changelog)。
 
 Linux x64 包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubuntu 22.04 / 24.04。
 
-<DownloadTable version="0.9.0" />
+<DownloadTable version="0.9.1" />
 
 ## 安装提示
 

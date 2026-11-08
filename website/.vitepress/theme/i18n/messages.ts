@@ -3,7 +3,7 @@
 export const messages = {
   "zh-CN": {
     "home": {
-      "announcement": "界面新增跟随系统的中英文切换，官网同步提供英文页面",
+      "announcement": "AppImage 包内附带 AppStream 元数据，Linux 应用目录可读取",
       "hero": {
         "lines": [
           "终端与桌面，",
@@ -247,6 +247,13 @@ export const messages = {
       ],
       "changelog": [
         {
+          "version": "0.9.1",
+          "items": [
+            "AppImage 内附带 AppStream 元数据：名称、简介、分类、截图与许可证",
+            "Linux 应用目录可直接读取，AppImage 目录测试不再提示缺少 appdata"
+          ]
+        },
+        {
           "version": "0.9.0",
           "items": [
             "界面新增语言设置：跟随系统 / 简体中文 / English，主进程消息一并切换",
@@ -259,13 +266,6 @@ export const messages = {
           "items": [
             "图形桌面新增「中文键盘」接管，本机输入法可以直接往 VNC 里打中文",
             "新增「发送文字」，整段写远端剪贴板再粘贴；两个入口都收进标签栏图标行"
-          ]
-        },
-        {
-          "version": "0.8.5",
-          "items": [
-            "合并重复工具：term_read 并入 term_lines，滚动截图并入 term_screenshot，工具总数 35",
-            "应用截图默认带 100px 网格；desktop_type 支持剪贴板粘贴，中文绕开远端输入法"
           ]
         }
       ],
@@ -336,7 +336,7 @@ export const messages = {
   },
   "en": {
     "home": {
-      "announcement": "Bilingual UI that follows your system language, plus English pages on the website",
+      "announcement": "AppImage builds now carry AppStream metadata for Linux app catalogs",
       "hero": {
         "lines": [
           "Terminals and desktops,",
@@ -580,6 +580,13 @@ export const messages = {
       ],
       "changelog": [
         {
+          "version": "0.9.1",
+          "items": [
+            "AppImage builds carry AppStream metadata: name, summary, categories, screenshots and license",
+            "Linux app catalogs can read it, and the AppImage catalog test no longer warns about a missing appdata file"
+          ]
+        },
+        {
           "version": "0.9.0",
           "items": [
             "New language setting: follow the system, Simplified Chinese or English, including main-process messages",
@@ -592,13 +599,6 @@ export const messages = {
           "items": [
             "Graphical desktops gain a “Chinese keyboard” takeover, so your local IME can type Chinese into VNC",
             "New “Send text” writes a whole block to the remote clipboard and pastes it; both entries moved into the tab icon row"
-          ]
-        },
-        {
-          "version": "0.8.5",
-          "items": [
-            "Merged duplicate tools: term_read into term_lines and scrollback capture into term_screenshot, 35 tools in total",
-            "App screenshots carry a 100px grid by default; desktop_type pastes through the clipboard so CJK input bypasses remote IMEs"
           ]
         }
       ],
