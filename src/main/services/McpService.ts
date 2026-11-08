@@ -139,15 +139,15 @@ export class McpService {
     }
     for (const [id, settle] of this.captures) {
       this.captures.delete(id)
-      settle({ id, error: '应用正在退出' })
+      settle({ id, error: mt('mcp.shutting_down') })
     }
     for (const [id, settle] of this.lineReads) {
       this.lineReads.delete(id)
-      settle({ id, error: '应用正在退出' })
+      settle({ id, error: mt('mcp.shutting_down') })
     }
     for (const [id, settle] of this.modeReads) {
       this.modeReads.delete(id)
-      settle({ id, error: '应用正在退出' })
+      settle({ id, error: mt('mcp.shutting_down') })
     }
     const http = this.http
     this.http = null
@@ -401,7 +401,7 @@ export class McpService {
       case 'term_screenshot': {
         const shot = lineShot(raw)
         const scope = textArg(raw, 'scope') ?? 'viewport'
-        if (scope !== 'viewport' && scope !== 'buffer') throw new Error('scope 只能是 viewport 或 buffer')
+        if (scope !== 'viewport' && scope !== 'buffer') throw new Error(mt('mcp.err_scope'))
         const termId = this.requireTerm(shot.termId)
         if (shot.ranged) return this.capture(termId, 'scrollback', shot.startLine, shot.endLine, true)
         return scope === 'buffer'
@@ -445,7 +445,7 @@ export class McpService {
       case 'sftp_remove': {
         const path = need(raw, 'path')
         const kind = need(raw, 'kind')
-        if (kind !== 'file' && kind !== 'dir' && kind !== 'link') throw new Error('kind 只能是 file、dir 或 link')
+        if (kind !== 'file' && kind !== 'dir' && kind !== 'link') throw new Error(mt('mcp.err_kind'))
         const found = this.requireCapability(need(raw, 'connection'), 'sftp')
         await this.guard(`rm ${path}`)
         await this.sftp.remove(found.id, path, kind)
@@ -492,9 +492,9 @@ export class McpService {
           timeoutMs: intArg(raw, 'timeoutMs')
         })
       case 'desktop_actions': {
-        if (!Array.isArray(raw.actions) || raw.actions.length === 0) throw new Error('actions 至少包含一个操作')
+        if (!Array.isArray(raw.actions) || raw.actions.length === 0) throw new Error(mt('mcp.err_actions_empty'))
         const actions = raw.actions.map((item) => {
-          if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('actions 里每项都必须是操作对象')
+          if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(mt('mcp.err_actions_item'))
           return desktopAction(item as Record<string, unknown>)
         })
         return this.desktopAgent.runMany(need(raw, 'viewId'), actions)
@@ -506,8 +506,8 @@ export class McpService {
       }
       case 'desktop_a11y': {
         const operation = textArg(raw, 'operation') || 'tree'
-        if (operation !== 'tree' && operation !== 'click') throw new Error('operation 只能是 tree 或 click')
-        if (operation === 'click' && !textArg(raw, 'path')) throw new Error('点击无障碍控件需要 tree 返回的 path')
+        if (operation !== 'tree' && operation !== 'click') throw new Error(mt('mcp.err_operation'))
+        if (operation === 'click' && !textArg(raw, 'path')) throw new Error(mt('mcp.err_a11y_path'))
         return this.accessibility.run(need(raw, 'viewId'), operation, textArg(raw, 'path'), textArg(raw, 'action'))
       }
       case 'app_screenshot':
@@ -518,10 +518,10 @@ export class McpService {
           return this.startRecording(intArg(raw, 'fps') ?? 15, intArg(raw, 'maxSeconds') ?? 120)
         }
         if (action === 'stop') return this.stopRecording()
-        throw new Error('action 只能是 start 或 stop')
+        throw new Error(mt('mcp.err_record_action'))
       }
       default:
-        throw new Error(`未知命令: ${tool}`)
+        throw new Error(mt('mcp.err_unknown_tool', { tool }))
     }
   }
 
@@ -533,7 +533,7 @@ export class McpService {
     const session = this.storage.list().find((item) => item.id === current?.sessionId)
     return [
       mt('mcp.term_reconnected', { id }),
-      session ? `连接：${session.publicId}（${session.name}）` : '',
+      session ? mt('mcp.connection_line', { id: session.publicId, name: session.name }) : '',
       mt('mcp.reconnect_note')
     ]
       .filter(Boolean)
@@ -562,7 +562,7 @@ export class McpService {
 
   private async onCli(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method !== 'POST') {
-      sendJson(res, 405, { ok: false, text: '只接受 POST' })
+      sendJson(res, 405, { ok: false, text: mt('mcp.err_post_only') })
       return
     }
     let body: { op?: unknown; tool?: unknown; args?: unknown }
@@ -580,12 +580,12 @@ export class McpService {
       try {
         sendJson(res, 200, { ok: true, text: schemaText(typeof body.tool === 'string' ? body.tool : undefined) })
       } catch (error) {
-        sendJson(res, 200, { ok: false, text: error instanceof Error ? error.message : '失败' })
+        sendJson(res, 200, { ok: false, text: error instanceof Error ? error.message : mt('mcp.failed') })
       }
       return
     }
     if (body.op !== 'call' || typeof body.tool !== 'string' || !body.tool) {
-      sendJson(res, 400, { ok: false, text: 'op 只能是 tools、schema 或 call' })
+      sendJson(res, 400, { ok: false, text: mt('mcp.err_op') })
       return
     }
     const raw =
@@ -596,7 +596,7 @@ export class McpService {
     try {
       args = parseToolArgs(body.tool, raw)
     } catch (error) {
-      sendJson(res, 200, { ok: false, text: error instanceof Error ? error.message : '参数不对' })
+      sendJson(res, 200, { ok: false, text: error instanceof Error ? error.message : mt('mcp.err_params') })
       return
     }
     const result = await this.run(body.tool, auditDetail(args) || body.tool, () => this.invoke(body.tool as string, args))
@@ -792,7 +792,7 @@ export class McpService {
 
   private requireForward(key: string) {
     const found = this.findSession(key)
-    if (found.mode === 'reverse') throw new Error('反向监听没有 SFTP')
+    if (found.mode === 'reverse') throw new Error(mt('mcp.err_reverse_sftp'))
     return found
   }
 
@@ -820,7 +820,7 @@ export class McpService {
     if (!SENSITIVE.test(path)) return
     if (!this.storage.getMcpSettings().confirmDangerous) return
     const ok = await this.ask(path)
-    if (!ok) throw new Error('已取消：危险路径未确认')
+    if (!ok) throw new Error(mt('mcp.cancelled_path'))
   }
 
   private connectionView(session: SessionConfig) {
@@ -861,24 +861,24 @@ export class McpService {
   private requireLive(termId: string): string {
     const id = this.requireTerm(termId)
     const term = this.terminal.listTerms().find((item) => item.id === id)
-    if (term?.status !== 'connected') throw new Error('终端已经断开。用 term_reconnect 恢复这扇终端，编号不变。')
+    if (term?.status !== 'connected') throw new Error(mt('mcp.term_disconnected'))
     return id
   }
 
   private requireTerm(termId: string): string {
     const id = termId.trim()
-    if (isConnId(id)) throw new Error(`「${id}」是连接编号。终端请填 term- 开头的编号。`)
-    if (!isTermId(id)) throw new Error(`「${id}」不是终端编号。请先 term_list，再用 term- 开头的编号。`)
-    if (!this.terminal.listTerms().some((term) => term.id === id)) throw new Error('终端不存在或已断开')
+    if (isConnId(id)) throw new Error(mt('mcp.err_id_is_connection', { id }))
+    if (!isTermId(id)) throw new Error(mt('mcp.err_not_term', { id }))
+    if (!this.terminal.listTerms().some((term) => term.id === id)) throw new Error(mt('mcp.err_term_missing'))
     return id
   }
 
   private findSession(key: string) {
     const id = key.trim()
-    if (isTermId(id)) throw new Error(`「${id}」是终端编号。连接请填 conn- 开头的编号。`)
-    if (!isConnId(id)) throw new Error(`「${id}」不是连接编号。请先 connection_list，再用 conn- 开头的编号。名称和备注不能用来查找。`)
+    if (isTermId(id)) throw new Error(mt('mcp.err_id_is_term', { id }))
+    if (!isConnId(id)) throw new Error(mt('mcp.err_not_connection', { id }))
     const found = this.storage.list().find((session) => session.publicId === id)
-    if (!found) throw new Error(`找不到连接: ${id}`)
+    if (!found) throw new Error(mt('mcp.err_connection_not_found', { id }))
     return found
   }
 
@@ -886,7 +886,7 @@ export class McpService {
     if (!DANGEROUS.test(command)) return
     if (!this.storage.getMcpSettings().confirmDangerous) return
     const ok = await this.ask(command)
-    if (!ok) throw new Error('已取消：危险操作未确认')
+    if (!ok) throw new Error(mt('mcp.cancelled_action'))
   }
 
   private capture(
@@ -897,20 +897,20 @@ export class McpService {
     cropOnly = false
   ): Promise<string> {
     if (startLine !== undefined && endLine !== undefined && endLine < startLine) {
-      return Promise.reject(new Error('endLine 要大于或等于 startLine，两端都包含'))
+      return Promise.reject(new Error(mt('mcp.err_line_range')))
     }
     const wc = this.getSender()
-    if (!wc || wc.isDestroyed()) return Promise.reject(new Error('窗口不可用，无法截图'))
+    if (!wc || wc.isDestroyed()) return Promise.reject(new Error(mt('mcp.err_window_capture')))
     const id = randomUUID()
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.captures.delete(id)
-        reject(new Error('截图超时'))
+        reject(new Error(mt('mcp.err_capture_timeout')))
       }, 60_000)
       this.captures.set(id, (result) => {
         clearTimeout(timer)
         if (result.error || !result.paths?.length) {
-          reject(new Error(result.error || '截图失败'))
+          reject(new Error(result.error || mt('mcp.err_capture_failed')))
           return
         }
         resolve([result.note, ...result.paths].filter(Boolean).join('\n'))
@@ -928,36 +928,36 @@ export class McpService {
 
   private async appShot(grid: boolean | number): Promise<string> {
     const wc = this.getSender()
-    if (!wc || wc.isDestroyed()) throw new Error('窗口不可用，无法截图')
+    if (!wc || wc.isDestroyed()) throw new Error(mt('mcp.err_window_capture'))
     const image = await wc.capturePage()
     const step = grid === true ? 100 : typeof grid === 'number' ? grid : 0
     const size = image.getSize()
     const drawn = step > 0 ? await renderGrid(wc, image, { step, spanWidth: size.width, spanHeight: size.height }) : image
     const png = drawn.toPNG()
-    if (png.length === 0) throw new Error('窗口没有可截取的内容（可能已最小化）')
+    if (png.length === 0) throw new Error(mt('mcp.err_window_empty'))
     const dir = join(app.getPath('userData'), 'screenshots')
     mkdirSync(dir, { recursive: true })
     const file = join(dir, `app-${stamp()}.png`)
     writeFileSync(file, png)
-    return `已保存应用窗口截图${drawn !== image ? `（网格 ${step}px）` : ''}：\n${file}`
+    return mt('mcp.app_saved', { grid: drawn !== image ? mt('mcp.app_saved_grid', { step }) : '', file })
   }
 
   private startRecording(fps: number, maxSeconds: number): Promise<string> {
     const wc = this.getSender()
-    if (!wc || wc.isDestroyed()) return Promise.reject(new Error('窗口不可用，无法录屏'))
-    if (this.recording) return Promise.reject(new Error('已经在录屏，先调 app_record action=stop'))
+    if (!wc || wc.isDestroyed()) return Promise.reject(new Error(mt('mcp.err_window_record')))
+    if (this.recording) return Promise.reject(new Error(mt('mcp.err_recording_busy')))
     const id = randomUUID()
     this.recording = { id, startedAt: Date.now() }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.recordStarts.delete(id)
         this.recording = null
-        reject(new Error('开始录屏超时'))
+        reject(new Error(mt('mcp.err_record_start_timeout')))
       }, 15_000)
       this.recordStarts.set(id, {
         resolve: () => {
           clearTimeout(timer)
-          resolve(`开始录屏（${fps} fps，最长 ${maxSeconds} 秒）。结束时调 app_record action=stop。`)
+          resolve(mt('mcp.recording_started', { fps, seconds: maxSeconds }))
         },
         reject: (error) => {
           clearTimeout(timer)
@@ -975,27 +975,27 @@ export class McpService {
 
   private stopRecording(): Promise<string> {
     const rec = this.recording
-    if (!rec) return Promise.reject(new Error('当前没有在录屏'))
+    if (!rec) return Promise.reject(new Error(mt('mcp.err_record_idle')))
     const seconds = Math.max(1, Math.round(((rec.endedAt ?? Date.now()) - rec.startedAt) / 1000))
     if (rec.saved) {
       const file = rec.saved
       this.recording = null
-      return Promise.resolve(`录屏已自动停止并保存：${file}\n时长约 ${seconds} 秒`)
+      return Promise.resolve(mt('mcp.recording_auto_saved', { file, seconds }))
     }
     const wc = this.getSender()
     if (!wc || wc.isDestroyed()) {
       this.recording = null
-      return Promise.reject(new Error('窗口不可用，录屏数据没有拿到'))
+      return Promise.reject(new Error(mt('mcp.err_record_data')))
     }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         if (this.recording?.id === rec.id) this.recording = null
-        reject(new Error('结束录屏超时'))
+        reject(new Error(mt('mcp.err_record_stop_timeout')))
       }, 20_000)
       rec.pendingStop = {
         resolve: (file) => {
           clearTimeout(timer)
-          resolve(`录屏已保存：${file}\n时长约 ${seconds} 秒`)
+          resolve(mt('mcp.recording_saved', { file, seconds }))
         },
         reject: (error) => {
           clearTimeout(timer)
@@ -1025,20 +1025,20 @@ export class McpService {
 
   private lines(termId: string, startLine?: number, endLine?: number): Promise<string> {
     if (startLine !== undefined && endLine !== undefined && endLine < startLine) {
-      return Promise.reject(new Error('endLine 要大于或等于 startLine，两端都包含'))
+      return Promise.reject(new Error(mt('mcp.err_line_range')))
     }
     const wc = this.getSender()
-    if (!wc || wc.isDestroyed()) return Promise.reject(new Error('窗口不可用，无法读取终端'))
+    if (!wc || wc.isDestroyed()) return Promise.reject(new Error(mt('mcp.err_window_lines')))
     const id = randomUUID()
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.lineReads.delete(id)
-        reject(new Error('读取终端行超时'))
+        reject(new Error(mt('mcp.err_lines_timeout')))
       }, 10_000)
       this.lineReads.set(id, (result) => {
         clearTimeout(timer)
         if (result.error || !result.lines) {
-          reject(new Error(result.error || '读取终端行失败'))
+          reject(new Error(result.error || mt('mcp.err_lines_failed')))
           return
         }
         resolve(formatLines(result))
@@ -1071,7 +1071,7 @@ export class McpService {
 
   private ask(command: string): Promise<boolean> {
     const wc = this.getSender()
-    if (!wc || wc.isDestroyed()) return Promise.reject(new Error('窗口不可用，无法确认危险操作'))
+    if (!wc || wc.isDestroyed()) return Promise.reject(new Error(mt('mcp.err_window_confirm')))
     const id = randomUUID()
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -1131,11 +1131,11 @@ function formatLines(result: TermLinesReply): string {
   const from = result.viewportY ?? 0
   const to = from + Math.max(0, (result.rows ?? 1) - 1)
   if (lines.length === 0) {
-    return length === 0 ? '缓冲是空的' : `行号超出缓冲，一共 ${length} 行`
+    return length === 0 ? mt('mcp.err_buffer_empty') : mt('mcp.err_line_overflow', { total: length })
   }
   const body = lines.map((line) => `${line.n}|${line.text}`).join('\n')
-  const cap = lines.length >= 200 ? '\n一次最多返回 200 行，其余请缩小范围再查。' : ''
-  return `缓冲共 ${length} 行，当前画面是第 ${from}–${to} 行。\n${body}${cap}`
+  const cap = lines.length >= 200 ? mt('mcp.lines_capped') : ''
+  return mt('mcp.lines_view', { total: length, from, to, body, cap })
 }
 
 function pngsIn(text: string): { type: 'image'; data: string; mimeType: 'image/png' }[] {
@@ -1438,7 +1438,7 @@ function agentText(text: string): string {
 
 function clip(text: string, max = 16_000): string {
   if (text.length <= max) return text
-  return `${text.slice(-max)}\n…已截断，只保留最后 ${max} 个字符`
+  return mt('mcp.clip_tail', { text: text.slice(-max), max })
 }
 
 /** 只截这次命令自己的输出。头尾都留，避免只剩滚动缓冲末尾。 */
@@ -1446,5 +1446,5 @@ function clipCommand(text: string, max = 16_000): string {
   if (text.length <= max) return text
   const head = Math.floor(max / 2)
   const tail = max - head
-  return `${text.slice(0, head)}\n…中间已截断…\n${text.slice(-tail)}`
+  return mt('mcp.clip_middle', { head: text.slice(0, head), tail: text.slice(-tail) })
 }
