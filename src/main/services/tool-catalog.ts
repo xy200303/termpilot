@@ -62,50 +62,50 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'connection_list',
     description:
-      '列出已保存的连接。id 是 conn- 编号，用来调用。name 和 remark 只帮助认出这条连接是干什么的，不能拿去当参数。不含密码。每条连接带 protocol（ssh / telnet / serial）和 capabilities：只有 ssh 有 exec 通道（term_exec）、SFTP（sftp_*）和并发通道；telnet 和 serial 只有终端字节流，对它们用 term_pty / term_write / term_lines / term_screenshot 这一族。',
+      'List saved connections. id is the conn- id used for calls. name and remark only help you recognise a connection; do not pass them as parameters. Passwords are not included. Each connection reports protocol (ssh / telnet / serial) and capabilities: only ssh has an exec channel (term_exec), SFTP (sftp_*) and concurrent channels; telnet and serial only carry a terminal byte stream, so use term_pty / term_write / term_lines / term_screenshot for them.',
     readOnly: true
   },
   {
     name: 'connection_open',
-    description: '按 conn- 编号打开连接。SSH / Telnet / 串口新开终端并返回 termId；RDP / VNC 每个连接只保留一个桌面标签，已打开时直接复用并返回现有 viewId。',
+    description: 'Open a connection by conn- id. SSH / Telnet / serial open a new terminal and return termId; RDP / VNC keep one desktop tab per connection and reuse the existing viewId when already open.',
     input: { connection: connId }
   },
   {
     name: 'connection_close',
-    description: '关掉某条连接下的全部终端或桌面窗口，并断开它的文件通道。',
+    description: 'Close every terminal or desktop window of a connection and drop its file channel.',
     input: { connection: connId }
   },
   {
     name: 'connection_create',
     description:
-      '新建并保存一条连接，返回 conn- 编号。protocol 选 ssh（默认）、telnet、serial、rdp 或 vnc。ssh 要 host/username/secret；telnet 要 host（默认 23）；serial 要 serialPath；rdp 默认 3389，vnc 默认 5900。桌面协议只有图形画面，没有 exec/SFTP；RDP 默认内嵌 IronRDP，nativeClient=true 才需要 FreeRDP。密码和私钥口令加密存在本机。',
+      'Create and save a connection, returning its conn- id. protocol is ssh (default), telnet, serial, rdp or vnc. ssh needs host/username/secret; telnet needs host (port defaults to 23); serial needs serialPath; rdp defaults to 3389 and vnc to 5900. Desktop protocols only show a picture and have no exec/SFTP; RDP uses embedded IronRDP unless nativeClient=true (FreeRDP). Passwords and key passphrases are stored encrypted on this machine.',
     input: { name: z.string().describe('显示名称，不能和已有连接重名'), ...sessionFields }
   },
   {
     name: 'connection_update',
-    description: '修改已保存的连接。connection 填 conn- 编号。写备注填 remark。名称和备注都不参与查找。已经打开的终端不会自动重连。',
+    description: 'Update a saved connection. connection is the conn- id; remark writes the note. Names and notes are not used for lookup. Open terminals are not reconnected automatically.',
     input: { connection: connId, name: z.string().optional().describe('新的显示名称'), ...sessionFields }
   },
   {
     name: 'connection_delete',
-    description: '删除一条已保存的连接，并关掉它打开的终端。开启危险确认时会先询问。',
+    description: 'Delete a saved connection and close the terminals it opened. Asks first when dangerous-action confirmation is on.',
     input: { connection: connId }
   },
   {
     name: 'serial_list',
     description:
-      '列出本机可用的串口设备（path、厂商、序号），给串口连接探路用。建串口连接：connection_create，protocol 填 serial，serialPath 填这里列出的 path。',
+      'List available local serial ports (path, manufacturer, serial number) to prepare a serial connection. Create one with connection_create, protocol = serial and serialPath set to one of these paths.',
     readOnly: true
   },
   {
     name: 'term_list',
-    description: '列出打开过、还没关掉的终端。status 为 connected 表示还连着，disconnected 或 error 表示已经断开。重启之后编号、标题和备注还在，上次退出时已经画好的行也会按行写回，新会话从下一行开始。断开时用 term_reconnect 恢复同一扇，不要再 connection_open。termId 是 term- 编号。',
+    description: 'List opened terminals that are not closed. status connected means still connected; disconnected or error means it is gone. Ids, titles and notes survive a restart, and lines already drawn are written back; new sessions start on the next line. Use term_reconnect for a disconnected terminal instead of connection_open. termId is the term- id.',
     readOnly: true
   },
   {
     name: 'term_exec',
     description:
-      '执行命令的默认工具（原 term_exec2）。在独立 exec 通道上跑，不占终端画面，可以并发，也不需要先开终端。返回 JSON：stdout 和 stderr 分流返回，都是原始字节流（不折行、无回显、无 ANSI）；exitCode 来自协议事件；另有 duration（秒）、timedOut、truncated。命令原样交给远端 bash（没有则 sh）执行，多行、heredoc、引号都支持，不要自己转义。session 填同一个名字时，cd 和 export 跨调用承接（存在远端 ~/.cache/termpilot/exec/ 下）；不填则每次全新环境。prelude 在每次执行前注入固定的 source/export。交互式操作、TUI、要看终端画面或截图时用 term_pty。',
+      'Default tool for running commands (formerly term_exec2). Runs on a separate exec channel without occupying the terminal, can run concurrently, and needs no open terminal. Returns JSON: stdout and stderr separately, both raw byte streams (no wrapping, no echo, no ANSI); exitCode comes from protocol events; plus duration (seconds), timedOut and truncated. The command is passed to remote bash (or sh) as-is; multi-line, heredoc and quoting are supported, so do not escape it yourself. Reusing the same session name carries cd and export across calls (stored under ~/.cache/termpilot/exec/ on the remote); omit it for a fresh environment each time. prelude is injected before every run. Use term_pty for interactive work, TUIs, or when you need the terminal picture or a screenshot.',
     input: {
       connection: connId,
       command: z.string().describe('要执行的命令，原样嵌入远端脚本，不需要转义'),
@@ -130,7 +130,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'term_pty',
     description:
-      '把命令打进这扇已经打开的终端（原 term_exec）。等它跑完（提示符回到画面）后，只返回这次新出现的内容；POSIX shell 还会带回退出码。输出是终端渲染结果：有回显、按窗口宽度折行、可能带颜色，不要拿去给程序解析——解析用 term_exec。到 timeout 还没跑完，就先把已经回来的内容交出去，命令还在远端跑。菜单、安装向导和 TUI 还在跑时不要用它，改用 term_write。停掉前台命令用 term_write，keys 填 ["ctrl-c"]。',
+      'Type a command into an opened terminal (formerly term_exec). Waits until it finishes (the prompt returns) and returns only the new output; POSIX shells also report the exit code. Output is what the terminal renders: echoed, wrapped to the window width, possibly coloured; do not parse it in programs — use term_exec for that. If it is still running at timeout, returns what has arrived so far and the command keeps running remotely. Do not use it while menus, installers or TUIs are running; use term_write instead. Stop a foreground command with term_write and keys ["ctrl-c"].',
     input: {
       termId,
       command: z.string().describe('要执行的命令。末尾没有换行时会自动补上'),
@@ -146,7 +146,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'term_write',
     description:
-      '向当前终端发送按键或文字，用于上下左右选择、输入内容、回车确认和 TUI。仅作用于 PTY 终端。keys 按顺序先发，然后输入 text，submit 为 true 时最后回车。发完返回当前画面。密码和验证码不要代填。',
+      'Send keys or text to the current terminal: arrow-key selection, typing, Enter, TUIs. PTY terminals only. keys are sent in order, then text, and a final Enter when submit is true. Returns the current screen. Never fill in passwords or verification codes.',
     input: {
       termId,
       keys: z.array(z.enum(TERM_KEYS)).max(40).optional().describe('按键名，按顺序发送'),
@@ -157,33 +157,33 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_reconnect',
-    description: '把已经断开的终端重新连上。编号、标题和备注保留，上次退出时已经画好的行也会按行写回。已经连着时直接返回。不要为此再调用 connection_open。',
+    description: 'Reconnect a disconnected terminal. Id, title and note are kept, and lines drawn before the disconnect are written back. Returns immediately when already connected. Do not call connection_open for this.',
     input: { termId }
   },
   {
     name: 'term_close',
-    description: '断开并关闭一个终端标签。',
+    description: 'Disconnect and close a terminal tab.',
     input: { termId }
   },
   {
     name: 'term_update',
-    description: '给一扇已经打开的终端写备注，方便以后认出它在做什么。编号不变。',
+    description: 'Write a note on an opened terminal so you can recognise it later. The id does not change.',
     input: { termId, remark: z.string().describe('这扇终端正在做什么。空字符串表示清掉') }
   },
   {
     name: 'term_open_local',
-    description: '打开一扇本机终端，返回 termId。没有连接。之后用 term_pty 执行命令，并用 term_update 写上备注。'
+    description: 'Open a local terminal and return its termId. There is no connection. Then run commands with term_pty and add a note with term_update.'
   },
   {
     name: 'term_lines',
-    description: '读出终端缓冲里的文字，每行带行号，已去掉 ANSI 控制符。仅作用于 PTY 终端。不填范围就是当前画面；想看最近输出就传 startLine 0。0 是最旧的一行。先用它确定行号，再交给 term_screenshot。',
+    description: 'Read terminal buffer text, one line per row with line numbers, ANSI stripped. PTY terminals only. Without a range it returns the current screen; pass startLine 0 to read from the oldest output. Use it to find line numbers, then pass them to term_screenshot.',
     readOnly: true,
     input: lineFields
   },
   {
     name: 'term_screenshot',
     description:
-      '截取终端画面。仅作用于 PTY 终端。默认截当前这一屏；scope=buffer 时把整段缓冲接成长图。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。一次大约 20 屏，更长就只保留末尾，结果里写明缓冲总行数和实际截到的行。行号用 term_lines 查。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时拍摄已经画出来的画面。',
+      'Capture the terminal screen. PTY terminals only. Defaults to the current screen; scope=buffer stitches the whole scrollback into one long image. With startLine and endLine (both inclusive, 0 is the oldest line) only that range is returned, already cropped. About 20 screens per call; longer ranges keep the tail and report the total buffer and the captured lines. Find line numbers with term_lines. With "compose" enabled in Settings, images are stitched from the buffer without scrolling the view; otherwise the visible screen is captured.',
     readOnly: true,
     images: 'always',
     input: {
@@ -193,7 +193,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'sftp_list',
-    description: '列出正向 SSH 会话的远端目录。',
+    description: 'List a remote directory over the current SSH session.',
     readOnly: true,
     input: {
       connection: connId,
@@ -202,12 +202,12 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'sftp_mkdir',
-    description: '在正向 SSH 上新建远端目录。path 是完整远端路径。',
+    description: 'Create a remote directory over the current SSH session. path is the full remote path.',
     input: { connection: connId, path: z.string().describe('完整远端路径') }
   },
   {
     name: 'sftp_upload',
-    description: '把本机绝对路径的文件上传到远端路径。超过 512MB 会拒绝。',
+    description: 'Upload a local file to a remote path. Files over 512MB are rejected.',
     input: {
       connection: connId,
       localPath: z.string().describe('本机绝对路径'),
@@ -216,7 +216,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'sftp_download',
-    description: '把远端文件下载到本机绝对路径。超过 512MB 会拒绝。几个 GB 的文件留在远程机器上处理。',
+    description: 'Download a remote file to a local absolute path. Files over 512MB are rejected; keep multi-GB files on the remote machine.',
     input: {
       connection: connId,
       remotePath: z.string().describe('远端路径'),
@@ -225,7 +225,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'sftp_rename',
-    description: '重命名或移动远端文件。from 和 to 都是远端路径。',
+    description: 'Rename or move a remote file. from and to are remote paths.',
     input: {
       connection: connId,
       from: z.string().describe('原远端路径'),
@@ -234,7 +234,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'sftp_remove',
-    description: '删除远端文件或目录。目录会连同里面的内容一起删除。',
+    description: 'Delete a remote file or directory. Directories are removed recursively.',
     input: {
       connection: connId,
       path: z.string().describe('远端路径'),
@@ -243,13 +243,13 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'desktop_list',
-    description: '列出当前打开的图形桌面（viewId、连接、协议、内嵌或原生窗口）。每个 VNC / RDP 连接最多一个桌面窗口。操作桌面前先调用它获取 viewId。',
+    description: 'List open desktops (viewId, connection, protocol, embedded or native window). Each VNC / RDP connection keeps one desktop tab. Call it before desktop operations to get viewId.',
     readOnly: true
   },
   {
     name: 'desktop_screenshot',
     description:
-      '截取一个图形桌面并返回 PNG，返回文字里带 shotId。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，左上角会用角标标出这块图在原画面里的起点坐标，刻度也用原画面坐标，可直接拿去 desktop_click。网格线按局部底色在 OKLCH 空间自动生成（浅底深色、深底浅色），并用 APCA 对比度校验，格子越密线越淡。原生 RDP 窗口的截图是窗口外框（含系统标题栏），点击用同一基准。',
+      'Capture a desktop and return a PNG. The reply includes a shotId. A 100px coordinate grid is drawn by default; grid units are image pixels, so coordinates can be passed straight to desktop_click. Pass grid=false to disable, or 20–500 for custom spacing. region captures only that area; the top-left corner shows where the crop starts in the full picture and grid labels stay in full-picture coordinates, so they still work with desktop_click. Line colours are generated per block in OKLCH with APCA contrast checks; denser grids are fainter. Native RDP captures the window frame including the system title bar, the same basis used for clicks.',
     images: 'always',
     input: {
       viewId,
@@ -268,7 +268,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_click',
     description:
-      '点击图形桌面。x/y 用 desktop_screenshot 返回那张图的像素坐标：VNC / 内嵌 RDP 是画布坐标；原生 RDP 是窗口外框坐标（截图含系统标题栏，和截图同一基准）。建议把截图返回的 shotId 一起传回来：截图之后窗口缩放、VNC 分辨率切换或 RDP 重新协商时，会按那张截图等比换算坐标；不传 shotId 则用该桌面最近一张截图，也可以传 imageWidth/imageHeight 显式指定。button 默认 left，double=true 表示双击。只读 VNC 会拒绝输入。',
+      'Click a desktop. x/y are pixels in the image returned by desktop_screenshot: canvas coordinates for VNC / embedded RDP, window-frame coordinates for native RDP (the picture includes the system title bar, the same basis as clicks). Pass back the shotId from the screenshot so coordinates are scaled when the window was resized, the VNC resolution changed or RDP renegotiated; without shotId the latest screenshot for that desktop is used, and imageWidth/imageHeight can be passed explicitly. button defaults to left, double=true double-clicks. View-only VNC rejects input.',
     input: {
       viewId,
       x: z.number().int().min(0).describe('图片横坐标'),
@@ -283,13 +283,13 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_key',
     description:
-      '发送按键或组合键，例如 enter、tab、esc、up/down/left/right、ctrl-c、ctrl-shift-t、alt-tab。标点可用 minus、slash、comma、period 等名称。',
+      'Send a key or key combination, e.g. enter, tab, esc, up/down/left/right, ctrl-c, ctrl-shift-t, alt-tab. Punctuation can be named minus, slash, comma, period, etc.',
     input: { viewId, keys: z.string().describe('按键组合，用 - 连接') }
   },
   {
     name: 'desktop_type',
     description:
-      '向图形桌面输入文字。默认 method=keys 逐字发按键（VNC 用 Unicode keysym、内嵌 RDP 用 Unicode 键盘事件），中文可能被远端输入法拦截；中文长文本建议 method=clipboard：先把文字写进远端剪贴板，再发粘贴快捷键。pasteKeys 默认 ctrl-v，终端一般是 ctrl-shift-v。原生 Windows 窗口始终走本机剪贴板粘贴。输入密码等敏感文本前先征得用户同意。',
+      'Type text into a desktop. The default method=keys sends characters one by one (VNC uses Unicode keysyms, embedded RDP uses Unicode key events); Chinese may be intercepted by the remote input method. For longer Chinese text use method=clipboard: the whole text is written to the remote clipboard and a paste shortcut is sent. pasteKeys defaults to ctrl-v; terminals usually need ctrl-shift-v. Native Windows windows always paste through the local clipboard. Ask the user before typing passwords or sensitive text.',
     input: {
       viewId,
       text: z.string().describe('要输入的文字'),
@@ -299,7 +299,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'desktop_scroll',
-    description: '滚动图形桌面。deltaY 正数向下、负数向上；x/y 可选，坐标与截图图片一致，尺寸变化时同样按最近一张截图换算。',
+    description: 'Scroll a desktop. deltaY is positive downwards, negative upwards; x/y are optional and use the same image coordinates; coordinates are scaled when the size changed, like clicks.',
     input: {
       viewId,
       x: z.number().int().min(0).optional(),
@@ -312,7 +312,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'desktop_wait',
-    description: '等待固定时间，或等待画面连续稳定。ms 默认 500；stableMs 大于 0 时检测画面稳定，timeoutMs 默认 10000。原生窗口只支持固定等待。',
+    description: 'Wait for a fixed time, or until the picture is stable. ms defaults to 500; stableMs > 0 waits for a stable picture, timeoutMs defaults to 10000. Native windows only support a fixed wait.',
     input: {
       viewId,
       ms: z.number().int().min(0).max(60000).optional().describe('固定等待毫秒'),
@@ -322,7 +322,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'desktop_actions',
-    description: '按顺序批量执行桌面操作，减少多次往返。actions 每项与 screenshot/click/key/type/scroll/wait 的参数一致并带 action；任意一步失败就停止并返回错误。',
+    description: 'Run desktop operations in order to save round trips. Each item takes the parameters of screenshot/click/key/type/scroll/wait plus an action; execution stops at the first failure and returns the error.',
     images: 'always',
     input: {
       viewId,
@@ -331,14 +331,14 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'desktop_perf',
-    description: '读取图形桌面的累计流量、当前上下行 kbps 和数据包速率。用于判断卡顿来自带宽、画质还是桌面本身。',
+    description: 'Read accumulated traffic, current up/down kbps and packet rate for a desktop. Use it to tell whether a slow desktop is limited by bandwidth, quality or the desktop itself.',
     readOnly: true,
     input: { viewId: z.string().optional().describe('留空返回所有已打开桌面') }
   },
   {
     name: 'desktop_a11y',
     description:
-      '读取 Linux VNC 桌面的 AT-SPI 无障碍控件树，或按 tree 返回的 path 点击控件。通过同主机已有的正向 SSH 连接访问，不自动安装依赖。operation=tree 返回名称、角色、坐标、动作和路径；operation=click 需要 path，action 可选。',
+      'Read the AT-SPI control tree of a Linux VNC desktop, or click a control by its path. Uses an existing forward SSH connection to the same host; does not install dependencies. operation=tree returns name, role, coordinates, actions and path; operation=click needs path, and action is optional.',
     input: {
       viewId,
       operation: z.enum(['tree', 'click']).optional().describe('默认 tree'),
@@ -349,7 +349,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'app_screenshot',
     description:
-      '截取整个 TermPilot 应用窗口：侧边栏、标签栏、终端画面一起，保存为 PNG 并返回路径，图片同时附在结果里。默认叠加 100px 坐标网格，传 grid=false 关闭，或填 20–500 自定义间距。确认界面状态或录演示素材时用。窗口最小化时截不到内容。只截应用自己的窗口，不截系统其他窗口。',
+      'Capture the whole TermPilot window: sidebar, tab bar and terminal together, saved as a PNG and returned with a path; the image is attached to the result. A 100px coordinate grid is drawn by default; pass grid=false to disable or 20–500 for custom spacing. Useful to confirm UI state or record demo material. Nothing is captured while the window is minimised. Only this app window is captured, not other system windows.',
     images: 'always',
     input: {
       grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('默认 100px 网格；false 关闭，或自定义间距')
@@ -358,7 +358,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'app_record',
     description:
-      '录制 TermPilot 应用窗口画面，保存为 WebM。action=start 开始，fps 默认 15，maxSeconds 默认 120、最长 600；action=stop 结束并返回文件路径。同一时间只能录一个。到 maxSeconds 会自动停止并保存，之后 stop 返回已保存的文件。录操作演示时用，录的是应用窗口本身，不含系统其他窗口和声音。',
+      'Record the TermPilot window to WebM. action=start begins (fps defaults to 15, maxSeconds to 120, at most 600); action=stop ends and returns the file path. Only one recording at a time; it stops and saves automatically at maxSeconds, and a later stop returns the saved file. Useful for demos; only the app window is recorded, without other system windows or sound.',
     input: {
       action: z.enum(['start', 'stop']).describe('start 开始录制，stop 结束并保存'),
       fps: z.number().int().min(5).max(30).optional().describe('帧率，默认 15'),
