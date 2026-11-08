@@ -97,7 +97,7 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
           <Button variant="outline" onClick={() => void reveal()}>
             {t('captureDialog.open_containing_folder')}
           </Button>
-          <Button onClick={() => void copy()}>{copied ? t('captureDialog.copied') : t('复制图片')}</Button>
+          <Button onClick={() => void copy()}>{copied ? t('captureDialog.copied') : t('captureDialog.copy_image')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

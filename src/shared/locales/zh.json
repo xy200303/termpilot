@@ -648,5 +648,6 @@
   "serial.not_installed": "serialport 未安装",
   "serial.need_path": "串口连接需要设备路径（COM3 / /dev/ttyUSB0）。先用 serial_list 看本机有哪些串口",
   "serial.open_failed": "打不开串口 {{path}}: {{message}}",
-  "telnet.need_host": "Telnet 需要主机地址"
+  "telnet.need_host": "Telnet 需要主机地址",
+  "captureDialog.copy_image": "复制图片"
 }
