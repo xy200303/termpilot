@@ -10,6 +10,7 @@ import { parseToolArgs, schemaText, TOOLS, toolsText } from './tool-catalog'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { IPC } from '../../shared/ipc-channels'
+import { renderGrid } from './desktop/gridRender'
 import { canonicalKey, encodeTermInput, TERM_KEYS } from '../../shared/term-keys'
 import type { CaptureReply, RecordReply, TermLinesReply, TermModeReply } from '../../shared/types'
 import {
@@ -386,8 +387,6 @@ export class McpService {
       }
       case 'term_write':
         return this.writeTerm(raw)
-      case 'term_read':
-        return clip(agentText(this.terminal.readTail(this.requireTerm(need(raw, 'termId')), intArg(raw, 'maxChars') ?? 8000)))
       case 'term_close': {
         const termId = this.requireTerm(need(raw, 'termId'))
         this.terminal.close(termId)
@@ -400,14 +399,13 @@ export class McpService {
         return this.lines(this.requireTerm(need(raw, 'termId')), intArg(raw, 'startLine'), intArg(raw, 'endLine'))
       case 'term_screenshot': {
         const shot = lineShot(raw)
+        const scope = textArg(raw, 'scope') ?? 'viewport'
+        if (scope !== 'viewport' && scope !== 'buffer') throw new Error('scope 只能是 viewport 或 buffer')
         const termId = this.requireTerm(shot.termId)
-        return shot.ranged
-          ? this.capture(termId, 'scrollback', shot.startLine, shot.endLine, true)
+        if (shot.ranged) return this.capture(termId, 'scrollback', shot.startLine, shot.endLine, true)
+        return scope === 'buffer'
+          ? this.capture(termId, 'scrollback', undefined, undefined, false)
           : this.capture(termId, 'viewport')
-      }
-      case 'term_screenshot_scrollback': {
-        const shot = lineShot(raw)
-        return this.capture(this.requireTerm(shot.termId), 'scrollback', shot.startLine, shot.endLine, shot.ranged)
       }
       case 'serial_list':
         return JSON.stringify(await listSerialPorts(), null, 2)
@@ -508,7 +506,7 @@ export class McpService {
         return this.accessibility.run(need(raw, 'viewId'), operation, textArg(raw, 'path'), textArg(raw, 'action'))
       }
       case 'app_screenshot':
-        return this.appShot()
+        return this.appShot(desktopGrid(raw))
       case 'app_record': {
         const action = textArg(raw, 'action') || 'start'
         if (action === 'start') {
@@ -923,17 +921,20 @@ export class McpService {
     })
   }
 
-  private async appShot(): Promise<string> {
+  private async appShot(grid: boolean | number): Promise<string> {
     const wc = this.getSender()
     if (!wc || wc.isDestroyed()) throw new Error('窗口不可用，无法截图')
     const image = await wc.capturePage()
-    const png = image.toPNG()
+    const step = grid === true ? 100 : typeof grid === 'number' ? grid : 0
+    const size = image.getSize()
+    const drawn = step > 0 ? await renderGrid(wc, image, { step, spanWidth: size.width, spanHeight: size.height }) : image
+    const png = drawn.toPNG()
     if (png.length === 0) throw new Error('窗口没有可截取的内容（可能已最小化）')
     const dir = join(app.getPath('userData'), 'screenshots')
     mkdirSync(dir, { recursive: true })
     const file = join(dir, `app-${stamp()}.png`)
     writeFileSync(file, png)
-    return `已保存应用窗口截图：\n${file}`
+    return `已保存应用窗口截图${drawn !== image ? `（网格 ${step}px）` : ''}：\n${file}`
   }
 
   private startRecording(fps: number, maxSeconds: number): Promise<string> {

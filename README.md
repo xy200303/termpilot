@@ -38,7 +38,7 @@ Windows · macOS · Linux
 - **终端**：SSH、Telnet、串口、本机终端和反向 shell 放在同一行标签里。SSH 复用同一条会话提供 PTY、exec 和 SFTP；Telnet / 串口只有终端字节流。
 - **桌面**：VNC 使用内嵌 noVNC，RDP 默认使用内嵌 IronRDP，也可切换 FreeRDP 原生窗口。每个连接只保留一个桌面标签。
 - **桌面能力**：支持截图网格、图片坐标点击、逐字输入中文和 Emoji、按键、滚动、批量操作、等待画面稳定；VNC / 内嵌 RDP 与本机双向共享文本剪贴板。
-- **Agent**：内置 MCP Server，共 37 个工具，覆盖连接、终端、exec、SFTP、图形桌面和应用窗口截图 / 录屏。桌面工具还能读取 Linux AT-SPI 控件树和实时流量指标。
+- **Agent**：内置 MCP Server，共 35 个工具，覆盖连接、终端、exec、SFTP、图形桌面和应用窗口截图 / 录屏。桌面工具还能读取 Linux AT-SPI 控件树和实时流量指标。
 
 ## 会话模型
 
@@ -62,7 +62,7 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 
 ## Agent 工具
 
-一共 37 个工具，分七族。调用只认编号：`conn-` 是连接，`term-` 是终端，`view-` 是图形桌面；名称和备注只用来认出它。连接有三种协议：SSH（全能：终端、exec 通道、SFTP、并发通道）、Telnet 和串口（只有终端字节流，`term_exec` 和 `sftp_*` 会返回能力说明，屏幕族工具三种协议行为一致）。
+一共 35 个工具，分七族。调用只认编号：`conn-` 是连接，`term-` 是终端，`view-` 是图形桌面；名称和备注只用来认出它。连接有三种协议：SSH（全能：终端、exec 通道、SFTP、并发通道）、Telnet 和串口（只有终端字节流，`term_exec` 和 `sftp_*` 会返回能力说明，屏幕族工具三种协议行为一致）。
 
 ### 连接管理（6）
 
@@ -87,10 +87,8 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 ### 终端画面与标签（10，只作用于 PTY）
 
 - `term_write`：发按键（方向键、回车、`ctrl-c` 等）和文字——TUI、菜单、安装向导都靠它
-- `term_read`：读终端最近输出（去掉 ANSI）
 - `term_lines`：按行号读缓冲（定位截图范围用）
 - `term_screenshot`：截当前屏或指定行号区间
-- `term_screenshot_scrollback`：把整个缓冲拼成长图
 - `term_reconnect`：断线后重连同一扇终端（编号、备注、已绘制的行保留）
 - `term_list` / `term_update` / `term_close` / `term_open_local`：列终端、写备注、关标签、开本机终端
 

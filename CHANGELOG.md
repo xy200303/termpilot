@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.8.5
+
+- 合并重复工具：`term_screenshot_scrollback` 并入 `term_screenshot`，用 `scope=buffer` 截整段缓冲，给 `startLine` / `endLine` 时仍只裁那一段；`term_read` 并入 `term_lines`，不填范围就是当前画面。工具总数 37 → 35。
+- `app_screenshot` 默认叠加 100px 坐标网格，传 `grid=false` 关闭，或填 20–500 自定义间距。
+- 终端截图不加网格：终端按行定位、没有点击坐标，叠网格只会挡住文字。
+
+安装包没有代码签名。
+
 ## 0.8.4
 
 - 桌面点击和滚动支持尺寸换算：`desktop_screenshot` 返回 `shotId`，`desktop_click` / `desktop_scroll` 传回它就按那张截图的坐标空间换算，截图后窗口缩放、VNC 分辨率切换或 RDP 重新协商都不会点偏；不传时用该桌面最近一张截图，也可以显式传 `imageWidth` / `imageHeight`。截图编号失效或属于别的桌面会明确报错，不会按错基准点。

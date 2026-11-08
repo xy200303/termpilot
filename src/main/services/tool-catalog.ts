@@ -62,7 +62,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'connection_list',
     description:
-      '列出已保存的连接。id 是 conn- 编号，用来调用。name 和 remark 只帮助认出这条连接是干什么的，不能拿去当参数。不含密码。每条连接带 protocol（ssh / telnet / serial）和 capabilities：只有 ssh 有 exec 通道（term_exec）、SFTP（sftp_*）和并发通道；telnet 和 serial 只有终端字节流，对它们用 term_pty / term_write / term_read / term_lines / term_screenshot 这一族。',
+      '列出已保存的连接。id 是 conn- 编号，用来调用。name 和 remark 只帮助认出这条连接是干什么的，不能拿去当参数。不含密码。每条连接带 protocol（ssh / telnet / serial）和 capabilities：只有 ssh 有 exec 通道（term_exec）、SFTP（sftp_*）和并发通道；telnet 和 serial 只有终端字节流，对它们用 term_pty / term_write / term_lines / term_screenshot 这一族。',
     readOnly: true
   },
   {
@@ -156,15 +156,6 @@ export const TOOLS: readonly ToolDef[] = [
     }
   },
   {
-    name: 'term_read',
-    description: '读取终端最近输出，已去掉 ANSI 控制符。仅作用于 PTY 终端。',
-    readOnly: true,
-    input: {
-      termId,
-      maxChars: z.number().int().min(200).max(50_000).optional().describe('最多返回多少字符，默认 8000')
-    }
-  },
-  {
     name: 'term_reconnect',
     description: '把已经断开的终端重新连上。编号、标题和备注保留，上次退出时已经画好的行也会按行写回。已经连着时直接返回。不要为此再调用 connection_open。',
     input: { termId }
@@ -185,25 +176,20 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'term_lines',
-    description: '读出终端缓冲里的文字，每行带行号。仅作用于 PTY 终端。不填范围就是当前画面。0 是最旧的一行。先用它确定行号，再交给 term_screenshot。',
+    description: '读出终端缓冲里的文字，每行带行号，已去掉 ANSI 控制符。仅作用于 PTY 终端。不填范围就是当前画面；想看最近输出就传 startLine 0。0 是最旧的一行。先用它确定行号，再交给 term_screenshot。',
     readOnly: true,
     input: lineFields
   },
   {
     name: 'term_screenshot',
     description:
-      '截取终端画面。仅作用于 PTY 终端。不填行号就截当前这一屏。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。一次大约 20 屏，更长就只保留末尾，结果里写明缓冲总行数和实际截到的行。行号用 term_lines 查。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时拍摄已经画出来的画面。',
+      '截取终端画面。仅作用于 PTY 终端。默认截当前这一屏；scope=buffer 时把整段缓冲接成长图。填了 startLine 和 endLine（两端都包含，0 是最旧的一行）就只返回这一段裁好的图。一次大约 20 屏，更长就只保留末尾，结果里写明缓冲总行数和实际截到的行。行号用 term_lines 查。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时拍摄已经画出来的画面。',
     readOnly: true,
     images: 'always',
-    input: lineFields
-  },
-  {
-    name: 'term_screenshot_scrollback',
-    description:
-      '把终端缓冲接成长图。仅作用于 PTY 终端。startLine / endLine 两端都包含，0 是最旧的一行；填了范围就只返回裁好的这一段。一次大约 20 屏，超过后分成多张并只保留末尾，结果写明「缓冲共 X 行，已截取第 A–B 行（超出上限）」。设置里打开「合成算法」时按缓冲拼图，不滚动正在看的画面；关闭时逐屏拍摄再接上。',
-    readOnly: true,
-    images: 'ranged',
-    input: lineFields
+    input: {
+      ...lineFields,
+      scope: z.enum(['viewport', 'buffer']).optional().describe('viewport 只截当前屏（默认），buffer 截整段缓冲')
+    }
   },
   {
     name: 'sftp_list',
@@ -358,8 +344,11 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'app_screenshot',
     description:
-      '截取整个 TermPilot 应用窗口：侧边栏、标签栏、终端画面一起，保存为 PNG 并返回路径，图片同时附在结果里。确认界面状态或录演示素材时用。窗口最小化时截不到内容。只截应用自己的窗口，不截系统其他窗口。',
-    images: 'always'
+      '截取整个 TermPilot 应用窗口：侧边栏、标签栏、终端画面一起，保存为 PNG 并返回路径，图片同时附在结果里。默认叠加 100px 坐标网格，传 grid=false 关闭，或填 20–500 自定义间距。确认界面状态或录演示素材时用。窗口最小化时截不到内容。只截应用自己的窗口，不截系统其他窗口。',
+    images: 'always',
+    input: {
+      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('默认 100px 网格；false 关闭，或自定义间距')
+    }
   },
   {
     name: 'app_record',
