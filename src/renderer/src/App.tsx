@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppSidebar } from './components/Sidebar'
@@ -13,7 +13,10 @@ import { TerminalView } from './components/TerminalView'
 import { VncView } from './components/VncView'
 import { RdpView } from './components/RdpView'
 import { ExternalDesktopView } from './components/ExternalDesktopView'
-import { RemoteEditor } from './components/RemoteEditor'
+/* Monaco 只在第一次打开文件时下载并初始化，不参与首屏解析 */
+const RemoteEditor = lazy(() =>
+  import('./components/RemoteEditor').then((m) => ({ default: m.RemoteEditor }))
+)
 import { EmptyState } from './components/EmptyState'
 import { useAppStore } from './stores/useAppStore'
 import { runCapture } from './terminal/captureView'
@@ -196,7 +199,9 @@ export default function App() {
                 )
               })}
             {currentFile ? (
-              <RemoteEditor key={currentFile.key} tab={currentFile} />
+              <Suspense fallback={<div className="h-full" />}>
+                <RemoteEditor key={currentFile.key} tab={currentFile} />
+              </Suspense>
             ) : activeTab?.kind === 'vnc' || (activeTab?.kind === 'rdp' && !activeSession?.desktopOptions?.nativeClient) ? null : activeTab?.kind === 'rdp' && activeSession ? (
               <ExternalDesktopView key={activeTab.id} viewId={activeTab.id} session={activeSession} />
             ) : activeTab ? (
