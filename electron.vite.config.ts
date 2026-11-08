@@ -18,6 +18,10 @@ export default defineConfig({
         '@': resolve('src/renderer/src')
       }
     },
+    build: {
+      // 生产包默认不压缩，11 MB 的首屏脚本会拖慢启动
+      minify: 'esbuild'
+    },
     plugins: [react(), tailwindcss()]
   }
 })
