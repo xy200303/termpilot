@@ -12,7 +12,7 @@ import init, {
 import type { ClipboardItem } from 'ironrdp-wasm'
 import wasmUrl from '../../../../node_modules/ironrdp-wasm/pkg/rdp_client_bg.wasm?url'
 import type { DesktopAgentInput } from '../../../shared/desktop-agent'
-import { captureCanvas, waitForCanvas } from './capture'
+import { captureCanvas, scaleToCanvas, waitForCanvas } from './capture'
 
 let wasmReady: Promise<unknown> | null = null
 
@@ -130,13 +130,14 @@ function runRdpAgentUnsafe(connection: RdpConnection, input: Exclude<DesktopAgen
   if (input.action === 'click') {
     canvas.focus()
     const button = input.button === 'right' ? 2 : input.button === 'middle' ? 1 : 0
-    const point = rdpPoint(canvas, input.x, input.y)
+    const target = scaleToCanvas(canvas, input.x, input.y, input.fromWidth, input.fromHeight)
+    const point = rdpPoint(canvas, target.x, target.y)
     const events: DeviceEvent[] = [DeviceEvent.mouseMove(point.x, point.y)]
     for (let i = 0; i < (input.double ? 2 : 1); i++) {
       events.push(DeviceEvent.mouseButtonPressed(button), DeviceEvent.mouseButtonReleased(button))
     }
     applyEvents(session, events)
-    return { note: `已发送 RDP 点击（图片坐标 ${input.x}, ${input.y}）` }
+    return { note: `已发送 RDP 点击（图片坐标 ${target.x}, ${target.y}${target.scaled ? '，已按截图尺寸换算' : ''}）` }
   }
   if (input.action === 'key') {
     canvas.focus()
@@ -157,7 +158,8 @@ function runRdpAgentUnsafe(connection: RdpConnection, input: Exclude<DesktopAgen
   }
   const events: DeviceEvent[] = []
   if (input.x !== undefined && input.y !== undefined) {
-    const point = rdpPoint(canvas, input.x, input.y)
+    const scaled = scaleToCanvas(canvas, input.x, input.y, input.fromWidth, input.fromHeight)
+    const point = rdpPoint(canvas, scaled.x, scaled.y)
     events.push(DeviceEvent.mouseMove(point.x, point.y))
   }
   const amount = input.deltaY > 0 ? -1 : 1

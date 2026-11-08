@@ -466,7 +466,8 @@ export class McpService {
           x: intArg(raw, 'x') ?? 0,
           y: intArg(raw, 'y') ?? 0,
           button: desktopButton(raw),
-          double: boolArg(raw, 'double')
+          double: boolArg(raw, 'double'),
+          ...desktopScaleSource(raw)
         })
       case 'desktop_key':
         return this.desktopAgent.run(need(raw, 'viewId'), { action: 'key', keys: need(raw, 'keys') })
@@ -477,7 +478,8 @@ export class McpService {
           action: 'scroll',
           x: intArg(raw, 'x'),
           y: intArg(raw, 'y'),
-          deltaY: intArg(raw, 'deltaY') ?? 0
+          deltaY: intArg(raw, 'deltaY') ?? 0,
+          ...desktopScaleSource(raw)
         })
       case 'desktop_wait':
         return this.desktopAgent.run(need(raw, 'viewId'), {
@@ -1339,6 +1341,18 @@ function desktopGrid(raw: Record<string, unknown>): boolean | number {
   throw new Error('grid 只能是 100px 网格开关（true/false），或 20–500 的网格像素间距')
 }
 
+/** 显式指定截图尺寸时透传；不传则由主进程用最近一张截图兜底。 */
+function desktopScaleSource(raw: Record<string, unknown>): {
+  fromWidth?: number
+  fromHeight?: number
+  shotId?: string
+} {
+  const fromWidth = intArg(raw, 'imageWidth')
+  const fromHeight = intArg(raw, 'imageHeight')
+  const shotId = textArg(raw, 'shotId')
+  return { fromWidth, fromHeight, shotId }
+}
+
 function desktopRegion(raw: Record<string, unknown>): DesktopRegion | undefined {
   const value = raw.region
   if (value === undefined || value === null) return undefined
@@ -1363,13 +1377,20 @@ function desktopAction(raw: Record<string, unknown>): DesktopAgentInput {
       x: intArg(raw, 'x') ?? 0,
       y: intArg(raw, 'y') ?? 0,
       button: desktopButton(raw),
-      double: boolArg(raw, 'double')
+      double: boolArg(raw, 'double'),
+      ...desktopScaleSource(raw)
     }
   }
   if (action === 'key') return { action, keys: need(raw, 'keys') }
   if (action === 'type') return { action, text: need(raw, 'text') }
   if (action === 'scroll') {
-    return { action, x: intArg(raw, 'x'), y: intArg(raw, 'y'), deltaY: intArg(raw, 'deltaY') ?? 0 }
+    return {
+      action,
+      x: intArg(raw, 'x'),
+      y: intArg(raw, 'y'),
+      deltaY: intArg(raw, 'deltaY') ?? 0,
+      ...desktopScaleSource(raw)
+    }
   }
   if (action === 'wait') {
     return { action, ms: intArg(raw, 'ms'), stableMs: intArg(raw, 'stableMs'), timeoutMs: intArg(raw, 'timeoutMs') }

@@ -22,6 +22,19 @@ export function captureCanvas(canvas: HTMLCanvasElement): CanvasCapture {
   }
 }
 
+/** 截图尺寸和当前画布不同时，把坐标按比例换算到当前画面。 */
+export function scaleToCanvas(
+  canvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  fromWidth?: number,
+  fromHeight?: number
+): { x: number; y: number; scaled: boolean } {
+  const sx = fromWidth && fromWidth > 0 && fromWidth !== canvas.width ? canvas.width / fromWidth : 1
+  const sy = fromHeight && fromHeight > 0 && fromHeight !== canvas.height ? canvas.height / fromHeight : 1
+  return { x: Math.round(x * sx), y: Math.round(y * sy), scaled: sx !== 1 || sy !== 1 }
+}
+
 export async function waitForCanvas(canvas: HTMLCanvasElement, input: DesktopWaitInput): Promise<{ note: string }> {
   const ms = Math.max(0, Math.min(input.ms ?? 500, 60_000))
   if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms))

@@ -1,4 +1,12 @@
-export interface DesktopClickInput {
+/** 截图时的画面尺寸；和当前尺寸不同时，坐标按比例换算。 */
+export interface DesktopScaleSource {
+  fromWidth?: number
+  fromHeight?: number
+  /** desktop_screenshot 返回的截图编号，点击时按这张图的坐标空间换算。 */
+  shotId?: string
+}
+
+export interface DesktopClickInput extends DesktopScaleSource {
   x: number
   y: number
   button?: 'left' | 'middle' | 'right'
@@ -14,7 +22,7 @@ export interface DesktopTypeInput {
   text: string
 }
 
-export interface DesktopScrollInput {
+export interface DesktopScrollInput extends DesktopScaleSource {
   x?: number
   y?: number
   deltaY: number

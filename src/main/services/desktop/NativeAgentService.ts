@@ -23,26 +23,35 @@ export class NativeAgentService {
     if (input.action === 'click') {
       const flags = input.button === 'right' ? '0x0018' : input.button === 'middle' ? '0x0020' : '0x0006'
       const count = input.double ? 2 : 1
+      const px = input.fromWidth ? `[math]::Round(${Math.round(input.x)} * $winW / ${input.fromWidth})` : String(Math.round(input.x))
+      const py = input.fromHeight ? `[math]::Round(${Math.round(input.y)} * $winH / ${input.fromHeight})` : String(Math.round(input.y))
       await this.script(pid, `
 ${windowApi()}
 $h = (Get-Process -Id ${pid}).MainWindowHandle
 if ($h -eq 0) { throw '原生窗口尚未创建完成' }
 $r = New-Object Win32+RECT
 [Win32]::GetWindowRect($h, [ref]$r) | Out-Null
+$winW = $r.Right - $r.Left
+$winH = $r.Bottom - $r.Top
 [Win32]::SetForegroundWindow($h) | Out-Null
-[Win32]::SetCursorPos($r.Left + ${Math.round(input.x)}, $r.Top + ${Math.round(input.y)}) | Out-Null
+[Win32]::SetCursorPos($r.Left + ${px}, $r.Top + ${py}) | Out-Null
 1..${count} | ForEach-Object { [Win32]::mouse_event(${flags}, 0, 0, 0, [UIntPtr]::Zero) }
 `)
       return { note: `已点击原生窗口 (${input.x}, ${input.y})` }
     }
     if (input.action === 'scroll') {
-      const move = input.x === undefined || input.y === undefined ? '' : `[Win32]::SetCursorPos($r.Left + ${Math.round(input.x)}, $r.Top + ${Math.round(input.y)}) | Out-Null`
+      const move =
+        input.x === undefined || input.y === undefined
+          ? ''
+          : `[Win32]::SetCursorPos($r.Left + ${input.fromWidth ? `[math]::Round(${Math.round(input.x)} * $winW / ${input.fromWidth})` : Math.round(input.x)}, $r.Top + ${input.fromHeight ? `[math]::Round(${Math.round(input.y)} * $winH / ${input.fromHeight})` : Math.round(input.y)}) | Out-Null`
       await this.script(pid, `
 ${windowApi()}
 $h = (Get-Process -Id ${pid}).MainWindowHandle
 if ($h -eq 0) { throw '原生窗口尚未创建完成' }
 $r = New-Object Win32+RECT
 [Win32]::GetWindowRect($h, [ref]$r) | Out-Null
+$winW = $r.Right - $r.Left
+$winH = $r.Bottom - $r.Top
 [Win32]::SetForegroundWindow($h) | Out-Null
 ${move}
 [Win32]::mouse_event(0x0800, 0, 0, ${-Math.round(input.deltaY)}, [UIntPtr]::Zero)

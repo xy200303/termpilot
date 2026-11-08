@@ -1,6 +1,6 @@
 import type RFB from '@novnc/novnc'
 import type { DesktopAgentInput } from '../../../shared/desktop-agent'
-import { captureCanvas, waitForCanvas } from './capture'
+import { captureCanvas, scaleToCanvas, waitForCanvas } from './capture'
 
 interface Entry {
   rfb: RFB
@@ -33,7 +33,8 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
   if (input.action === 'click') {
     const button = input.button === 'right' ? 2 : input.button === 'middle' ? 1 : 0
     const buttons = input.button === 'right' ? 2 : input.button === 'middle' ? 4 : 1
-    const point = canvasPoint(canvas, input.x, input.y)
+    const target = scaleToCanvas(canvas, input.x, input.y, input.fromWidth, input.fromHeight)
+    const point = canvasPoint(canvas, target.x, target.y)
     const base = { bubbles: true, cancelable: true, button, clientX: point.x, clientY: point.y }
     canvas.focus()
     for (let i = 0; i < (input.double ? 2 : 1); i++) {
@@ -42,7 +43,7 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
       canvas.dispatchEvent(new MouseEvent('mouseup', { ...base, buttons: 0, detail: i + 1 }))
       canvas.dispatchEvent(new MouseEvent('click', { ...base, buttons: 0, detail: i + 1 }))
     }
-    return { note: `已发送 VNC 点击（图片坐标 ${input.x}, ${input.y}）` }
+    return { note: `已发送 VNC 点击（图片坐标 ${target.x}, ${target.y}${target.scaled ? '，已按截图尺寸换算' : ''}）` }
   }
   if (input.action === 'key') {
     rfb.focus()
@@ -55,9 +56,8 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
     return { note: `已逐字输入 ${Array.from(input.text).length} 个字符` }
   }
   const rect = canvas.getBoundingClientRect()
-  const x = input.x ?? canvas.width / 2
-  const y = input.y ?? canvas.height / 2
-  const point = canvasPoint(canvas, x, y)
+  const scaled = scaleToCanvas(canvas, input.x ?? canvas.width / 2, input.y ?? canvas.height / 2, input.fromWidth, input.fromHeight)
+  const point = canvasPoint(canvas, scaled.x, scaled.y)
   canvas.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: input.deltaY, clientX: point.x, clientY: point.y }))
   return { note: `已发送 VNC 滚动 ${input.deltaY}（画布显示宽度 ${Math.round(rect.width)}px）` }
 }

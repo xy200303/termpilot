@@ -263,7 +263,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_screenshot',
     description:
-      '截取一个图形桌面并返回 PNG。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，左上角会用角标标出这块图在原画面里的起点坐标，刻度也用原画面坐标，可直接拿去 desktop_click。网格线按局部底色在 OKLCH 空间自动生成（浅底深色、深底浅色），并用 APCA 对比度校验，格子越密线越淡。原生 RDP 窗口的截图是窗口外框（含系统标题栏），点击用同一基准。',
+      '截取一个图形桌面并返回 PNG，返回文字里带 shotId。默认叠加 100px 坐标网格，网格刻度就是图片像素坐标，便于直接算点击位置；传 grid=false 关闭，或填 20–500 自定义间距。region 可以只截某块区域，左上角会用角标标出这块图在原画面里的起点坐标，刻度也用原画面坐标，可直接拿去 desktop_click。网格线按局部底色在 OKLCH 空间自动生成（浅底深色、深底浅色），并用 APCA 对比度校验，格子越密线越淡。原生 RDP 窗口的截图是窗口外框（含系统标题栏），点击用同一基准。',
     images: 'always',
     input: {
       viewId,
@@ -282,13 +282,16 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_click',
     description:
-      '点击图形桌面。x/y 用 desktop_screenshot 返回那张图的像素坐标：VNC / 内嵌 RDP 是画布坐标；原生 RDP 是窗口外框坐标（截图含系统标题栏，和截图同一基准）。button 默认 left，double=true 表示双击。只读 VNC 会拒绝输入。',
+      '点击图形桌面。x/y 用 desktop_screenshot 返回那张图的像素坐标：VNC / 内嵌 RDP 是画布坐标；原生 RDP 是窗口外框坐标（截图含系统标题栏，和截图同一基准）。建议把截图返回的 shotId 一起传回来：截图之后窗口缩放、VNC 分辨率切换或 RDP 重新协商时，会按那张截图等比换算坐标；不传 shotId 则用该桌面最近一张截图，也可以传 imageWidth/imageHeight 显式指定。button 默认 left，double=true 表示双击。只读 VNC 会拒绝输入。',
     input: {
       viewId,
       x: z.number().int().min(0).describe('图片横坐标'),
       y: z.number().int().min(0).describe('图片纵坐标'),
       button: z.enum(['left', 'middle', 'right']).optional().describe('默认 left'),
-      double: z.boolean().optional().describe('是否双击')
+      double: z.boolean().optional().describe('是否双击'),
+      imageWidth: z.number().int().min(1).optional().describe('截图时的图片宽度，缺省用最近一张截图'),
+      imageHeight: z.number().int().min(1).optional().describe('截图时的图片高度'),
+      shotId: z.string().optional().describe('desktop_screenshot 返回的截图编号，按那张图的坐标换算')
     }
   },
   {
@@ -305,12 +308,15 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'desktop_scroll',
-    description: '滚动图形桌面。deltaY 正数向下、负数向上；x/y 可选，坐标与截图图片一致。',
+    description: '滚动图形桌面。deltaY 正数向下、负数向上；x/y 可选，坐标与截图图片一致，尺寸变化时同样按最近一张截图换算。',
     input: {
       viewId,
       x: z.number().int().min(0).optional(),
       y: z.number().int().min(0).optional(),
-      deltaY: z.number().int().describe('滚动量，正负均可')
+      deltaY: z.number().int().describe('滚动量，正负均可'),
+      imageWidth: z.number().int().min(1).optional().describe('截图时的图片宽度，缺省用最近一张截图'),
+      imageHeight: z.number().int().min(1).optional().describe('截图时的图片高度'),
+      shotId: z.string().optional().describe('desktop_screenshot 返回的截图编号，按那张图的坐标换算')
     }
   },
   {
