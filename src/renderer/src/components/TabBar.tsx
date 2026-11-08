@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { Camera, ChevronLeft, ChevronRight, GalleryVertical, Gauge, MonitorUp, ScreenShare, TerminalSquare, X } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, GalleryVertical, Gauge, Keyboard, MonitorUp, ScreenShare, TerminalSquare, Type, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
@@ -15,6 +15,9 @@ import { openAfterMenu, RemarkDialog } from './RemarkDialog'
 import { useAppStore } from '../stores/useAppStore'
 import { captureTerminalView, type CaptureDone } from '../terminal/captureView'
 import { CaptureDialog } from './CaptureDialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { sendTextToVnc } from '../desktop/vncAgent'
+import { sendTextToRdp } from '../desktop/rdpAgent'
 
 const drag = { WebkitAppRegion: 'drag' } as CSSProperties
 
@@ -40,6 +43,11 @@ export function TabBar() {
   const isDesktop = activeTab?.kind === 'rdp' || activeTab?.kind === 'vnc'
   const desktopPerformance = useAppStore((s) => s.desktopPerformance)
   const toggleDesktopPerformance = useAppStore((s) => s.toggleDesktopPerformance)
+  const desktopIme = useAppStore((s) => s.desktopIme)
+  const setDesktopIme = useAppStore((s) => s.setDesktopIme)
+  const [sayOpen, setSayOpen] = useState(false)
+  const [sayText, setSayText] = useState('')
+  const [sayBusy, setSayBusy] = useState(false)
   const [shot, setShot] = useState<CaptureDone | null>(null)
   const [shotError, setShotError] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -75,6 +83,22 @@ export function TabBar() {
 
   const scrollStrip = (dir: -1 | 1) => {
     stripRef.current?.scrollBy({ left: dir * 240, behavior: 'smooth' })
+  }
+
+  const sendSay = async (pasteKeys: string) => {
+    if (!activeTab) return
+    setSayBusy(true)
+    try {
+      if (activeTab.kind === 'vnc') await sendTextToVnc(activeTab.id, sayText, pasteKeys)
+      else await sendTextToRdp(activeTab.id, sayText, pasteKeys)
+      setSayOpen(false)
+      setSayText('')
+      setNotice(pasteKeys === 'ctrl-shift-v' ? '已按终端方式粘贴' : '已粘贴到桌面')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSayBusy(false)
+    }
   }
 
   const shoot = (mode: 'viewport' | 'scrollback') => {
@@ -199,6 +223,21 @@ export function TabBar() {
           <Gauge />
         </Button>
       )}
+      {activeTab?.kind === 'vnc' && (
+        <Button
+          variant={desktopIme[activeTab.id] ? 'secondary' : 'ghost'}
+          size="icon-sm"
+          title={desktopIme[activeTab.id] ? '退出中文键盘接管' : '中文键盘接管（本机输入法直接打中文）'}
+          onClick={() => setDesktopIme(activeTab.id, !desktopIme[activeTab.id])}
+        >
+          <Keyboard />
+        </Button>
+      )}
+      {isDesktop && (
+        <Button variant="ghost" size="icon-sm" title="发送文字（走远端剪贴板）" onClick={() => setSayOpen(true)}>
+          <Type />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon-sm"
@@ -242,6 +281,35 @@ export function TabBar() {
         setRemarkingId(null)
       }}
     />
+    <Dialog open={sayOpen} onOpenChange={(open) => !open && setSayOpen(false)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>发送文字</DialogTitle>
+          <DialogDescription>
+            用本机输入法打完，整段写进远端剪贴板再粘贴。终端里的应用用「粘贴到终端」。
+          </DialogDescription>
+        </DialogHeader>
+        <textarea
+          autoFocus
+          value={sayText}
+          onChange={(event) => setSayText(event.target.value)}
+          placeholder="要发送的文字"
+          className="h-24 w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus-visible:ring-1"
+        />
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            disabled={sayBusy || !sayText || !activeTab}
+            onClick={() => void sendSay('ctrl-shift-v')}
+          >
+            粘贴到终端
+          </Button>
+          <Button disabled={sayBusy || !sayText || !activeTab} onClick={() => void sendSay('ctrl-v')}>
+            粘贴
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
     <CaptureDialog
       shot={shot}
       error={shotError}

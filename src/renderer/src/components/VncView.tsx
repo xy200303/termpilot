@@ -5,7 +5,6 @@ import { useAppStore } from '../stores/useAppStore'
 import type { SessionConfig } from '../../../shared/types'
 import { registerVnc, sendVncChar, sendVncCombo, sendVncKey, unregisterVnc } from '../desktop/vncAgent'
 import { DesktopPerfHud } from './DesktopPerfHud'
-import { DesktopTextInput } from './DesktopTextInput'
 import { ImeKeyboard } from './ImeKeyboard'
 
 const VNC_PROFILE = {
@@ -21,7 +20,9 @@ export function VncView(props: { viewId: string; session: SessionConfig; active:
   const autoLevelRef = useRef<'quality' | 'balanced' | 'speed'>('balanced')
   const activeRef = useRef(props.active)
   const [attempt, setAttempt] = useState(0)
-  const [ime, setIme] = useState(false)
+  const desktopIme = useAppStore((s) => s.desktopIme)
+  const setDesktopIme = useAppStore((s) => s.setDesktopIme)
+  const ime = desktopIme[props.viewId] === true
   const status = useAppStore((s) => s.desktopState[props.viewId])
   const desktopPerformance = useAppStore((s) => s.desktopPerformance)
   const onStatus = useAppStore((s) => s.onDesktopStatus)
@@ -185,33 +186,13 @@ export function VncView(props: { viewId: string; session: SessionConfig; active:
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
       <div ref={host} className="absolute inset-0" />
-      <DesktopTextInput
-        viewId={props.viewId}
-        mode="vnc"
-        disabled={props.session.desktopOptions?.viewOnly === true}
-      />
-      {props.session.desktopOptions?.viewOnly !== true && (
-        <Button
-          size="sm"
-          variant={ime ? 'default' : 'secondary'}
-          className="absolute bottom-3 left-3 z-20"
-          onClick={() => {
-            setIme((value) => {
-              if (value) host.current?.querySelector('canvas')?.focus()
-              return !value
-            })
-          }}
-        >
-          {ime ? '退出中文键盘' : '中文键盘'}
-        </Button>
-      )}
       <ImeKeyboard
         active={ime && props.active}
         onChar={(char) => sendVncChar(props.viewId, char)}
         onKey={(name) => sendVncKey(props.viewId, name)}
         onCombo={(combo) => sendVncCombo(props.viewId, combo)}
         onExit={() => {
-          setIme(false)
+          setDesktopIme(props.viewId, false)
           host.current?.querySelector('canvas')?.focus()
         }}
       />

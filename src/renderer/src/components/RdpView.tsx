@@ -4,7 +4,6 @@ import { useAppStore } from '../stores/useAppStore'
 import type { SessionConfig } from '../../../shared/types'
 import { connectRdp, registerRdp, unregisterRdp, attachRdpInput, type RdpConnection } from '../desktop/rdpAgent'
 import { DesktopPerfHud } from './DesktopPerfHud'
-import { DesktopTextInput } from './DesktopTextInput'
 
 export function RdpView(props: { viewId: string; session: SessionConfig; active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -90,7 +89,6 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
       <canvas ref={canvasRef} tabIndex={0} className="max-h-full max-w-full outline-none" />
-      <DesktopTextInput viewId={props.viewId} mode="rdp" />
       {desktopPerformance && (
         <DesktopPerfHud
           viewId={props.viewId}

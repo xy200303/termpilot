@@ -54,6 +54,8 @@ interface AppState {
   sidebarCollapsed: boolean
   /** 桌面性能浮层 */
   desktopPerformance: boolean
+  /** 哪些桌面标签开着「中文键盘」接管 */
+  desktopIme: Record<string, boolean>
   /** 侧边栏页：连接树 / 远程文件树 */
   sidebarPane: 'connect' | 'files'
   /** 树节点折叠，key 为 forward / reverse / 分组名 */
@@ -117,6 +119,7 @@ interface AppState {
 
   toggleSidebar: () => void
   toggleDesktopPerformance: () => void
+  setDesktopIme: (viewId: string, active: boolean) => void
   setSidebarPane: (pane: 'connect' | 'files') => void
   toggleGroup: (group: string) => void
   selectSession: (id: string) => void
@@ -148,6 +151,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeTabId: null,
   sidebarCollapsed: false,
   desktopPerformance: false,
+  desktopIme: {},
   sidebarPane: 'connect',
   collapsedGroups: {},
   search: '',
@@ -556,6 +560,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
   toggleDesktopPerformance: () => set({ desktopPerformance: !get().desktopPerformance }),
+  setDesktopIme: (viewId, active) => set({ desktopIme: { ...get().desktopIme, [viewId]: active } }),
   setSidebarPane: (pane) => set({ sidebarPane: pane }),
   toggleGroup: (group) =>
     set({ collapsedGroups: { ...get().collapsedGroups, [group]: !get().collapsedGroups[group] } }),
