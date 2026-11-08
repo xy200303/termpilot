@@ -84,7 +84,7 @@ export class DesktopService {
     try {
       if (session.protocol === 'vnc') return await this.openVnc(viewId, session)
       if (session.protocol === 'rdp') return await this.openRdp(viewId, session)
-      throw new Error(mt('desktop.not_desktop', { protocol: protocolLabel(session.protocol) }))
+      throw new Error(mt('desktop.not_desktop', { protocol: mt(protocolLabel(session.protocol)) }))
     } catch (error) {
       this.sessions.delete(viewId)
       const message = error instanceof Error ? error.message : String(error)

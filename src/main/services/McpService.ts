@@ -732,7 +732,7 @@ export class McpService {
     } else if (protocol === 'telnet') {
       if (!input.host) throw new Error(mt('mcp.err_telnet_host'))
     } else if (isDesktopProtocol(protocol)) {
-      if (!input.host) throw new Error(mt('mcp.err_host_required', { protocol: protocolLabel(protocol) }))
+      if (!input.host) throw new Error(mt('mcp.err_host_required', { protocol: mt(protocolLabel(protocol)) }))
     } else if (input.mode === 'forward') {
       if (!input.host || !input.username) throw new Error(mt('mcp.err_host_user'))
       if (input.authType === 'key' && !input.keyPath) throw new Error(mt('mcp.err_key_path'))
@@ -807,12 +807,12 @@ export class McpService {
     const feature = capability === 'exec' ? mt('mcp.feature_exec') : mt('mcp.feature_sftp')
     if (isDesktopProtocol(found.protocol)) {
       throw new Error(
-        mt('mcp.err_desktop_no_stream', { protocol: protocolLabel(found.protocol), feature }) +
+        mt('mcp.err_desktop_no_stream', { protocol: mt(protocolLabel(found.protocol)), feature }) +
           mt('mcp.err_desktop_hint')
       )
     }
     throw new Error(
-      mt('mcp.err_stream_only', { protocol: protocolLabel(found.protocol), feature }) +
+      mt('mcp.err_stream_only', { protocol: mt(protocolLabel(found.protocol)), feature }) +
         mt('mcp.err_stream_hint')
     )
   }
