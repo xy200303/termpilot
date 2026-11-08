@@ -8,6 +8,7 @@ import type { WebContents } from 'electron'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { parseToolArgs, schemaText, TOOLS, toolsText } from './tool-catalog'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { t as mt } from '../i18n'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { IPC } from '../../shared/ipc-channels'
 import { renderGrid } from './desktop/gridRender'
@@ -802,16 +803,16 @@ export class McpService {
   private requireCapability(key: string, capability: 'exec' | 'sftp') {
     const found = this.requireForward(key)
     if (capabilitiesOf(found.protocol)[capability]) return found
-    const feature = capability === 'exec' ? 'exec 通道（term_exec）' : 'SFTP 文件传输（sftp_*）'
+    const feature = capability === 'exec' ? mt('mcp.feature_exec') : mt('mcp.feature_sftp')
     if (isDesktopProtocol(found.protocol)) {
       throw new Error(
-        `该连接是 ${protocolLabel(found.protocol)} 图形桌面，没有终端字节流，不支持 ${feature}。` +
-          `可用 app_screenshot / app_record 截取应用窗口；该协议也不支持 term_pty / term_write。`
+        mt('mcp.err_desktop_no_stream', { protocol: protocolLabel(found.protocol), feature }) +
+          mt('mcp.err_desktop_hint')
       )
     }
     throw new Error(
-      `该连接是${protocolLabel(found.protocol)}协议，只有终端字节流，不支持 ${feature}。` +
-        `改用 connection_open 开终端后走 term_pty / term_write 这一族。`
+      mt('mcp.err_stream_only', { protocol: protocolLabel(found.protocol), feature }) +
+        mt('mcp.err_stream_hint')
     )
   }
 
@@ -1207,7 +1208,7 @@ function rpcError(message: string) {
 
 function listenError(error: unknown, port: number): string {
   if (error && typeof error === 'object' && 'code' in error && error.code === 'EADDRINUSE') {
-    return `端口 ${port} 已被占用`
+    return mt('mcp.err_port_in_use', { port })
   }
   return error instanceof Error ? error.message : String(error)
 }
@@ -1216,7 +1217,7 @@ function desktopButton(raw: Record<string, unknown>): 'left' | 'middle' | 'right
   const value = textArg(raw, 'button')
   if (!value) return undefined
   if (value !== 'left' && value !== 'middle' && value !== 'right') {
-    throw new Error('button 只能是 left、middle 或 right')
+    throw new Error(mt('mcp.err_button'))
   }
   return value
 }
@@ -1242,14 +1243,14 @@ function auditDetail(input: Record<string, unknown>): string {
 
 function need(raw: Record<string, unknown>, key: string): string {
   const value = textArg(raw, key)
-  if (!value) throw new Error(`缺少 ${key}`)
+  if (!value) throw new Error(mt('mcp.err_missing', { key }))
   return value
 }
 
 function textArg(raw: Record<string, unknown>, key: string): string | undefined {
   const value = raw[key]
   if (value === undefined || value === null || value === '') return undefined
-  if (typeof value !== 'string') throw new Error(`${key} 必须是字符串`)
+  if (typeof value !== 'string') throw new Error(mt('mcp.err_string', { key }))
   return value
 }
 
@@ -1257,7 +1258,7 @@ function intArg(raw: Record<string, unknown>, key: string): number | undefined {
   const value = raw[key]
   if (value === undefined || value === null || value === '') return undefined
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
-  if (!Number.isInteger(parsed)) throw new Error(`${key} 必须是整数`)
+  if (!Number.isInteger(parsed)) throw new Error(mt('mcp.err_int', { key }))
   return parsed
 }
 
@@ -1266,18 +1267,18 @@ function boolArg(raw: Record<string, unknown>, key: string): boolean | undefined
   if (value === undefined || value === null || value === '') return undefined
   if (value === true || value === 'true') return true
   if (value === false || value === 'false') return false
-  throw new Error(`${key} 必须是 true 或 false`)
+  throw new Error(mt('mcp.err_bool', { key }))
 }
 
 function keyArg(raw: Record<string, unknown>): Array<(typeof TERM_KEYS)[number]> | undefined {
   const value = raw.keys
   if (value === undefined || value === null || value === '') return undefined
   const list = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : null
-  if (!list) throw new Error('keys 必须是按键列表')
+  if (!list) throw new Error(mt('mcp.err_keys'))
   const allowed = new Set<string>(TERM_KEYS)
   const keys = list.map((item) => canonicalKey(String(item))).filter(Boolean)
   for (const key of keys) {
-    if (!allowed.has(key)) throw new Error(`不认识的按键: ${key}`)
+    if (!allowed.has(key)) throw new Error(mt('mcp.err_key_unknown', { key }))
   }
   return keys as Array<(typeof TERM_KEYS)[number]>
 }
@@ -1285,19 +1286,19 @@ function keyArg(raw: Record<string, unknown>): Array<(typeof TERM_KEYS)[number]>
 function sessionPatch(raw: Record<string, unknown>): SessionPatch {
   const protocol = textArg(raw, 'protocol')
   if (protocol && protocol !== 'ssh' && protocol !== 'telnet' && protocol !== 'serial' && protocol !== 'rdp' && protocol !== 'vnc') {
-    throw new Error('protocol 只能是 ssh、telnet、serial、rdp 或 vnc')
+    throw new Error(mt('mcp.err_protocol'))
   }
   const mode = textArg(raw, 'mode')
-  if (mode && mode !== 'forward' && mode !== 'reverse') throw new Error('mode 只能是 forward 或 reverse')
+  if (mode && mode !== 'forward' && mode !== 'reverse') throw new Error(mt('mcp.err_mode'))
   const authType = textArg(raw, 'authType')
-  if (authType && authType !== 'password' && authType !== 'key') throw new Error('authType 只能是 password 或 key')
+  if (authType && authType !== 'password' && authType !== 'key') throw new Error(mt('mcp.err_auth_type'))
   const parity = textArg(raw, 'parity')
   if (parity && parity !== 'none' && parity !== 'even' && parity !== 'odd' && parity !== 'mark' && parity !== 'space') {
-    throw new Error('parity 只能是 none、even、odd、mark 或 space')
+    throw new Error(mt('mcp.err_parity'))
   }
   const sftpMode = textArg(raw, 'sftpMode')
   if (sftpMode && sftpMode !== 'auto' && sftpMode !== 'shared' && sftpMode !== 'fresh') {
-    throw new Error('sftpMode 只能是 auto、shared 或 fresh')
+    throw new Error(mt('mcp.err_sftp_mode'))
   }
   return {
     protocol: protocol as SessionPatch['protocol'],
@@ -1334,7 +1335,7 @@ function desktopPerformance(raw: Record<string, unknown>): DesktopOptions['perfo
   const value = textArg(raw, 'performance')
   if (value === undefined) return undefined
   if (value === 'auto' || value === 'quality' || value === 'balanced' || value === 'speed') return value
-  throw new Error('performance 只能是 auto、quality、balanced 或 speed')
+  throw new Error(mt('mcp.err_performance'))
 }
 
 function desktopGrid(raw: Record<string, unknown>): boolean | number {
@@ -1343,14 +1344,14 @@ function desktopGrid(raw: Record<string, unknown>): boolean | number {
   if (grid === undefined) return 100
   if (typeof grid === 'boolean') return grid
   if (typeof grid === 'number' && Number.isInteger(grid) && grid >= 20 && grid <= 500) return grid
-  throw new Error('grid 只能是 100px 网格开关（true/false），或 20–500 的网格像素间距')
+  throw new Error(mt('mcp.err_grid'))
 }
 
 /** desktop_type 的输入方式：keys 逐字按键（默认），clipboard 走远端剪贴板。 */
 function desktopTypeOptions(raw: Record<string, unknown>): { method?: 'keys' | 'clipboard'; pasteKeys?: string } {
   const method = textArg(raw, 'method')
   if (method !== undefined && method !== 'keys' && method !== 'clipboard') {
-    throw new Error('method 只能是 keys 或 clipboard')
+    throw new Error(mt('mcp.err_method'))
   }
   return { method, pasteKeys: textArg(raw, 'pasteKeys') }
 }
@@ -1370,14 +1371,14 @@ function desktopScaleSource(raw: Record<string, unknown>): {
 function desktopRegion(raw: Record<string, unknown>): DesktopRegion | undefined {
   const value = raw.region
   if (value === undefined || value === null) return undefined
-  if (typeof value !== 'object') throw new Error('region 需要 { x, y, width, height }')
+  if (typeof value !== 'object') throw new Error(mt('mcp.err_region_shape'))
   const region = value as Record<string, unknown>
   const x = intArg(region, 'x')
   const y = intArg(region, 'y')
   const width = intArg(region, 'width')
   const height = intArg(region, 'height')
   if (x === undefined || y === undefined || width === undefined || height === undefined) {
-    throw new Error('region 需要 x、y、width、height 四个整数')
+    throw new Error(mt('mcp.err_region_fields'))
   }
   return { x, y, width, height }
 }
@@ -1411,7 +1412,7 @@ function desktopAction(raw: Record<string, unknown>): DesktopAgentInput {
   if (action === 'wait') {
     return { action, ms: intArg(raw, 'ms'), stableMs: intArg(raw, 'stableMs'), timeoutMs: intArg(raw, 'timeoutMs') }
   }
-  throw new Error(`不支持的桌面操作 ${action || '(缺少 action)'}`)
+  throw new Error(mt('mcp.err_desktop_action', { action: action || '(missing action)' }))
 }
 
 function stripAnsi(text: string): string {
