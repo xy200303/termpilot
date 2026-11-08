@@ -338,7 +338,7 @@ function rdpErrorText(error: unknown): string {
   if (error && typeof error === 'object') {
     const candidate = error as { kind?: () => number; backtrace?: () => string; reason?: () => string }
     const backtrace = typeof candidate.backtrace === 'function' ? candidate.backtrace() : ''
-    if (typeof candidate.kind === 'function') return `RDP 错误（类别 ${candidate.kind()}）${backtrace ? `：${backtrace}` : ''}`
+    if (typeof candidate.kind === 'function') return tr('rdp.error_kind', { kind: String(candidate.kind()), detail: backtrace ? tr('rdp.error_detail', { text: backtrace }) : '' })
     if (backtrace) return backtrace
     if (typeof candidate.reason === 'function') return candidate.reason()
     return JSON.stringify(error)

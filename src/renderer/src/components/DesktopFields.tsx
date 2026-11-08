@@ -66,7 +66,7 @@ export function DesktopFields(props: {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="auto">自动</SelectItem>
+            <SelectItem value="auto">{t('perf.auto')}</SelectItem>
             <SelectItem value="quality">{t('desktop.quality')}</SelectItem>
             <SelectItem value="balanced">{t('desktop.balanced')}</SelectItem>
             <SelectItem value="speed">{t('desktop.speed')}</SelectItem>

@@ -196,7 +196,7 @@ async function deliverReplay(
 function bufferNote(total: number, from: number, covered: number, wantStart: number, wantEnd: number): string {
   const to = Math.max(from, covered - 1)
   const text = tr('capture.buffer_has_total_lines_captured_lines_from_to', { total, from, to })
-  if (from > wantStart || covered < wantEnd) return `${text}（超出上限）`
+  if (from > wantStart || covered < wantEnd) return tr('capture.over_limit', { text })
   return text
 }
 
@@ -316,7 +316,7 @@ async function stitch(shots: PageShot[]): Promise<string[]> {
     canvas.width = width
     canvas.height = group.reduce((sum, slice) => sum + slice.sh, 0)
     const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('无法拼接截图')
+    if (!ctx) throw new Error(tr('capture.compose_failed'))
     ctx.imageSmoothingEnabled = false
     let y = 0
     for (const slice of group) {
@@ -352,7 +352,7 @@ function loadImage(pngBase64: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('截图解码失败'))
+    image.onerror = () => reject(new Error(tr('capture.decode_failed')))
     image.src = `data:image/png;base64,${pngBase64}`
   })
 }

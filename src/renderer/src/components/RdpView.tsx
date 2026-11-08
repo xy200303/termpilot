@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '../stores/useAppStore'
-import { useT } from '../i18n'
+import i18n, { useT } from '../i18n'
 import type { SessionConfig } from '../../../shared/types'
 import { connectRdp, registerRdp, unregisterRdp, attachRdpInput, type RdpConnection } from '../desktop/rdpAgent'
 import { DesktopPerfHud } from './DesktopPerfHud'
@@ -134,7 +134,7 @@ function rdpErrorText(error: unknown): string {
   if (error && typeof error === 'object') {
     const candidate = error as { backtrace?: () => string; reason?: () => string; kind?: () => number }
     const backtrace = typeof candidate.backtrace === 'function' ? candidate.backtrace() : ''
-    if (typeof candidate.kind === 'function') return `RDP 错误（类别 ${candidate.kind()}）${backtrace ? `：${backtrace}` : ''}`
+    if (typeof candidate.kind === 'function') return String(i18n.t('rdp.error_kind', { kind: String(candidate.kind()), detail: backtrace ? String(i18n.t('rdp.error_detail', { text: backtrace })) : '', defaultValue: 'RDP error' }))
     if (backtrace) return backtrace
     if (typeof candidate.reason === 'function') return candidate.reason()
     return JSON.stringify(error)

@@ -48,7 +48,7 @@ export function SftpInstallDialog() {
     <Dialog open={view?.open ?? false} onOpenChange={(open) => setView((current) => current && { ...current, open })}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>文件通道</DialogTitle>
+          <DialogTitle>{t('sftp.channel')}</DialogTitle>
           <DialogDescription>
             {status === 'running'
               ? t('sftp.switching_to_the_built_in_sftp_subsystem')

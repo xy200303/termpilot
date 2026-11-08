@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import i18n from '../i18n'
 
 const SPECIAL_KEYS: Record<string, string> = {
   Enter: 'enter',
@@ -56,7 +57,7 @@ export function ImeKeyboard(props: Props) {
   return (
     <textarea
       ref={ref}
-      aria-label="中文键盘接管"
+      aria-label={String(i18n.t('ime.label', { defaultValue: 'Chinese keyboard input' }))}
       className="pointer-events-none absolute left-0 top-0 h-px w-px opacity-0"
       onBlur={() => window.setTimeout(focus, 0)}
       onKeyDown={(event) => {

@@ -378,5 +378,16 @@
   "compose.glyph_missing": "字形没有建成",
   "common.desktop": "桌面",
   "common.window_number": "窗口 {{n}}",
-  "tabbar.rename": "重命名"
+  "tabbar.rename": "重命名",
+  "captureDialog.failed": "截图没有完成",
+  "captureDialog.ok": "知道了",
+  "sftp.channel": "文件通道",
+  "sidebar.no_host": "未填写主机",
+  "common.delete": "删除",
+  "ime.label": "中文键盘接管",
+  "capture.over_limit": "{{text}}（超出上限）",
+  "capture.compose_failed": "无法拼接截图",
+  "capture.decode_failed": "截图解码失败",
+  "rdp.error_kind": "RDP 错误（类别 {{kind}}）{{detail}}",
+  "rdp.error_detail": "：{{text}}"
 }

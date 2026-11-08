@@ -381,5 +381,16 @@
   "compose.glyph_missing": "Glyph atlas was not built",
   "common.desktop": "Desktop",
   "common.window_number": "Window {{n}}",
-  "tabbar.rename": "Rename"
+  "tabbar.rename": "Rename",
+  "captureDialog.failed": "Screenshot failed",
+  "captureDialog.ok": "OK",
+  "sftp.channel": "File channel",
+  "sidebar.no_host": "No host",
+  "common.delete": "Delete",
+  "ime.label": "Chinese keyboard input",
+  "capture.over_limit": "{{text}} (over the limit)",
+  "capture.compose_failed": "Could not compose the screenshot",
+  "capture.decode_failed": "Could not decode the screenshot",
+  "rdp.error_kind": "RDP error ({{kind}}){{detail}}",
+  "rdp.error_detail": ": {{text}}"
 }

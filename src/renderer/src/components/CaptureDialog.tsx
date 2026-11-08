@@ -65,11 +65,11 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
       <Dialog open onOpenChange={(open) => !open && props.onClose()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>截图没有完成</DialogTitle>
+            <DialogTitle>{t('captureDialog.failed')}</DialogTitle>
             <DialogDescription>{props.error}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={props.onClose}>知道了</Button>
+            <Button onClick={props.onClose}>{t('captureDialog.ok')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

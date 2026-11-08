@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/context-menu'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useAppStore } from '../stores/useAppStore'
-import { useT } from '../i18n'
+import i18n, { useT } from '../i18n'
 import { connectionAgentPrompt, copyAgentPrompt, termAgentPrompt } from '../agentPrompt'
 import { hostKeyOf } from '../../../shared/host-key'
 import { openAfterMenu, RemarkDialog } from './RemarkDialog'
@@ -64,7 +64,7 @@ function SidebarBrand(props: { collapsed: boolean; onToggle: () => void }) {
           <div className="truncate text-[13.5px] font-semibold tracking-tight text-sidebar-foreground">
             TermPilot
           </div>
-          <div className="truncate text-[10.5px] text-muted-foreground">SSH · Telnet · 串口 · VNC · RDP</div>
+          <div className="truncate text-[10.5px] text-muted-foreground">SSH · Telnet · {t('sidebar.group_serial')} · VNC · RDP</div>
         </div>
       )}
       <Button
@@ -339,7 +339,7 @@ function machinesOf(sessions: SessionConfig[]): { key: string; host: string; ses
     const key = hostKeyOf(host)
     const bucket = map.get(key)
     if (bucket) bucket.sessions.push(session)
-    else map.set(key, { host: host || '未填写主机', sessions: [session] })
+    else map.set(key, { host: host || String(i18n.t('sidebar.no_host', { defaultValue: 'No host' })), sessions: [session] })
   }
   return [...map.entries()]
     .sort((a, b) => a[1].host.localeCompare(b[1].host, 'zh'))
@@ -497,7 +497,7 @@ function SessionNode(props: { session: SessionConfig; depth: number }) {
           <ContextMenuItem onClick={() => setEditing({ action: 'edit', session })}>{t('form.edit')}</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onClick={() => deleteSession(session.id)}>
-            删除
+            {t('common.delete')}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
