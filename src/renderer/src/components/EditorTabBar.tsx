@@ -10,6 +10,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { readBuffer } from '../editor/editorBuffers'
+import { useT } from '../i18n'
 import { useAppStore, type EditorTab } from '../stores/useAppStore'
 import { FileIcon } from './FileIcon'
 
@@ -21,6 +22,7 @@ function unsaved(tab: EditorTab): boolean {
 
 /** 连接标签下面的文件标签。点 × 关闭；没保存会先确认。 */
 export function EditorTabBar(props: { tabs: EditorTab[]; activeKey: string | null }) {
+  const t = useT()
   const closeEditorTab = useAppStore((s) => s.closeEditorTab)
   const activateEditorTab = useAppStore((s) => s.activateEditorTab)
   const setNotice = useAppStore((s) => s.setNotice)
@@ -81,7 +83,7 @@ export function EditorTabBar(props: { tabs: EditorTab[]; activeKey: string | nul
             </button>
             <button
               type="button"
-              title="关闭"
+              title={t('关闭')}
               className="flex size-4 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-foreground/10 hover:opacity-100"
               onClick={() => close(tab)}
               onMouseDown={(e) => e.stopPropagation()}
@@ -95,20 +97,20 @@ export function EditorTabBar(props: { tabs: EditorTab[]; activeKey: string | nul
     <Dialog open={pending !== null} onOpenChange={(open) => !open && !saving && setPending(null)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>文件尚未保存</DialogTitle>
+          <DialogTitle>{t('文件尚未保存')}</DialogTitle>
           <DialogDescription>
-            {pending?.name} 有未保存的修改。关闭后这些内容会丢失。
+            {t('{name} 有未保存的修改。关闭后这些内容会丢失。', { name: pending?.name ?? '' })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" disabled={saving} onClick={() => setPending(null)}>
-            取消
+            {t('取消')}
           </Button>
           <Button variant="destructive" disabled={saving} onClick={discard}>
-            不保存
+            {t('不保存')}
           </Button>
           <Button disabled={saving} onClick={() => void saveAndClose()}>
-            保存
+            {t('保存')}
           </Button>
         </DialogFooter>
       </DialogContent>

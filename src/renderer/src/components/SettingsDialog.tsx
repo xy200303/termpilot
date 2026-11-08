@@ -233,7 +233,7 @@ export function SettingsDialog() {
                       <SelectContent>
                         {appThemes.map((item) => (
                           <SelectItem key={item.id} value={item.id}>
-                            {item.label}
+                            {t(item.label)}
                           </SelectItem>
                         ))}
                       </SelectContent>

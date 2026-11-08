@@ -307,4 +307,10 @@ export const EN: Record<string, string> = {
   '（超出上限）': ' (over the limit)',
   '截图是空的': 'The screenshot is empty'
 
+  文件尚未保存: 'File not saved',
+  '{name} 有未保存的修改。关闭后这些内容会丢失。': '{name} has unsaved changes. Closing will lose them.',
+  不保存: "Don't save",
+  '字形图没有建成': 'Could not build the glyph atlas',
+  '合成没有画出来': 'Compositing produced no image'
+
 }
