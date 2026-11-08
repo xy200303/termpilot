@@ -292,6 +292,19 @@ export const EN: Record<string, string> = {
   '所属连接：{id}': 'Connection: {id}',
   '连接名称：{name}': 'Connection name: {name}',
   '连接备注：{text}': 'Connection note: {text}',
-  '已复制 Agent 提示词': 'Agent prompt copied'
+  '已复制 Agent 提示词': 'Agent prompt copied',
+
+  // 终端截图说明
+  '终端标签不存在，先连接': 'Terminal not found; connect first',
+  '终端不在画面上': 'Terminal is not on screen',
+  '没有可截的画面': 'Nothing to capture',
+  '当前画面是第 {from}–{to} 行': 'Current screen is lines {from}–{to}',
+  '行号超出缓冲，一共 {total} 行': 'Line number beyond the buffer ({total} lines in total)',
+  '范围内没有行': 'No lines in that range',
+  '前 {frames} 张是逐屏实拍，后面 {long} 张是按行连续接成的长图。{range}': '{frames} screenshots are live captures; {long} are stitched line by line. {range}',
+  '合成没有画出来。请到设置里关掉「合成算法」。': 'Compositing produced no image. Turn off "compose" in Settings.',
+  '缓冲共 {total} 行，已截取第 {from}–{to} 行': 'Buffer has {total} lines; captured lines {from}–{to}',
+  '（超出上限）': ' (over the limit)',
+  '截图是空的': 'The screenshot is empty'
 
 }

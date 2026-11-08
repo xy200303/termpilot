@@ -1,4 +1,8 @@
 import type { CaptureRect, CaptureRun } from '../../../shared/types'
+import i18n from '../i18n'
+
+const tr = (key: string, params?: Record<string, string | number>): string =>
+  String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))
 import { useAppStore } from '../stores/useAppStore'
 import { terminalPool, type TermLook } from './TerminalPool'
 
@@ -36,7 +40,7 @@ export async function captureTerminalView(opts: {
 }): Promise<CaptureDone> {
   const state = useAppStore.getState()
   if (!state.tabs.some((tab) => tab.id === opts.termId)) {
-    throw new Error('终端标签不存在，先连接')
+    throw new Error(tr('终端标签不存在，先连接'))
   }
   if (state.activeTabId !== opts.termId) state.setActiveTab(opts.termId)
   await waitVisible(opts.termId)
@@ -44,22 +48,22 @@ export async function captureTerminalView(opts: {
   if (opts.mode === 'viewport') {
     if (composeOn()) {
       const info = terminalPool.pageInfo(opts.termId)
-      if (!info) throw new Error('终端不在画面上')
+      if (!info) throw new Error(tr('终端不在画面上'))
       const start = info.viewportY
       const end = Math.min(info.length, start + Math.max(1, info.rows))
-      if (end <= start) throw new Error('没有可截的画面')
+      if (end <= start) throw new Error(tr('没有可截的画面'))
       const done = await captureReplay(opts.termId, start, end, info.length, start, end)
       const last = end - 1
-      return { paths: done.paths, note: `当前画面是第 ${start}–${Math.max(start, last)} 行` }
+      return { paths: done.paths, note: tr('当前画面是第 {from}–{to} 行', { from: start, to: Math.max(start, last) }) }
     }
     const shot = await grab(opts.termId)
     const paths = await window.api.capture.save([shot.png])
     const last = shot.viewportY + shot.rows - 1
-    return { paths, note: `当前画面是第 ${shot.viewportY}–${Math.max(shot.viewportY, last)} 行` }
+    return { paths, note: tr('当前画面是第 {from}–{to} 行', { from: shot.viewportY, to: Math.max(shot.viewportY, last) }) }
   }
 
   const info = terminalPool.pageInfo(opts.termId)
-  if (!info) throw new Error('终端不在画面上')
+  if (!info) throw new Error(tr('终端不在画面上'))
   const rows = Math.max(1, info.rows)
   const total = info.length
   const wantStart = opts.startLine ?? 0
@@ -67,10 +71,10 @@ export async function captureTerminalView(opts: {
   let start = wantStart
   let end = wantEnd
   if (opts.cropOnly) {
-    if (start >= total) throw new Error(`行号超出缓冲，一共 ${total} 行`)
+    if (start >= total) throw new Error(tr('行号超出缓冲，一共 {total} 行', { total }))
     end = Math.min(end, total)
     wantEnd = end
-    if (end <= start) throw new Error('范围内没有行')
+    if (end <= start) throw new Error(tr('范围内没有行'))
   } else if (end <= start) {
     end = start + rows
     wantEnd = end
@@ -101,7 +105,7 @@ export async function captureTerminalView(opts: {
   } finally {
     terminalPool.scrollTo(opts.termId, saved)
   }
-  if (shots.length === 0) throw new Error('没有可截的画面')
+  if (shots.length === 0) throw new Error(tr('没有可截的画面'))
 
   const longPaths = await window.api.capture.save(await stitch(shots))
   const rangeNote = bufferNote(total, start, covered, wantStart, wantEnd)
@@ -110,11 +114,11 @@ export async function captureTerminalView(opts: {
   if (shots.length === 1 && shots[0]?.skipRows === 0 && shots[0].keepRows === shots[0].rows) {
     return { paths: framePaths, note: rangeNote }
   }
-  const note = `前 ${framePaths.length} 张是逐屏实拍，后面 ${longPaths.length} 张是按行连续接成的长图。${rangeNote}`
+  const note = tr('前 {frames} 张是逐屏实拍，后面 {long} 张是按行连续接成的长图。{range}', { frames: framePaths.length, long: longPaths.length, range: rangeNote })
   return { paths: [...framePaths, ...longPaths], note }
 }
 
-const COMPOSE_FAILED = '合成没有画出来。请到设置里关掉「合成算法」。'
+const COMPOSE_FAILED = tr('合成没有画出来。请到设置里关掉「合成算法」。')
 
 function composeOn(): boolean {
   return useAppStore.getState().appearance.experimentalScreenshot
@@ -139,7 +143,7 @@ async function replayCanvases(
 ): Promise<{ pngs: string[]; covered: number }> {
   const look = terminalPool.look(termId)
   const rect = terminalPool.screenRect(termId)
-  if (!look || !rect) throw new Error('终端不在画面上')
+  if (!look || !rect) throw new Error(tr('终端不在画面上'))
   const pageRows = Math.max(1, look.rows)
   const deadline = performance.now() + CAPTURE_BUDGET_MS
   const pngs: string[] = []
@@ -152,7 +156,7 @@ async function replayCanvases(
     )
     covered = chunkEnd
   }
-  if (pngs.length === 0) throw new Error('没有可截的画面')
+  if (pngs.length === 0) throw new Error(tr('没有可截的画面'))
   return { pngs, covered }
 }
 
@@ -166,10 +170,10 @@ async function paintRange(
 ): Promise<string> {
   try {
     const png = terminalPool.composeRange(termId, start, end, cellWidth, cellHeight)
-    if (!png) throw new Error('终端不在画面上')
+    if (!png) throw new Error(tr('终端不在画面上'))
     return png
   } catch (error) {
-    if (error instanceof Error && error.message === '终端不在画面上') throw error
+    if (error instanceof Error && error.message === tr('终端不在画面上')) throw error
     throw new Error(COMPOSE_FAILED)
   }
 }
@@ -191,7 +195,7 @@ async function deliverReplay(
 /** 没截全时必须写出来。以前先把起点收到末尾，截完又刚好盖住这段，提示就不会出现。 */
 function bufferNote(total: number, from: number, covered: number, wantStart: number, wantEnd: number): string {
   const to = Math.max(from, covered - 1)
-  const text = `缓冲共 ${total} 行，已截取第 ${from}–${to} 行`
+  const text = tr('缓冲共 {total} 行，已截取第 {from}–{to} 行', { total, from, to })
   if (from > wantStart || covered < wantEnd) return `${text}（超出上限）`
   return text
 }
@@ -235,7 +239,7 @@ async function grab(termId: string): Promise<{ png: string; viewportY: number; r
   await paint()
   const rect = terminalPool.screenRect(termId)
   const info = terminalPool.pageInfo(termId)
-  if (!rect || !info) throw new Error('终端不在画面上')
+  if (!rect || !info) throw new Error(tr('终端不在画面上'))
   return { png: await shoot(rect), viewportY: info.viewportY, rows: info.rows }
 }
 
@@ -285,14 +289,14 @@ async function waitVisible(termId: string): Promise<void> {
     if (terminalPool.screenRect(termId)) return
     await new Promise((resolve) => requestAnimationFrame(resolve))
   }
-  throw new Error('终端不在画面上')
+  throw new Error(tr('终端不在画面上'))
 }
 
 async function stitch(shots: PageShot[]): Promise<string[]> {
   const images = await Promise.all(shots.map((shot) => loadImage(shot.png)))
   const slices = images.map((image, index) => crop(image, shots[index]!))
   const width = slices[0]?.image.naturalWidth ?? 0
-  if (width < 2) throw new Error('截图是空的')
+  if (width < 2) throw new Error(tr('截图是空的'))
   const pages: Array<{ image: HTMLImageElement; sy: number; sh: number }[]> = []
   let batch: Array<{ image: HTMLImageElement; sy: number; sh: number }> = []
   let batchHeight = 0
