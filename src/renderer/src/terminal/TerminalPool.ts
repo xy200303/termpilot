@@ -9,6 +9,8 @@ import { terminalPalette } from '../theme/terminalThemes'
 const SAVE_LINES = 2000
 /** 落库间隔。终端输出不停时也不必每 2 秒写一次库。 */
 const SAVE_INTERVAL_MS = 10_000
+/** 同时存在的 WebGL 终端上限。超出时把最久没用的终端降回 Canvas，避免显存和 GPU 上下文无限增长。 */
+const MAX_WEBGL_TERMINALS = 8
 
 /**
  * 进程级 xterm 单例池（关键设计，见 docs/技术方案.md §4.2）：
@@ -42,6 +44,10 @@ class TerminalPool {
   /** 存盘定时器的清理。终端销毁时停掉。 */
   private savers = new Map<string, () => void>()
   private palette: ITheme = terminalPalette('light').theme
+  /** termId → WebGL 附加组件，Map 的插入顺序当作 LRU */
+  private webgl = new Map<string, WebglAddon>()
+  /** 上下文丢失后最多重建一次，避免坏驱动上反复失败 */
+  private webglRetries = new Map<string, number>()
   /** 每个终端保留的历史行数，跟随外观设置 */
   private scrollback = 10000
 
@@ -83,7 +89,7 @@ class TerminalPool {
     host.style.background = this.palette.background ?? ''
     bindClipboardKeys(term)
 
-    this.enableWebgl(term)
+
 
     // 键盘/粘贴输入 → 主进程
     term.onData((d) => window.api.term.input(termId, d))
@@ -98,6 +104,7 @@ class TerminalPool {
 
     const entry: PoolEntry = { term, fit, host, disposeData }
     this.entries.set(termId, entry)
+    this.applyWebgl(termId, term)
     return entry
   }
 
@@ -144,6 +151,7 @@ class TerminalPool {
   /** 挂载到指定容器（re-parent），并做一次同步 fit + 下一帧 refit 强制重绘 */
   attach(termId: string, el: HTMLElement): void {
     const e = this.ensure(termId)
+    this.touchWebgl(termId)
     if (e.host.parentElement !== el) el.appendChild(e.host)
     bindClipboardKeys(e.term)
     this.fit(termId)
@@ -303,6 +311,8 @@ class TerminalPool {
     this.savers.get(termId)?.()
     this.savers.delete(termId)
     e.disposeData()
+    this.releaseWebgl(termId)
+    this.webglRetries.delete(termId)
     e.term.dispose()
     this.entries.delete(termId)
   }
@@ -313,17 +323,53 @@ class TerminalPool {
     entry.term.refresh(0, Math.max(0, entry.term.rows - 1))
   }
 
-  private enableWebgl(term: Terminal): void {
+  /** 申请 WebGL；超过上限时先释放最久没用的那个，失败就退回 Canvas。 */
+  private applyWebgl(termId: string, term: Terminal): void {
+    if (this.webgl.has(termId)) {
+      this.touchWebgl(termId)
+      return
+    }
+    while (this.webgl.size >= MAX_WEBGL_TERMINALS) {
+      const oldest = this.webgl.keys().next().value
+      if (!oldest) break
+      this.releaseWebgl(oldest)
+    }
     try {
-      const webgl = new WebglAddon()
-      webgl.onContextLoss(() => {
-        // GPU 驱动崩溃 / 休眠恢复后重建渲染器
-        webgl.dispose()
-        this.enableWebgl(term)
+      const addon = new WebglAddon()
+      addon.onContextLoss(() => {
+        // GPU 驱动崩溃 / 休眠恢复：退回 Canvas，最多重建一次
+        addon.dispose()
+        this.webgl.delete(termId)
+        const used = this.webglRetries.get(termId) ?? 0
+        if (used >= 1) return
+        this.webglRetries.set(termId, used + 1)
+        setTimeout(() => {
+          const entry = this.entries.get(termId)
+          if (entry) this.applyWebgl(termId, entry.term)
+        }, 1000)
       })
-      term.loadAddon(webgl)
+      term.loadAddon(addon)
+      this.webgl.set(termId, addon)
     } catch {
       // WebGL 不可用时 xterm 自动回退 Canvas 渲染器
+    }
+  }
+
+  private touchWebgl(termId: string): void {
+    const addon = this.webgl.get(termId)
+    if (!addon) return
+    this.webgl.delete(termId)
+    this.webgl.set(termId, addon)
+  }
+
+  private releaseWebgl(termId: string): void {
+    const addon = this.webgl.get(termId)
+    if (!addon) return
+    this.webgl.delete(termId)
+    try {
+      addon.dispose()
+    } catch {
+      /* 已经释放过就忽略 */
     }
   }
 }
