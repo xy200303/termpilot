@@ -24,12 +24,38 @@ try {
 export async function listSerialPorts(): Promise<SerialPortInfo[]> {
   if (!serialport) throw new Error(mt('serial.unavailable', { reason: serialportLoadError ?? mt('serial.not_installed') }))
   const ports = await serialport.SerialPort.list()
-  return ports.map((port) => ({
+  const listed = ports.map((port) => ({
     path: port.path,
     manufacturer: port.manufacturer || undefined,
     serialNumber: port.serialNumber || undefined,
     friendlyName: port.friendlyName || undefined
   }))
+  /* 测试用：TERMPILOT_SERIAL_MOCK=1 时额外列出一个虚拟串口 */
+  if (process.env.TERMPILOT_SERIAL_MOCK === '1') {
+    listed.push({ path: 'MOCK', manufacturer: 'TermPilot mock', serialNumber: undefined, friendlyName: 'Mock serial port' })
+  }
+  return listed
+}
+
+/**
+ * 测试用串口：开启 TERMPILOT_SERIAL_MOCK 后，路径 MOCK 走 serialport 的 MockBinding，
+ * 写进去的字节会原样回读，用来在没有真实设备时验证串口终端链路。
+ */
+function openPort(
+  lib: typeof import('serialport'),
+  path: string,
+  options: { baudRate: number; dataBits: number; stopBits: number; parity: SerialParity }
+): import('serialport').SerialPort {
+  if (process.env.TERMPILOT_SERIAL_MOCK === '1' && path.toUpperCase() === 'MOCK') {
+    const req = createRequire(join(__dirname, 'require-shim.js'))
+    const mock = req('@serialport/binding-mock') as {
+      MockBinding: { reset(): void; createPort(path: string, options?: { echo?: boolean; record?: boolean }): unknown }
+    }
+    mock.MockBinding.reset()
+    mock.MockBinding.createPort('MOCK', { echo: true, record: false })
+    return new lib.SerialPortMock({ path: 'MOCK', ...options, autoOpen: false }) as unknown as import('serialport').SerialPort
+  }
+  return new lib.SerialPort({ path, ...options, autoOpen: false })
 }
 
 export interface SerialOptions {
@@ -59,13 +85,11 @@ export class SerialTransport implements ByteTransport {
     return new Promise((resolve, reject) => {
       const dataBits = this.options.dataBits
       const stopBits = this.options.stopBits
-      const port = new serialport!.SerialPort({
-        path,
+      const port = openPort(serialport!, path, {
         baudRate: this.options.baudRate ?? SERIAL_DEFAULTS.baudRate,
         dataBits: dataBits === 5 || dataBits === 6 || dataBits === 7 || dataBits === 8 ? dataBits : SERIAL_DEFAULTS.dataBits,
         stopBits: stopBits === 1 || stopBits === 2 ? stopBits : SERIAL_DEFAULTS.stopBits,
-        parity: this.options.parity ?? SERIAL_DEFAULTS.parity,
-        autoOpen: false
+        parity: this.options.parity ?? SERIAL_DEFAULTS.parity
       })
       this.port = port
       port.on('data', (data: Buffer) => this.dataCb?.(data))
