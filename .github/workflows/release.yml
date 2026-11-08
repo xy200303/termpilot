@@ -43,6 +43,8 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           NODE_OPTIONS: --max-old-space-size=4096
+          # GitHub Release 资产偶发 504 时，从 npmmirror 的 electron-builder-binaries 镜像取打包工具
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://registry.npmmirror.com/-/binary/electron-builder-binaries
         run: npx electron-builder --publish never
       - name: Check Linux glibc compatibility
         if: runner.os == 'Linux'

@@ -1,3 +1,10 @@
+## 0.8.6
+
+- 图形桌面新增「中文键盘」接管，解决 VNC 下手动输入中文到不了远端的问题：用透明文本框接住本机输入法，合成结束逐字发 Unicode keysym，普通键、组合键和方向键照常转发，Esc 退出。
+- 新增「发送文字」：本机打完字整段写进远端剪贴板再粘贴，可选普通粘贴或终端粘贴（`ctrl-shift-v`）。两个入口都收进标签栏右侧图标行。
+
+安装包没有代码签名。
+
 ## 0.8.5
 
 - 合并重复工具：`term_screenshot_scrollback` 并入 `term_screenshot`（`scope=buffer` 截整段缓冲，给 `startLine` / `endLine` 仍只裁那一段）；`term_read` 并入 `term_lines`（不填范围就是当前画面）。工具总数 37 → 35。

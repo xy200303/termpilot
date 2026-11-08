@@ -5,7 +5,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.8.5'
+const VERSION = '0.8.6'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
@@ -141,6 +141,13 @@ const specs = [
 
 const changelog = [
   {
+    version: '0.8.6',
+    items: [
+      '图形桌面新增「中文键盘」接管，本机输入法可以直接往 VNC 里打中文',
+      '新增「发送文字」，整段写远端剪贴板再粘贴；两个入口都收进标签栏图标行'
+    ]
+  },
+  {
     version: '0.8.5',
     items: [
       '合并重复工具：term_read 并入 term_lines，滚动截图并入 term_screenshot，工具总数 35',
@@ -152,13 +159,6 @@ const changelog = [
     items: [
       '桌面截图返回 shotId，点击/滚动按它换算坐标，窗口或分辨率变化不再点偏',
       'shotId 失效或跨桌面会明确报错，不会按错基准'
-    ]
-  },
-  {
-    version: '0.8.3',
-    items: [
-      'desktop_screenshot 支持 region 只截一块区域，角标标出原画面起点坐标',
-      '网格线按局部底色在 OKLCH 里选色，并用 APCA 对比度校验，亮暗各半也看得清'
     ]
   }
 ]
