@@ -211,10 +211,10 @@ export function registerIpc(
     if (!win) throw new Error(mt('ipc.window_capture'))
     assertRect(rect, win.getContentSize())
     const image = await event.sender.capturePage(rect)
-    return image.toPNG().toString('base64')
+    return new Uint8Array(image.toPNG())
   })
 
-  ipcMain.handle(IPC.captureSave, (_event, pngs: string[]) => {
+  ipcMain.handle(IPC.captureSave, (_event, pngs: Uint8Array[]) => {
     if (!Array.isArray(pngs) || pngs.length === 0 || pngs.length > 40) {
       throw new Error(mt('ipc.no_screenshot'))
     }
@@ -224,7 +224,7 @@ export function registerIpc(
     const batch = randomBytes(3).toString('hex')
     const written = pngs.map((png, index) => {
       const file = join(dir, `${stamp}-${batch}-${String(index + 1).padStart(2, '0')}.png`)
-      writeFileSync(file, Buffer.from(png, 'base64'))
+      writeFileSync(file, Buffer.from(png))
       return file
     })
     pruneScreenshots()

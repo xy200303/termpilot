@@ -43,7 +43,12 @@ const ANSI16 = [
 ] as const
 
 /** 把缓冲里的一段行贴成 PNG。行号含首不含尾。不打开第二个终端。 */
-export function composeTerminalRange(term: Terminal, start: number, end: number, look: ComposeLook): string {
+export async function composeTerminalRange(
+  term: Terminal,
+  start: number,
+  end: number,
+  look: ComposeLook
+): Promise<Uint8Array> {
   const cols = Math.max(2, term.cols)
   const rows = Math.max(1, end - start)
   const device = deviceCells(term, look)
@@ -118,10 +123,9 @@ export function composeTerminalRange(term: Terminal, start: number, end: number,
     }
   }
 
-  const url = canvas.toDataURL('image/png')
-  const comma = url.indexOf(',')
-  if (comma < 0) throw new Error(String(i18n.t('compose.compositing_produced_no_image')))
-  return url.slice(comma + 1)
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+  if (!blob) throw new Error(String(i18n.t('compose.compositing_produced_no_image')))
+  return new Uint8Array(await blob.arrayBuffer())
 }
 
 function deviceCells(term: Terminal, look: ComposeLook): DeviceCells {

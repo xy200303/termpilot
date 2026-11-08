@@ -17,7 +17,7 @@ export interface CaptureDone {
 }
 
 interface PageShot {
-  png: string
+  png: Uint8Array
   /** 这一屏顶部已经出现在上一张里的行数 */
   skipRows: number
   /** 这一屏里新出现、要接进长图的行数 */
@@ -140,13 +140,13 @@ async function replayCanvases(
   termId: string,
   start: number,
   capped: number
-): Promise<{ pngs: string[]; covered: number }> {
+): Promise<{ pngs: Uint8Array[]; covered: number }> {
   const look = terminalPool.look(termId)
   const rect = terminalPool.screenRect(termId)
   if (!look || !rect) throw new Error(tr('capture.terminal_is_not_on_screen'))
   const pageRows = Math.max(1, look.rows)
   const deadline = performance.now() + CAPTURE_BUDGET_MS
-  const pngs: string[] = []
+  const pngs: Uint8Array[] = []
   let covered = start
   while (covered < capped && pngs.length < MAX_PAGES) {
     if (pngs.length > 0 && performance.now() >= deadline) break
@@ -167,9 +167,9 @@ async function paintRange(
   end: number,
   cellWidth: number,
   cellHeight: number
-): Promise<string> {
+): Promise<Uint8Array> {
   try {
-    const png = terminalPool.composeRange(termId, start, end, cellWidth, cellHeight)
+    const png = await terminalPool.composeRange(termId, start, end, cellWidth, cellHeight)
     if (!png) throw new Error(tr('capture.terminal_is_not_on_screen'))
     return png
   } catch (error) {
@@ -179,7 +179,7 @@ async function paintRange(
 }
 
 async function deliverReplay(
-  pngs: string[],
+  pngs: Uint8Array[],
   total: number,
   start: number,
   covered: number,
@@ -235,7 +235,7 @@ async function scrollSettled(termId: string, line: number): Promise<void> {
   }
 }
 
-async function grab(termId: string): Promise<{ png: string; viewportY: number; rows: number }> {
+async function grab(termId: string): Promise<{ png: Uint8Array; viewportY: number; rows: number }> {
   await paint()
   const rect = terminalPool.screenRect(termId)
   const info = terminalPool.pageInfo(termId)
@@ -244,7 +244,7 @@ async function grab(termId: string): Promise<{ png: string; viewportY: number; r
 }
 
 /** 窗口实拍会把盖在终端上的弹窗和菜单一起拍进去。拍的时候藏起来，拍完恢复。 */
-async function shoot(rect: CaptureRect): Promise<string> {
+async function shoot(rect: CaptureRect): Promise<Uint8Array> {
   const hidden = hideFloaters()
   try {
     if (hidden.length > 0) await paint()
@@ -292,13 +292,13 @@ async function waitVisible(termId: string): Promise<void> {
   throw new Error(tr('capture.terminal_is_not_on_screen'))
 }
 
-async function stitch(shots: PageShot[]): Promise<string[]> {
+async function stitch(shots: PageShot[]): Promise<Uint8Array[]> {
   const images = await Promise.all(shots.map((shot) => loadImage(shot.png)))
   const slices = images.map((image, index) => crop(image, shots[index]!))
-  const width = slices[0]?.image.naturalWidth ?? 0
+  const width = slices[0]?.image.width ?? 0
   if (width < 2) throw new Error(tr('capture.the_screenshot_is_empty'))
-  const pages: Array<{ image: HTMLImageElement; sy: number; sh: number }[]> = []
-  let batch: Array<{ image: HTMLImageElement; sy: number; sh: number }> = []
+  const pages: Array<{ image: ImageBitmap; sy: number; sh: number }[]> = []
+  let batch: Array<{ image: ImageBitmap; sy: number; sh: number }> = []
   let batchHeight = 0
   for (const slice of slices) {
     if (batch.length > 0 && batchHeight + slice.sh > MAX_STITCH_HEIGHT) {
@@ -311,7 +311,7 @@ async function stitch(shots: PageShot[]): Promise<string[]> {
   }
   if (batch.length > 0) pages.push(batch)
 
-  return pages.map((group) => {
+  return await Promise.all(pages.map(async (group) => {
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = group.reduce((sum, slice) => sum + slice.sh, 0)
@@ -324,7 +324,7 @@ async function stitch(shots: PageShot[]): Promise<string[]> {
         slice.image,
         0,
         slice.sy,
-        slice.image.naturalWidth,
+        slice.image.width,
         slice.sh,
         0,
         y,
@@ -333,27 +333,28 @@ async function stitch(shots: PageShot[]): Promise<string[]> {
       )
       y += slice.sh
     }
-    return canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '')
-  })
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) throw new Error(tr('capture.compose_failed'))
+    return new Uint8Array(await blob.arrayBuffer())
+  }))
 }
 
 /** 整屏原样保留。不满一屏时只留底部新出现的行，按行高从实拍图上裁。 */
-function crop(image: HTMLImageElement, shot: PageShot): { image: HTMLImageElement; sy: number; sh: number } {
+function crop(image: ImageBitmap, shot: PageShot): { image: ImageBitmap; sy: number; sh: number } {
   if (shot.skipRows === 0 && shot.keepRows === shot.rows) {
-    return { image, sy: 0, sh: image.naturalHeight }
+    return { image, sy: 0, sh: image.height }
   }
-  const rowPx = image.naturalHeight / shot.rows
-  const sy = Math.min(image.naturalHeight - 1, Math.round(shot.skipRows * rowPx))
-  const bottom = Math.min(image.naturalHeight, Math.round((shot.skipRows + shot.keepRows) * rowPx))
+  const rowPx = image.height / shot.rows
+  const sy = Math.min(image.height - 1, Math.round(shot.skipRows * rowPx))
+  const bottom = Math.min(image.height, Math.round((shot.skipRows + shot.keepRows) * rowPx))
   return { image, sy, sh: Math.max(1, bottom - sy) }
 }
 
-function loadImage(pngBase64: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(tr('capture.decode_failed')))
-    image.src = `data:image/png;base64,${pngBase64}`
+function loadImage(png: Uint8Array): Promise<ImageBitmap> {
+  const buffer = png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer
+  // CSP 只允许 data:，用 createImageBitmap 解码，避免为截图放开 blob:
+  return createImageBitmap(new Blob([buffer], { type: 'image/png' })).catch(() => {
+    throw new Error(tr('capture.decode_failed'))
   })
 }
 

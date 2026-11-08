@@ -190,8 +190,8 @@ const api = {
     }
   },
   capture: {
-    page: (rect: CaptureRect) => ipcRenderer.invoke(IPC.capturePage, rect) as Promise<string>,
-    save: (pngs: string[]) => ipcRenderer.invoke(IPC.captureSave, pngs) as Promise<string[]>,
+    page: (rect: CaptureRect) => ipcRenderer.invoke(IPC.capturePage, rect) as Promise<Uint8Array>,
+    save: (pngs: Uint8Array[]) => ipcRenderer.invoke(IPC.captureSave, pngs) as Promise<string[]>,
     reveal: (file: string) => ipcRenderer.invoke(IPC.captureReveal, file) as Promise<void>,
     copy: (file: string) => ipcRenderer.invoke(IPC.captureCopy, file) as Promise<void>,
     read: (file: string) => ipcRenderer.invoke(IPC.captureRead, file) as Promise<string>,

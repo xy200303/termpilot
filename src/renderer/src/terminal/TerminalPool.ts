@@ -228,11 +228,17 @@ class TerminalPool {
   }
 
   /** 按缓冲格子用 WebGL 贴出这一段的 PNG。行号含首不含尾。 */
-  composeRange(termId: string, start: number, end: number, cellWidth: number, cellHeight: number): string | null {
+  async composeRange(
+    termId: string,
+    start: number,
+    end: number,
+    cellWidth: number,
+    cellHeight: number
+  ): Promise<Uint8Array | null> {
     const term = this.entries.get(termId)?.term
     if (!term || end <= start || cellWidth < 1 || cellHeight < 1) return null
     const theme = term.options.theme ?? this.palette
-    return composeTerminalRange(term, start, end, {
+    return await composeTerminalRange(term, start, end, {
       cellWidth,
       cellHeight,
       fontFamily: term.options.fontFamily || 'Consolas, "Cascadia Mono", "Microsoft YaHei", monospace',
