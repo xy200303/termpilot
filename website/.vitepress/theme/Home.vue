@@ -5,7 +5,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.8.3'
+const VERSION = '0.8.4'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
@@ -141,6 +141,13 @@ const specs = [
 
 const changelog = [
   {
+    version: '0.8.4',
+    items: [
+      '桌面截图返回 shotId，点击/滚动按它换算坐标，窗口或分辨率变化不再点偏',
+      'shotId 失效或跨桌面会明确报错，不会按错基准'
+    ]
+  },
+  {
     version: '0.8.3',
     items: [
       'desktop_screenshot 支持 region 只截一块区域，角标标出原画面起点坐标',
@@ -152,13 +159,6 @@ const changelog = [
     items: [
       'desktop_screenshot 默认带 100px 坐标网格，Agent 不传参就能按刻度算坐标',
       '需要干净画面时传 grid=false 关闭，也可自定义 20–500 的网格间距'
-    ]
-  },
-  {
-    version: '0.8.0',
-    items: [
-      '新增 VNC / RDP 图形桌面、双向剪贴板和桌面性能模式',
-      'MCP 新增 10 个桌面工具，工具总数 37'
     ]
   }
 ]

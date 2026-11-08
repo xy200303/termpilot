@@ -5,15 +5,15 @@ description: TermPilot 三端安装包下载：Windows x64、macOS（Apple Silic
 
 # 下载
 
-当前版本 **v0.8.3**。所有安装包发布在 [GitHub Releases](https://github.com/xy200303/termpilot/releases/latest)，版本说明见[更新日志](/changelog)。
+当前版本 **v0.8.4**。所有安装包发布在 [GitHub Releases](https://github.com/xy200303/termpilot/releases/latest)，版本说明见[更新日志](/changelog)。
 
 Linux x64 包在 Ubuntu 22.04 上构建，要求 `glibc >= 2.35`，适用于 Ubuntu 22.04 / 24.04。
 
 | 平台 | 安装包 | 免安装 |
 | --- | --- | --- |
-| Windows x64 | [TermPilot.Setup.0.8.3.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.3.exe)（146MB） | [TermPilot-0.8.3-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.3-win.zip)（198MB） |
-| macOS（Apple Silicon） | [TermPilot-0.8.3-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.3-arm64.dmg)（168MB） | [TermPilot-0.8.3-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.3-arm64-mac.zip)（169MB） |
-| Linux x64 | [termpilot_0.8.3_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.3_amd64.deb)（129MB） | [TermPilot-0.8.3.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.3.AppImage)（167MB） |
+| Windows x64 | [TermPilot.Setup.0.8.4.exe](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot.Setup.0.8.4.exe) | [TermPilot-0.8.4-win.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.4-win.zip) |
+| macOS（Apple Silicon） | [TermPilot-0.8.4-arm64.dmg](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.4-arm64.dmg) | [TermPilot-0.8.4-arm64-mac.zip](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.4-arm64-mac.zip) |
+| Linux x64 | [termpilot_0.8.4_amd64.deb](https://github.com/xy200303/termpilot/releases/latest/download/termpilot_0.8.4_amd64.deb) | [TermPilot-0.8.4.AppImage](https://github.com/xy200303/termpilot/releases/latest/download/TermPilot-0.8.4.AppImage) |
 
 ## 安装提示
 

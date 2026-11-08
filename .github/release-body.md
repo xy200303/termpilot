@@ -1,3 +1,10 @@
+## 0.8.4
+
+- 桌面点击和滚动支持尺寸换算：`desktop_screenshot` 返回 `shotId`，`desktop_click` / `desktop_scroll` 传回它就按那张截图的坐标空间等比换算，截图后窗口缩放、VNC 分辨率切换或 RDP 重新协商都不会点偏。
+- 不传 `shotId` 时用该桌面最近一张截图，也可以显式传 `imageWidth` / `imageHeight`；截图编号失效或属于别的桌面会明确报错，不会按错基准点。
+
+安装包没有代码签名。
+
 ## 0.8.3
 
 - `desktop_screenshot` 新增 `region`：只截 `{x,y,width,height}` 这块区域返回，左上角角标标出这块图在原画面里的起点坐标，刻度仍是整屏坐标，可以直接拿去 `desktop_click`。
