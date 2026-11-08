@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http'
+import { t as mt } from '../../i18n'
 import { connect, type Socket } from 'node:net'
 import { randomUUID } from 'node:crypto'
 import { WebSocketServer, WebSocket } from 'ws'
@@ -54,7 +55,7 @@ export class VncBridge {
       http.listen(0, '127.0.0.1', () => resolve())
     })
     const address = http.address()
-    if (!address || typeof address === 'string') throw new Error('VNC 本地桥接启动失败')
+    if (!address || typeof address === 'string') throw new Error(mt('vncbridge.start_failed'))
     return `ws://127.0.0.1:${address.port}/${this.viewId}?token=${this.token}`
   }
 
@@ -63,7 +64,7 @@ export class VncBridge {
     this.onStatus('connecting')
     const remote = connect({ host, port })
     this.remote = remote
-    remote.setTimeout(15_000, () => remote.destroy(new Error('连接 VNC 服务超时')))
+    remote.setTimeout(15_000, () => remote.destroy(new Error(mt('vncbridge.timeout'))))
 
     remote.on('connect', () => {
       remote.setTimeout(0)
@@ -77,7 +78,7 @@ export class VncBridge {
       this.pump(ws, remote)
     })
     remote.on('error', (error) => {
-      this.onStatus('error', `VNC 连接失败：${error.message}`)
+      this.onStatus('error', mt('vncbridge.failed', { message: error.message }))
       ws.close()
     })
     remote.on('close', () => {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { t as mt } from '../../i18n'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, nativeImage } from 'electron'
@@ -29,13 +30,13 @@ export class DesktopAgentService {
 
   async run(viewId: string, input: DesktopAgentInput): Promise<string> {
     const protocol = this.desktop.protocolOf(viewId)
-    if (!protocol) throw new Error('桌面不存在或已关闭，请先 connection_open')
+    if (!protocol) throw new Error(mt('desktop.missing'))
     const action = withScaleSource(input, this.baseline(viewId, input))
     const grid = gridSpacing(action)
     const region = action.action === 'screenshot' ? action.region : undefined
     if (protocol !== 'vnc' && protocol !== 'rdp') {
       const pid = this.desktop.nativePid(viewId)
-      if (!pid) throw new Error('原生客户端进程不存在或已退出')
+      if (!pid) throw new Error(mt('desktop.native_gone'))
       const result = await this.nativeAgent.run(pid, action)
       if (!result.file) return result.note
       const done = await decorate(this.sender(), result.file, grid, region)
@@ -45,7 +46,7 @@ export class DesktopAgentService {
 
     const label = protocol.toUpperCase()
     const wc = this.sender()
-    if (!wc || wc.isDestroyed()) throw new Error(`窗口不可用，无法操作 ${label}`)
+    if (!wc || wc.isDestroyed()) throw new Error(mt('desktop.window_unavailable', { label }))
     const id = randomUUID()
     const timeoutMs = action.action === 'wait'
       ? Math.max(action.ms ?? 500, (action.stableMs ?? 0) > 0 ? (action.timeoutMs ?? 10_000) : 0) + 5000
@@ -53,7 +54,7 @@ export class DesktopAgentService {
     const reply = await new Promise<DesktopAgentReply>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`桌面操作超时，请确认 ${label} 标签仍在当前窗口中`))
+        reject(new Error(mt('desktop.timeout', { label })))
       }, timeoutMs)
       this.pending.set(id, (result) => {
         clearTimeout(timer)
@@ -69,10 +70,10 @@ export class DesktopAgentService {
       writeFileSync(file, Buffer.from(reply.pngBase64, 'base64'))
       const done = await decorate(this.sender(), file, grid, region)
       if (done.width > 0 && done.height > 0) this.lastShot.set(viewId, { width: done.width, height: done.height })
-      const note = reply.note ?? `${label} 画面已截取`
+      const note = reply.note ?? mt('desktop.captured', { label })
       return `${note}${done.suffix}\n${file}`
     }
-    return reply.note ?? '已完成'
+    return reply.note ?? mt('desktop.done')
   }
 
   async runMany(viewId: string, inputs: DesktopAgentInput[]): Promise<string> {
@@ -99,8 +100,8 @@ export class DesktopAgentService {
       if (input.fromWidth || input.fromHeight) return undefined
       if (input.shotId) {
         const shot = this.shots.get(input.shotId)
-        if (!shot) throw new Error(`截图编号 ${input.shotId} 已失效，请重新 desktop_screenshot`)
-        if (shot.viewId !== viewId) throw new Error('截图编号属于另一个桌面，请用对应 viewId 或重新截图')
+        if (!shot) throw new Error(mt('desktop.shot_expired', { id: input.shotId }))
+        if (shot.viewId !== viewId) throw new Error(mt('desktop.shot_other'))
         return { width: shot.width, height: shot.height }
       }
     }
@@ -164,9 +165,9 @@ async function decorate(
   const parts: string[] = []
   if (cropped) {
     parts.push(
-      `区域 ${cropped.x},${cropped.y} ${cropped.width}×${cropped.height}，原画面 ${cropped.fullWidth}×${cropped.fullHeight}，坐标基准是整屏`
+      mt('desktop.region_note', { x: cropped.x, y: cropped.y, w: cropped.width, h: cropped.height, fw: cropped.fullWidth, fh: cropped.fullHeight })
     )
   }
-  if (gridded) parts.push(`网格 ${spacing}px`)
+  if (gridded) parts.push(mt('desktop.grid_note', { spacing }))
   return { suffix: parts.length > 0 ? `，${parts.join('；')}` : '', width: full.width, height: full.height }
 }

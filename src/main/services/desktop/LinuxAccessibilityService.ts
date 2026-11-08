@@ -1,4 +1,5 @@
 import type { ExecService } from '../ExecService'
+import { t as mt } from '../../i18n'
 import type { StorageService } from '../StorageService'
 import type { DesktopService } from './DesktopService'
 
@@ -11,14 +12,14 @@ export class LinuxAccessibilityService {
 
   async run(viewId: string, operation: 'tree' | 'click', path?: string, action?: string): Promise<string> {
     const session = this.desktop.sessionOf(viewId)
-    if (!session) throw new Error('桌面不存在或已关闭，请先 connection_open')
-    if (session.protocol !== 'vnc') throw new Error('Linux 无障碍目前只支持 VNC 桌面')
+    if (!session) throw new Error(mt('a11y.desktop_missing'))
+    if (session.protocol !== 'vnc') throw new Error(mt('a11y.vnc_only'))
     const host = session.host.trim().toLowerCase()
     const ssh = this.storage.list().find((item) =>
       item.protocol === 'ssh' && item.mode === 'forward' && item.host.trim().toLowerCase() === host
     )
     if (!ssh) {
-      throw new Error(`没有找到主机 ${session.host} 对应的正向 SSH 连接。AT-SPI 通过同主机 SSH 读取，VNC 协议本身不携带无障碍树`)
+      throw new Error(mt('a11y.no_ssh', { host: session.host }))
     }
     const display = Math.max(0, (session.port || 5900) - 5900)
     const payload = Buffer.from(JSON.stringify({ operation, path: path ?? '', action: action ?? '' }), 'utf8').toString('base64')
@@ -28,9 +29,9 @@ export class LinuxAccessibilityService {
     const text = `${run.stdout}\n${run.stderr}`.trim()
     if (run.exitCode !== 0) {
       if (/org\.a11y\.Bus|ServiceUnknown|at-spi|AT-SPI/i.test(text)) {
-        throw new Error(`远端 Linux 桌面没有可用的 AT-SPI 无障碍服务。请在桌面会话安装并启用 at-spi2-core 与辅助功能；TermPilot 不会自动安装。原始信息：\n${text}`)
+        throw new Error(mt('a11y.no_service', { text }))
       }
-      throw new Error(`读取 Linux 无障碍失败：\n${text}`)
+      throw new Error(mt('a11y.read_failed', { text }))
     }
     return text
   }
@@ -57,7 +58,7 @@ try:
     registry = bus.get_object('org.a11y.atspi.Registry', '/org/a11y/atspi/registry')
     root_ref = registry.getDesktop(0, dbus_interface=REGISTRY)
 except Exception as error:
-    print('AT-SPI org.a11y.Bus 不可用：' + str(error), file=sys.stderr)
+    print(mt('a11y.bus_unavailable') + str(error), file=sys.stderr)
     sys.exit(2)
 
 def proxy(reference):
@@ -122,7 +123,7 @@ def extents(obj):
 def resolve(path):
     parts = path.split('/')
     if not parts or parts[0] != '0':
-        raise ValueError('控件路径必须以 0 开头')
+        raise ValueError(mt('a11y.path_prefix'))
     obj = proxy(root_ref)
     for part in parts[1:]:
         obj = child(obj, int(part))
@@ -159,20 +160,20 @@ if REQ['operation'] == 'click':
         if selected:
             index = available.index(selected)
             target.DoAction(index, dbus_interface=ACTION)
-            print(json.dumps({'note': '已执行无障碍动作 ' + selected, 'path': REQ['path'], 'name': name(target)}, ensure_ascii=False))
+            print(json.dumps({'note': mt('a11y.action_done') + ' ' + selected, 'path': REQ['path'], 'name': name(target)}, ensure_ascii=False))
             sys.exit(0)
         box = extents(target)
         if not box or box[2] <= 0 or box[3] <= 0:
-            raise ValueError('控件没有可点击动作或屏幕坐标')
+            raise ValueError(mt('a11y.not_clickable'))
         x = box[0] + box[2] // 2
         y = box[1] + box[3] // 2
         registry.GenerateMouseEvent(x, y, 'b1c', dbus_interface=REGISTRY)
-        print(json.dumps({'note': '已通过无障碍点击控件中心', 'path': REQ['path'], 'x': x, 'y': y, 'name': name(target)}, ensure_ascii=False))
+        print(json.dumps({'note': mt('a11y.clicked_center'), 'path': REQ['path'], 'x': x, 'y': y, 'name': name(target)}, ensure_ascii=False))
         sys.exit(0)
     except Exception as error:
-        print('点击无障碍控件失败：' + str(error), file=sys.stderr)
+        print(mt('a11y.click_failed') + str(error), file=sys.stderr)
         sys.exit(3)
 
-print('operation 只能是 tree 或 click', file=sys.stderr)
+print(mt('a11y.err_operation'), file=sys.stderr)
 sys.exit(4)
 `

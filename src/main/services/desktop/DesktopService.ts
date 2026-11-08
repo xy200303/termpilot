@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { t as mt } from '../../i18n'
 import type { WebContents } from 'electron'
 import { IPC } from '../../../shared/ipc-channels'
 import { protocolLabel, type DesktopProtocol } from '../../../shared/protocol'
@@ -69,7 +70,7 @@ export class DesktopService {
 
   async open(viewId: string, sessionId: string): Promise<DesktopOpenResult> {
     const session = this.storage.list().find((item) => item.id === sessionId)
-    if (!session) throw new Error('连接不存在')
+    if (!session) throw new Error(mt('desktop.connection_missing'))
     const opened = [...this.sessions.entries()].find(([otherId, id]) => id === sessionId && otherId !== viewId)
     if (opened) this.close(opened[0])
     if (this.sessions.get(viewId) === sessionId) {
@@ -83,7 +84,7 @@ export class DesktopService {
     try {
       if (session.protocol === 'vnc') return await this.openVnc(viewId, session)
       if (session.protocol === 'rdp') return await this.openRdp(viewId, session)
-      throw new Error(`${protocolLabel(session.protocol)}不是图形桌面协议`)
+      throw new Error(mt('desktop.not_desktop', { protocol: protocolLabel(session.protocol) }))
     } catch (error) {
       this.sessions.delete(viewId)
       const message = error instanceof Error ? error.message : String(error)
@@ -126,7 +127,7 @@ export class DesktopService {
         if (!lastError.includes('ENOENT')) throw error
       }
     }
-    throw new Error('没有找到 FreeRDP（wfreerdp / xfreerdp）。请先安装原生客户端，或用环境变量 TERMPILOT_FREERDP 指定可执行文件路径。')
+    throw new Error(mt('desktop.freerdp_missing'))
   }
 
   private startProcess(viewId: string, session: SessionConfig, command: string, args: string[]): Promise<string> {
@@ -142,7 +143,7 @@ export class DesktopService {
       child.once('spawn', () => {
         this.native.set(viewId, state)
         this.status(viewId, session.id, 'connected')
-        resolve(`FreeRDP 已打开独立窗口。账号密码在原生窗口中输入，不会出现在命令行里。命令：${command}`)
+        resolve(mt('desktop.freerdp_opened', { command }))
       })
       child.on('exit', (code) => {
         this.native.delete(viewId)
@@ -153,7 +154,7 @@ export class DesktopService {
           viewId,
           session.id,
           failed ? 'error' : 'disconnected',
-          failed ? `客户端退出（${code}）${tail ? `\n${tail}` : ''}` : '桌面窗口已关闭'
+          failed ? mt('desktop.client_exited', { code, tail: tail ? `\n${tail}` : '' }) : mt('desktop.window_closed')
         )
       })
     })

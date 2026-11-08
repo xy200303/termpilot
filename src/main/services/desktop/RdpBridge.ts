@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http'
+import { t as mt } from '../../i18n'
 import { connect as connectTcp, type Socket } from 'node:net'
 import { connect as connectTls, type TLSSocket, type DetailedPeerCertificate } from 'node:tls'
 import { randomUUID } from 'node:crypto'
@@ -92,7 +93,7 @@ function wsBytes(data: RawData): Buffer {
 
 function parseRequest(data: Buffer): { destination: string; x224: Buffer } {
   const outer = readTlv(data, 0)
-  if (outer.tag !== TAG_SEQUENCE) throw new Error('RDCleanPath 请求不是 ASN.1 SEQUENCE')
+  if (outer.tag !== TAG_SEQUENCE) throw new Error(mt('rdpbridge.not_sequence'))
   let version = 0
   let destination = ''
   let x224: Buffer | null = null
@@ -102,8 +103,8 @@ function parseRequest(data: Buffer): { destination: string; x224: Buffer } {
     if (tag === 2) destination = readTlv(child.value, 0).value.toString('utf8')
     if (tag === 6) x224 = readTlv(child.value, 0).value
   }
-  if (version !== VERSION_1) throw new Error(`不支持 RDCleanPath 版本 ${version}`)
-  if (!destination || !x224) throw new Error('RDCleanPath 请求缺少目标或 X.224 数据')
+  if (version !== VERSION_1) throw new Error(mt('rdpbridge.bad_version', { version }))
+  if (!destination || !x224) throw new Error(mt('rdpbridge.missing_target'))
   return { destination, x224 }
 }
 
@@ -125,7 +126,7 @@ function errorResponse(): Buffer {
 function parseDestination(value: string): { host: string; port: number } {
   if (value.startsWith('[')) {
     const end = value.indexOf(']')
-    if (end < 0) throw new Error(`IPv6 目标格式错误：${value}`)
+    if (end < 0) throw new Error(mt('rdpbridge.bad_ipv6', { value }))
     const port = value.slice(end + 1).startsWith(':') ? Number(value.slice(end + 2)) : 3389
     return { host: value.slice(1, end), port: port || 3389 }
   }
@@ -153,7 +154,7 @@ function certificateChain(peer: DetailedPeerCertificate): Buffer[] {
 function handshake(host: string, port: number, x224: Buffer): Promise<{ response: Buffer; certificates: Buffer[]; socket: TLSSocket }> {
   return new Promise((resolve, reject) => {
     const socket = connectTcp({ host, port })
-    socket.setTimeout(15_000, () => socket.destroy(new Error('连接 RDP 服务超时')))
+    socket.setTimeout(15_000, () => socket.destroy(new Error(mt('rdpbridge.timeout'))))
     socket.once('error', reject)
     socket.once('connect', () => {
       socket.setTimeout(0)
@@ -218,7 +219,7 @@ export class RdpBridge {
       http.listen(0, '127.0.0.1', () => resolve())
     })
     const address = http.address()
-    if (!address || typeof address === 'string') throw new Error('RDP 本地代理启动失败')
+    if (!address || typeof address === 'string') throw new Error(mt('rdpbridge.proxy_failed'))
     return `ws://127.0.0.1:${address.port}/${this.viewId}?token=${this.token}`
   }
 
