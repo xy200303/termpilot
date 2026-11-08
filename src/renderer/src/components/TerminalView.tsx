@@ -100,14 +100,14 @@ export function TerminalView(props: { termId: string }) {
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem disabled={!selection?.text} onClick={() => void copy()}>
-            复制
+            {t('terminal.copy')}
             <ContextMenuShortcut>{window.api.platform === 'darwin' ? '⌘C' : 'Ctrl+C'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem disabled={!selection} onClick={shoot}>
-            截图
+            {t('terminal.screenshot')}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => void paste()}>
-            粘贴
+            {t('terminal.paste')}
             <ContextMenuShortcut>{window.api.platform === 'darwin' ? '⌘V' : 'Ctrl+V'}</ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuContent>

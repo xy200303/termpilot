@@ -29,12 +29,12 @@ export function ExternalDesktopView(props: { viewId: string; session: SessionCon
       <div className="flex max-w-xl flex-col items-center gap-4 text-center">
         <MonitorUp className="size-10 text-muted-foreground" />
         <div>
-          <h2 className="text-lg font-semibold">RDP 独立窗口</h2>
+          <h2 className="text-lg font-semibold">{t('external.title')}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            画面由 FreeRDP 原生窗口显示，动态分辨率和剪贴板已启用。密码在原生窗口中输入，不写进命令行。
+            {t('external.intro')}
           </p>
         </div>
-        {status?.status === 'connecting' && <p className="text-sm text-muted-foreground">正在启动客户端…</p>}
+        {status?.status === 'connecting' && <p className="text-sm text-muted-foreground">{t('external.starting')}</p>}
         {(status?.error || message) && (
           <pre className="max-h-48 w-full overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-left text-xs text-muted-foreground">
             {status?.error || message}
@@ -45,7 +45,7 @@ export function ExternalDesktopView(props: { viewId: string; session: SessionCon
           {busy ? t('external.opening') : status?.status === 'connected' ? t('external.reopen_native_window') : t('external.open_native_window')}
         </Button>
         <p className="text-xs leading-5 text-muted-foreground">
-          关闭这个标签会结束对应的原生客户端进程。画面不进入 Electron，因此整窗截图和录屏不包含原生窗口内容。
+          {t('external.note')}
         </p>
       </div>
     </div>

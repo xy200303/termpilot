@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '../stores/useAppStore'
-import { useT } from '../i18n'
+import i18n, { useT } from '../i18n'
 import { parseSshCommand } from '../../../shared/parse-ssh'
 import { sshOptionsForSession, sanitizeSshOptions, type SshConnectOptions } from '../../../shared/ssh-options'
 import { SERIAL_DEFAULTS, TELNET_DEFAULT_PORT, defaultPort, isDesktopProtocol, protocolLabel, type SessionProtocol } from '../../../shared/protocol'
@@ -659,7 +659,7 @@ export function SessionForm() {
                         })
                       }}
                     >
-                      浏览
+                      {t('form.browse')}
                     </Button>
                   </div>
                 </Field>
@@ -714,7 +714,7 @@ export function SessionForm() {
               </Field>
               {options?.extraJumps?.length ? (
                 <p className="text-xs text-muted-foreground">
-                  后面还有 {options.extraJumps.map((hop) => `${hop.username}@${hop.host}:${hop.port}`).join('，')}
+                  {t('form.extra_jumps', { list: options.extraJumps.map((hop) => `${hop.username}@${hop.host}:${hop.port}`).join(', ') })}
                 </p>
               ) : null}
             </TabsContent>
@@ -860,13 +860,15 @@ function secondsToMs(text: string): number | undefined {
 
 function recognizedNote(options: SshConnectOptions | undefined): string {
   if (!options) return ''
+  const tr = (key: string, params?: Record<string, string | number>): string =>
+    String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))
   const parts: string[] = []
-  if (options.algorithms?.cipher) parts.push('加密算法')
-  if (options.algorithms?.kex) parts.push('密钥交换')
-  if (options.algorithms?.serverHostKey) parts.push('主机密钥算法')
-  if (options.algorithms?.hmac) parts.push('校验算法')
-  if (options.keyPaths?.length) parts.push(`另有 ${options.keyPaths.length} 把私钥`)
-  return parts.length > 0 ? `命令里还带了${parts.join('、')}。` : ''
+  if (options.algorithms?.cipher) parts.push(tr('form.cipher'))
+  if (options.algorithms?.kex) parts.push(tr('form.kex'))
+  if (options.algorithms?.serverHostKey) parts.push(tr('form.host_key'))
+  if (options.algorithms?.hmac) parts.push(tr('form.mac'))
+  if (options.keyPaths?.length) parts.push(tr('form.extra_keys', { count: options.keyPaths.length }))
+  return parts.length > 0 ? tr('form.ssh_options_summary', { parts: parts.join(', ') }) : ''
 }
 
 export function Field(props: { label: string; children: React.ReactNode }) {

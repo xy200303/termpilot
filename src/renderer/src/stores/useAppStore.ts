@@ -20,6 +20,7 @@ import {
 import { isDesktopProtocol, type SessionProtocol } from '../../../shared/protocol'
 import { newTermId, newViewId } from '../../../shared/ids'
 import { dropBuffer, editorKey } from '../editor/editorBuffers'
+import i18n from '../i18n'
 import { terminalPool } from '../terminal/TerminalPool'
 import { unregisterRdp } from '../desktop/rdpAgent'
 import { applyAppearance, readCachedAppearance, resolveAppTheme, type ResolvedAppTheme } from '../theme/applyAppearance'
@@ -343,7 +344,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ activeTabId: existing.id })
         return
       }
-      const tab: Tab = { id: newViewId(), sessionId: session.id, kind, title: '桌面' }
+      const tab: Tab = { id: newViewId(), sessionId: session.id, kind, title: i18n.t('common.desktop', { defaultValue: 'Desktop' }) }
       set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
       void window.api.desktop.open(tab.id, session.id).catch((error) => {
         get().onDesktopStatus({
@@ -367,7 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: newTermId(),
       sessionId: session.id,
       kind: 'ssh',
-      title: `窗口 ${count + 1}`
+      title: i18n.t('common.window_number', { defaultValue: 'Window {{n}}', n: count + 1 })
     }
     set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
     window.api.term.create({
@@ -386,7 +387,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: newTermId(),
       sessionId: null,
       kind: 'local',
-      title: `窗口 ${count + 1}`
+      title: i18n.t('common.window_number', { defaultValue: 'Window {{n}}', n: count + 1 })
     }
     set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
     window.api.term.create({ termId: tab.id, kind: 'local', title: tab.title, cols: 80, rows: 24 })
@@ -554,7 +555,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: e.termId,
       sessionId: e.sessionId,
       kind: 'reverse',
-      title: `窗口 ${n}`,
+      title: i18n.t('common.window_number', { defaultValue: 'Window {{n}}', n }),
       remark: e.peer
     }
     set({

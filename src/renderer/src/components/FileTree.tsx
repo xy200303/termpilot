@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/context-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '../stores/useAppStore'
-import { useT } from '../i18n'
+import i18n, { useT } from '../i18n'
 import { FileIcon } from './FileIcon'
 import { openAfterMenu, RemarkDialog } from './RemarkDialog'
 import type { RemoteFile } from '../../../shared/types'
@@ -158,7 +158,7 @@ export function FileTree() {
     )
   }
 
-  const unsupported = error === NO_SFTP
+  const unsupported = error === noSftp()
 
   const directoryOf = (path: string | null) => {
     if (!path || path === root) return root
@@ -323,7 +323,7 @@ export function FileTree() {
                   <ContextMenuItem
                     onClick={() => openRemoteEditor(forward.id, { path: item.path, name: item.name }, true)}
                   >
-                    编辑
+                    {t('files.edit')}
                   </ContextMenuItem>
                 )}
                 <ContextMenuItem
@@ -479,10 +479,10 @@ export function FileTree() {
       )}
       <RemarkDialog
         open={renaming !== null}
-        title="重命名"
-        description={renaming ? `给「${renaming.name}」换个名字。` : ''}
+        title={t('files.rename')}
+        description={renaming ? t('files.rename_hint', { name: renaming.name }) : ''}
         initial={renaming?.name ?? ''}
-        placeholder="新的名称"
+        placeholder={t('files.new_name')}
         error={renameError}
         onOpenChange={(open) => {
           if (!open) {
@@ -495,9 +495,9 @@ export function FileTree() {
       <RemarkDialog
         open={making}
         title={t('files.new_folder')}
-        description="在当前目录新建一个文件夹。"
+        description={t('files.new_folder_hint')}
         initial=""
-        placeholder="文件夹名"
+        placeholder={t('files.folder_name')}
         error={folderError}
         onOpenChange={(open) => {
           if (!open) {
@@ -510,9 +510,9 @@ export function FileTree() {
       <RemarkDialog
         open={picking}
         title={t('files.open_folder')}
-        description="填写这台机器上的目录。"
+        description={t('files.path_hint')}
         initial={root === '.' ? '/' : root}
-        placeholder="/root 或 /home"
+        placeholder={t('files.path_placeholder')}
         error={pathError}
         onOpenChange={(open) => {
           if (!open) {
@@ -523,7 +523,7 @@ export function FileTree() {
         onSave={(value) => {
           const path = value.trim()
           if (!path) {
-            setPathError('目录不能为空')
+            setPathError(t('files.path_required'))
             return
           }
           setPathError('')
@@ -644,14 +644,14 @@ function writeRoot(sessionId: string, path: string): void {
   localStorage.setItem(ROOTS_KEY, JSON.stringify(saved))
 }
 
-const NO_SFTP = '这台机器没有 SFTP'
+const noSftp = (): string => String(i18n.t('files.no_sftp', { defaultValue: 'This machine has no SFTP' }))
 
 function sftpMessage(error: unknown): string {
   const raw = (error instanceof Error ? error.message : String(error)).replace(
     /^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/,
     ''
   )
-  if (/Received exit code 127|establishing SFTP/i.test(raw)) return NO_SFTP
+  if (/Received exit code 127|establishing SFTP/i.test(raw)) return noSftp()
   return raw
 }
 

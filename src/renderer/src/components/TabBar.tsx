@@ -107,7 +107,7 @@ export function TabBar() {
     if (!activeTabId) return
     const termId = activeTabId
     setShotError(null)
-    setNotice('正在截图…')
+    setNotice(tr('tabbar.capturing'))
     void (async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve))
       try {
@@ -194,7 +194,7 @@ export function TabBar() {
                 <ContextMenuItem
                   onClick={() => void copyAgentPrompt(termAgentPrompt(t, session), setNotice)}
                 >
-                  复制为 Agent 提示词
+                  {tr('tabbar.copy_agent_prompt')}
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => openAfterMenu(() => setRenamingId(t.id))}>{tr('files.rename')}</ContextMenuItem>
                 <ContextMenuItem onClick={() => openAfterMenu(() => setRemarkingId(t.id))}>{tr('form.note')}</ContextMenuItem>
@@ -262,7 +262,7 @@ export function TabBar() {
     <RemarkDialog
       open={renamingId !== null}
       title={tr('files.rename')}
-      description={`给「${tabs.find((tab) => tab.id === renamingId)?.title ?? ''}」换个名字。`}
+      description={tr('tabbar.rename_hint', { name: tabs.find((tab) => tab.id === renamingId)?.title ?? '' })}
       initial={tabs.find((tab) => tab.id === renamingId)?.title ?? ''}
       placeholder={tr('sidebar.window_name')}
       onOpenChange={(open) => !open && setRenamingId(null)}
@@ -274,7 +274,7 @@ export function TabBar() {
     <RemarkDialog
       open={remarkingId !== null}
       title={tr('form.note')}
-      description={`给「${tabs.find((tab) => tab.id === remarkingId)?.title ?? ''}」写一句，方便以后认出它。留空就是清掉。`}
+      description={tr('tabbar.remark_hint', { name: tabs.find((tab) => tab.id === remarkingId)?.title ?? '' })}
       initial={tabs.find((tab) => tab.id === remarkingId)?.remark ?? ''}
       placeholder={tr('sidebar.what_is_this_window_doing')}
       onOpenChange={(open) => !open && setRemarkingId(null)}

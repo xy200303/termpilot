@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useT } from '../i18n'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -53,6 +54,7 @@ function RemarkForm(props: {
   onCancel: () => void
   onSave: (value: string) => void
 }) {
+  const t = useT()
   const [value, setValue] = useState(props.initial)
 
   const save = () => props.onSave(value)
@@ -78,9 +80,9 @@ function RemarkForm(props: {
       {props.error ? <p className="text-sm text-destructive">{props.error}</p> : null}
       <DialogFooter>
         <Button variant="outline" onClick={props.onCancel}>
-          取消
+          {t('common.cancel')}
         </Button>
-        <Button onClick={save}>保存</Button>
+        <Button onClick={save}>{t('common.save')}</Button>
       </DialogFooter>
     </DialogContent>
   )

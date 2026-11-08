@@ -1,4 +1,8 @@
 import type { RecordStart } from '../../../shared/types'
+import i18n from '../i18n'
+
+const tr = (key: string, params?: Record<string, string | number>): string =>
+  String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))
 
 /**
  * 应用窗口录屏。
@@ -32,7 +36,7 @@ function errorText(error: unknown): string {
 
 function stopAndCollect(): Promise<{ data: Uint8Array; mime: string }> {
   const rec = recorder
-  if (!rec) return Promise.reject(new Error('没有正在进行的录屏'))
+  if (!rec) return Promise.reject(new Error(tr('record.not_running')))
   return new Promise((resolve, reject) => {
     const collect = async () => {
       try {

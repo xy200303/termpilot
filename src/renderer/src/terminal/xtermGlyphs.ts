@@ -4,7 +4,7 @@
  */
 
 function throwIfFalsy<T>(value: T | undefined | null): T {
-  if (!value) throw new Error('字形没有建成')
+  if (!value) throw new Error(tr('compose.glyph_missing'))
   return value
 }
 
@@ -694,3 +694,7 @@ function translateArgs(args: string[], cellWidth: number, cellHeight: number, xO
 
   return result;
 }
+import i18n from '../i18n'
+
+const tr = (key: string, params?: Record<string, string | number>): string =>
+  String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../i18n'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,6 +13,7 @@ import type { McpConfirmRequest } from '../../../shared/types'
 
 /** Agent 要执行危险命令时弹出。关掉窗口等于拒绝。 */
 export function McpConfirmDialog() {
+  const t = useT()
   const [queue, setQueue] = useState<McpConfirmRequest[]>([])
   const current = queue[0]
 
@@ -29,18 +31,18 @@ export function McpConfirmDialog() {
     <Dialog open={current !== undefined} onOpenChange={(open) => !open && reply(false)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Agent 请求执行危险命令</DialogTitle>
-          <DialogDescription>确认后才会发到终端。60 秒内不处理会自动拒绝。</DialogDescription>
+          <DialogTitle>{t('confirm.title')}</DialogTitle>
+          <DialogDescription>{t('confirm.description')}</DialogDescription>
         </DialogHeader>
         <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2 font-mono text-xs text-foreground">
           {current?.command}
         </pre>
         <DialogFooter>
           <Button variant="outline" onClick={() => reply(false)}>
-            拒绝
+            {t('confirm.deny')}
           </Button>
           <Button variant="destructive" onClick={() => reply(true)}>
-            允许
+            {t('confirm.allow')}
           </Button>
         </DialogFooter>
       </DialogContent>

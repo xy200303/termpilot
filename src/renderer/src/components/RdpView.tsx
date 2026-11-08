@@ -107,7 +107,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
           </div>
           {status?.error && <pre className="max-w-2xl whitespace-pre-wrap text-xs text-destructive">{status.error}</pre>}
           <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>
-            重新连接
+            {t('common.reconnect')}
           </Button>
         </div>
       )}

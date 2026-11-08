@@ -21,7 +21,7 @@ import { terminalPool } from './terminal/TerminalPool'
 import { startRecording, stopRecording } from './terminal/windowRecorder'
 import { runVncAgent } from './desktop/vncAgent'
 import { runRdpAgentById } from './desktop/rdpAgent'
-import { syncLanguage } from './i18n'
+import i18n, { syncLanguage } from './i18n'
 
 export default function App() {
   const loadSessions = useAppStore((s) => s.loadSessions)
@@ -96,7 +96,7 @@ export default function App() {
         window.api.term.linesReply(
           listed
             ? { id: job.id, ...listed }
-            : { id: job.id, error: '终端不在画面上' }
+            : { id: job.id, error: i18n.t('capture.terminal_missing', { defaultValue: 'Terminal is not on screen' }) }
         )
       }),
     []
