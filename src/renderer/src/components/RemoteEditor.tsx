@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Editor, { loader } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
+import * as monaco from 'monaco-editor/editor/editor.api'
+import 'monaco-editor/basic-languages/monaco.contribution'
+import 'monaco-editor/language/json/monaco.contribution'
 import editorWorker from 'monaco-editor/editor/editor.worker.js?worker'
 import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker'
-import cssWorker from 'monaco-editor/language/css/css.worker.js?worker'
-import htmlWorker from 'monaco-editor/language/html/html.worker.js?worker'
-import tsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker'
 import { readBuffer, writeBuffer } from '../editor/editorBuffers'
 import { useAppStore, type EditorTab } from '../stores/useAppStore'
 
+/* 只保留 JSON 的语言服务；css/html/ts 不打包各自的 worker（每个 0.7–6.7 MB），
+   远端文本文件仍保留语法高亮和编辑能力 */
 self.MonacoEnvironment = {
   getWorker(_id, label) {
     if (label === 'json') return new jsonWorker()
-    if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker()
-    if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker()
-    if (label === 'typescript' || label === 'javascript') return new tsWorker()
     return new editorWorker()
   }
 }
