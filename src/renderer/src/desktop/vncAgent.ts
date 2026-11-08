@@ -1,6 +1,11 @@
 import type RFB from '@novnc/novnc'
 import type { DesktopAgentInput } from '../../../shared/desktop-agent'
 import { captureCanvas, scaleToCanvas, waitForCanvas } from './capture'
+import i18n from '../i18n'
+
+const tr = (key: string, params?: Record<string, string | number>): string =>
+  String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))
+
 
 interface Entry {
   rfb: RFB
@@ -19,17 +24,17 @@ export function unregisterVnc(viewId: string): void {
 
 export async function runVncAgent(viewId: string, input: DesktopAgentInput): Promise<{ pngBase64?: string; note: string }> {
   const entry = entries.get(viewId)
-  if (!entry) throw new Error('VNC 画面不存在或已断开，请先打开该 VNC 标签')
+  if (!entry) throw new Error(tr('common.vnc_desktop_not_found_or_disconnected_open_the_v'))
   const { rfb, canvas } = entry
   if (input.action === 'screenshot') {
     const shot = captureCanvas(canvas)
     return {
       pngBase64: shot.pngBase64,
-      note: `VNC 画面已截取（${shot.width}×${shot.height}）`
+      note: tr('common.vnc_screen_captured_w_h', { w: shot.width, h: shot.height })
     }
   }
   if (input.action === 'wait') return waitForCanvas(canvas, input)
-  if (rfb.viewOnly) throw new Error('这条 VNC 连接是只观看模式，不能发送鼠标键盘')
+  if (rfb.viewOnly) throw new Error(tr('common.this_vnc_connection_is_view_only_cannot_send_mou'))
   if (input.action === 'click') {
     const button = input.button === 'right' ? 2 : input.button === 'middle' ? 1 : 0
     const buttons = input.button === 'right' ? 2 : input.button === 'middle' ? 4 : 1
@@ -43,12 +48,12 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
       canvas.dispatchEvent(new MouseEvent('mouseup', { ...base, buttons: 0, detail: i + 1 }))
       canvas.dispatchEvent(new MouseEvent('click', { ...base, buttons: 0, detail: i + 1 }))
     }
-    return { note: `已发送 VNC 点击（图片坐标 ${target.x}, ${target.y}${target.scaled ? '，已按截图尺寸换算' : ''}）` }
+    return { note: tr('common.vnc_click_sent_image_coordinates_x_y_scaled', { x: target.x, y: target.y, scaled: target.scaled ? tr('common.scaled_from_the_screenshot_size') : '' }) }
   }
   if (input.action === 'key') {
     rfb.focus()
     sendCombo(rfb, input.keys)
-    return { note: `已发送 VNC 按键 ${input.keys}` }
+    return { note: tr('common.vnc_key_sent_keys', { keys: input.keys }) }
   }
   if (input.action === 'type') {
     rfb.focus()
@@ -56,46 +61,46 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
     if (input.method === 'clipboard') {
       // VNC 没有文本通道：先把整段写进远端剪贴板，再让目标应用自己粘贴
       const combo = await pasteIntoVnc(entry, input.text, input.pasteKeys)
-      return { note: `已把 ${count} 个字符写入远端剪贴板，并发送 ${combo} 粘贴` }
+      return { note: tr('common.wrote_count_characters_to_the_remote_clipboard_a', { count, combo }) }
     }
     for (const char of input.text) sendChar(rfb, char)
-    return { note: `已逐字输入 ${count} 个字符` }
+    return { note: tr('common.typed_count_characters', { count }) }
   }
   const rect = canvas.getBoundingClientRect()
   const scaled = scaleToCanvas(canvas, input.x ?? canvas.width / 2, input.y ?? canvas.height / 2, input.fromWidth, input.fromHeight)
   const point = canvasPoint(canvas, scaled.x, scaled.y)
   canvas.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: input.deltaY, clientX: point.x, clientY: point.y }))
-  return { note: `已发送 VNC 滚动 ${input.deltaY}（画布显示宽度 ${Math.round(rect.width)}px）` }
+  return { note: tr('common.vnc_scroll_sent_delta_canvas_width_width_px', { delta: input.deltaY, width: Math.round(rect.width) }) }
 }
 
 /** 桌面标签里的「发送文字」入口：写远端剪贴板再粘贴，中文不经过远端输入法。 */
 export async function sendTextToVnc(viewId: string, text: string, pasteKeys = 'ctrl-v'): Promise<void> {
   const entry = entries.get(viewId)
-  if (!entry) throw new Error('VNC 画面不存在或已断开')
-  if (entry.rfb.viewOnly) throw new Error('这条 VNC 连接是只观看模式，不能发送文字')
+  if (!entry) throw new Error(tr('common.vnc_desktop_not_found_or_disconnected'))
+  if (entry.rfb.viewOnly) throw new Error(tr('common.this_vnc_connection_is_view_only_cannot_send_tex'))
   await pasteIntoVnc(entry, text, pasteKeys)
 }
 
 /** 中文键盘接管时逐字发字符（Unicode keysym）。 */
 export function sendVncChar(viewId: string, char: string): void {
   const entry = entries.get(viewId)
-  if (!entry) throw new Error('VNC 画面不存在或已断开')
+  if (!entry) throw new Error(tr('common.vnc_desktop_not_found_or_disconnected'))
   sendChar(entry.rfb, char)
 }
 
 /** 中文键盘接管时发特殊键，名字同 term 按键表（enter、backspace、up…）。 */
 export function sendVncKey(viewId: string, name: string): void {
   const entry = entries.get(viewId)
-  if (!entry) throw new Error('VNC 画面不存在或已断开')
+  if (!entry) throw new Error(tr('common.vnc_desktop_not_found_or_disconnected'))
   const special = SPECIAL[name]
-  if (!special) throw new Error(`不认识的按键 ${name}`)
+  if (!special) throw new Error(tr('common.unknown_key_key', { key: name }))
   entry.rfb.sendKey(special.keysym, special.code)
 }
 
 /** 中文键盘接管时发组合键，例如 ctrl-c、shift-tab。 */
 export function sendVncCombo(viewId: string, combo: string): void {
   const entry = entries.get(viewId)
-  if (!entry) throw new Error('VNC 画面不存在或已断开')
+  if (!entry) throw new Error(tr('common.vnc_desktop_not_found_or_disconnected'))
   sendCombo(entry.rfb, combo)
 }
 
@@ -112,7 +117,7 @@ async function pasteIntoVnc(entry: Entry, text: string, pasteKeys?: string): Pro
 
 function canvasPoint(canvas: HTMLCanvasElement, x: number, y: number): { x: number; y: number } {
   if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
-    throw new Error(`坐标 (${x}, ${y}) 超出图片范围 ${canvas.width}×${canvas.height}`)
+    throw new Error(tr('common.coordinates_x_y_are_outside_the_image_w_h', { x, y, w: canvas.width, h: canvas.height }))
   }
   const rect = canvas.getBoundingClientRect()
   return {
@@ -201,10 +206,10 @@ const CHAR_CODES: Record<string, string> = {
 function sendCombo(rfb: RFB, combo: string): void {
   const parts = combo.split('-').filter(Boolean)
   const main = parts.pop()
-  if (!main) throw new Error('按键不能为空')
+  if (!main) throw new Error(tr('common.key_cannot_be_empty'))
   const modifiers = parts.map((name) => {
     const item = MODIFIERS[name.toLowerCase()]
-    if (!item) throw new Error(`不认识的修饰键 ${name}`)
+    if (!item) throw new Error(tr('common.unknown_modifier_key', { key: name }))
     return item
   })
   for (const item of modifiers) rfb.sendKey(item.keysym, item.code, true)
@@ -212,7 +217,7 @@ function sendCombo(rfb: RFB, combo: string): void {
     const special = SPECIAL[main.toLowerCase()]
     if (special) rfb.sendKey(special.keysym, special.code)
     else if (Array.from(main).length === 1) sendChar(rfb, main)
-    else throw new Error(`不认识的按键 ${main}`)
+    else throw new Error(tr('common.unknown_key_key', { key: main }))
   } finally {
     for (const item of [...modifiers].reverse()) rfb.sendKey(item.keysym, item.code, false)
   }

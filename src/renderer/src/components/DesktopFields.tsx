@@ -20,10 +20,10 @@ export function DesktopFields(props: {
   return (
     <>
       <div className="grid grid-cols-[1fr_6rem] gap-2">
-        <Field label={t('Host')}>
-          <Input value={form.host} placeholder={t('IP or hostname')} onChange={(e) => set('host', e.target.value)} />
+        <Field label={t('desktop.host')}>
+          <Input value={form.host} placeholder={t('desktop.ip_or_hostname')} onChange={(e) => set('host', e.target.value)} />
         </Field>
-        <Field label={t('Port')}>
+        <Field label={t('desktop.port')}>
           <Input
             type="number"
             value={form.port}
@@ -31,33 +31,33 @@ export function DesktopFields(props: {
           />
         </Field>
       </div>
-      <Field label={protocol === 'rdp' ? t('Username') : t('VNC password')}>
+      <Field label={protocol === 'rdp' ? t('desktop.username') : t('desktop.vnc_password')}>
         <Input
           type={protocol === 'rdp' ? 'text' : 'password'}
           value={protocol === 'rdp' ? form.username : (form.secret ?? '')}
-          placeholder={protocol === 'rdp' ? t('Account name; FreeRDP asks for the password') : t('Leave empty if there is no password')}
+          placeholder={protocol === 'rdp' ? t('desktop.account_name_freerdp_asks_for_the_password') : t('desktop.leave_empty_if_there_is_no_password')}
           onChange={(e) => set(protocol === 'rdp' ? 'username' : 'secret', e.target.value)}
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label={t('Desktop width (optional)')}>
+        <Field label={t('desktop.desktop_width_optional')}>
           <Input
             type="number"
             value={options.width ?? ''}
-            placeholder={t('Follow window')}
+            placeholder={t('desktop.follow_window')}
             onChange={(e) => setOptions({ width: Number(e.target.value) || undefined })}
           />
         </Field>
-        <Field label={t('Desktop height (optional)')}>
+        <Field label={t('desktop.desktop_height_optional')}>
           <Input
             type="number"
             value={options.height ?? ''}
-            placeholder={t('Follow window')}
+            placeholder={t('desktop.follow_window')}
             onChange={(e) => setOptions({ height: Number(e.target.value) || undefined })}
           />
         </Field>
       </div>
-      <Field label={t('Performance mode')}>
+      <Field label={t('desktop.performance_mode')}>
         <Select
           value={options.performance ?? 'balanced'}
           onValueChange={(value) => setOptions({ performance: value as DesktopOptions['performance'] })}
@@ -67,9 +67,9 @@ export function DesktopFields(props: {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="auto">自动</SelectItem>
-            <SelectItem value="quality">{t('Quality')}</SelectItem>
-            <SelectItem value="balanced">{t('Balanced')}</SelectItem>
-            <SelectItem value="speed">{t('Speed')}</SelectItem>
+            <SelectItem value="quality">{t('desktop.quality')}</SelectItem>
+            <SelectItem value="balanced">{t('desktop.balanced')}</SelectItem>
+            <SelectItem value="speed">{t('desktop.speed')}</SelectItem>
           </SelectContent>
         </Select>
       </Field>
@@ -79,7 +79,7 @@ export function DesktopFields(props: {
           checked={options.clipboard !== false}
           onChange={(e) => setOptions({ clipboard: e.target.checked })}
         />
-        {t('Share text clipboard with this machine')}
+        {t('desktop.share_text_clipboard_with_this_machine')}
       </Label>
       {protocol === 'vnc' && (
         <Label className="flex items-center gap-2 text-sm font-normal">
@@ -88,7 +88,7 @@ export function DesktopFields(props: {
             checked={options.viewOnly === true}
             onChange={(e) => setOptions({ viewOnly: e.target.checked })}
           />
-          {t('View only, do not send mouse or keyboard')}
+          {t('desktop.view_only_do_not_send_mouse_or_keyboard')}
         </Label>
       )}
       {protocol === 'rdp' && (
@@ -98,7 +98,7 @@ export function DesktopFields(props: {
             checked={options.nativeClient === true}
             onChange={(e) => setOptions({ nativeClient: e.target.checked })}
           />
-          {t('Use the FreeRDP native window (embedded IronRDP by default)')}
+          {t('desktop.use_the_freerdp_native_window_embedded_ironrdp_b')}
         </Label>
       )}
     </>

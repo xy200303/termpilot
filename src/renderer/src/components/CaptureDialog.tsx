@@ -80,9 +80,9 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
     <Dialog open={props.shot !== null} onOpenChange={(open) => !open && props.onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('Screenshot saved')}</DialogTitle>
+          <DialogTitle>{t('captureDialog.screenshot_saved')}</DialogTitle>
           <DialogDescription>
-            {count > 1 ? t('{count} images; showing the last one.', { count }) : t('Saved to the screenshots folder.')}
+            {count > 1 ? t('captureDialog.count_images_showing_the_last_one', { count }) : t('captureDialog.saved_to_the_screenshots_folder')}
             {props.shot?.note ? ` ${props.shot.note}` : ''}
           </DialogDescription>
         </DialogHeader>
@@ -95,9 +95,9 @@ export function CaptureDialog(props: { shot: CaptureDone | null; error?: string 
         {error && <p className="text-xs text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => void reveal()}>
-            {t('Open containing folder')}
+            {t('captureDialog.open_containing_folder')}
           </Button>
-          <Button onClick={() => void copy()}>{copied ? t('Copied') : t('复制图片')}</Button>
+          <Button onClick={() => void copy()}>{copied ? t('captureDialog.copied') : t('复制图片')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

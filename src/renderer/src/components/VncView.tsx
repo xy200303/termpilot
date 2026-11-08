@@ -55,7 +55,7 @@ export function VncView(props: { viewId: string; session: SessionConfig; active:
       try {
         const result = await window.api.desktop.open(props.viewId, props.session.id)
         if (disposed || !host.current) return
-        if (result.mode !== 'embedded') throw new Error(t('VNC did not enter embedded mode'))
+        if (result.mode !== 'embedded') throw new Error(t('vnc.vnc_did_not_enter_embedded_mode'))
         rfb = new RFB(host.current, result.url, { credentials: { password: result.password ?? '' } })
         rfbRef.current = rfb
         const canvas = host.current.querySelector('canvas')
@@ -101,7 +101,7 @@ export function VncView(props: { viewId: string; session: SessionConfig; active:
             viewId: props.viewId,
             sessionId: props.session.id,
             status: clean ? 'disconnected' : 'error',
-            message: clean ? t('VNC disconnected') : t('VNC connection lost')
+            message: clean ? t('vnc.vnc_disconnected') : t('vnc.vnc_connection_lost')
           })
         })
         rfb.addEventListener('credentialsrequired', () => {
@@ -210,7 +210,7 @@ export function VncView(props: { viewId: string; session: SessionConfig; active:
       {status?.status !== 'connected' && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/90 px-8 text-center">
           <div className="text-sm text-muted-foreground">
-            {status?.status === 'connecting' ? t('Connecting to VNC…') : error ? t('VNC connection failed') : t('VNC disconnected')}
+            {status?.status === 'connecting' ? t('vnc.connecting_to_vnc') : error ? t('vnc.vnc_connection_failed') : t('vnc.vnc_disconnected')}
           </div>
           {status?.error && <pre className="max-w-2xl whitespace-pre-wrap text-xs text-destructive">{status.error}</pre>}
           <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>

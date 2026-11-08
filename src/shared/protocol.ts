@@ -34,11 +34,11 @@ export function capabilitiesOf(protocol: SessionProtocol | undefined): ProtocolC
 
 /** 界面和错误提示里的协议名；英文作为 i18n key，中文在 zh.json 里映射。 */
 export function protocolLabel(protocol: SessionProtocol | undefined): string {
-  if (protocol === 'telnet') return 'Telnet'
-  if (protocol === 'serial') return 'Serial'
-  if (protocol === 'rdp') return 'RDP'
-  if (protocol === 'vnc') return 'VNC'
-  return 'SSH'
+  if (protocol === 'telnet') return 'protocol.telnet'
+  if (protocol === 'serial') return 'protocol.serial'
+  if (protocol === 'rdp') return 'protocol.rdp'
+  if (protocol === 'vnc') return 'protocol.vnc'
+  return 'protocol.ssh'
 }
 
 export function defaultPort(protocol: SessionProtocol | undefined): number {

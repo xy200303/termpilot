@@ -18,36 +18,36 @@ export function StatusBar() {
   const session = tab?.sessionId ? sessions.find((s) => s.id === tab.sessionId) : null
   const state = tab ? termState[tab.id] : undefined
 
-  let statusText = t('Ready')
+  let statusText = t('status.ready')
   if (tab?.kind === 'reverse' && session) {
     const listen = listeners[session.id]
     statusText = listen?.listening
-      ? `${t('Reverse shell connected')} · 127.0.0.1:${session.listenPort}`
-      : t('Reverse connection closed')
+      ? `${t('status.reverse_shell_connected')} · 127.0.0.1:${session.listenPort}`
+      : t('status.reverse_connection_closed')
   } else if (tab?.kind === 'local') {
-    statusText = state?.status === 'connected' ? t('Local terminal') : t('Local terminal not connected')
+    statusText = state?.status === 'connected' ? t('sidebar.local_terminal') : t('status.local_terminal_not_connected')
   } else if (tab) {
     switch (state?.status) {
       case 'connected':
-        statusText = `${t('SSH')} ${session ? `${session.username}@${session.host}:${session.port}` : ''}`
+        statusText = `${t('form.ssh')} ${session ? `${session.username}@${session.host}:${session.port}` : ''}`
         break
       case 'connecting':
-        statusText = `${t('Connecting to')} ${session?.host ?? ''}…`
+        statusText = `${t('status.connecting_to')} ${session?.host ?? ''}…`
         break
       case 'error':
-        statusText = state.error ?? t('Connection failed')
+        statusText = state.error ?? t('status.connection_failed')
         break
       default:
-        statusText = t('Not connected')
+        statusText = t('status.not_connected')
     }
   }
 
-  let mcpText = t('MCP disabled')
+  let mcpText = t('status.mcp_disabled')
   if (mcp?.enabled) {
-    if (mcpRuntime.running && mcpRuntime.clients > 0) mcpText = `${t('MCP clients')} ${mcpRuntime.clients}`
-    else if (mcpRuntime.running) mcpText = t('MCP listening')
-    else if (mcpRuntime.error) mcpText = t('MCP failed to start')
-    else mcpText = t('MCP not running')
+    if (mcpRuntime.running && mcpRuntime.clients > 0) mcpText = `${t('status.mcp_clients')} ${mcpRuntime.clients}`
+    else if (mcpRuntime.running) mcpText = t('status.mcp_listening')
+    else if (mcpRuntime.error) mcpText = t('status.mcp_failed_to_start')
+    else mcpText = t('status.mcp_not_running')
   }
 
   return (

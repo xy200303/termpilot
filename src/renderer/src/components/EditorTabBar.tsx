@@ -83,7 +83,7 @@ export function EditorTabBar(props: { tabs: EditorTab[]; activeKey: string | nul
             </button>
             <button
               type="button"
-              title={t('Close')}
+              title={t('editor.close')}
               className="flex size-4 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-foreground/10 hover:opacity-100"
               onClick={() => close(tab)}
               onMouseDown={(e) => e.stopPropagation()}
@@ -97,20 +97,20 @@ export function EditorTabBar(props: { tabs: EditorTab[]; activeKey: string | nul
     <Dialog open={pending !== null} onOpenChange={(open) => !open && !saving && setPending(null)}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('File not saved')}</DialogTitle>
+          <DialogTitle>{t('editor.file_not_saved')}</DialogTitle>
           <DialogDescription>
-            {t('{name} has unsaved changes. Closing will lose them.', { name: pending?.name ?? '' })}
+            {t('editor.name_has_unsaved_changes_closing_will_lose_them', { name: pending?.name ?? '' })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" disabled={saving} onClick={() => setPending(null)}>
-            {t('Cancel')}
+            {t('editor.cancel')}
           </Button>
           <Button variant="destructive" disabled={saving} onClick={discard}>
-            {t('Don\'t save')}
+            {t('editor.don_t_save')}
           </Button>
           <Button disabled={saving} onClick={() => void saveAndClose()}>
-            {t('Save')}
+            {t('editor.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

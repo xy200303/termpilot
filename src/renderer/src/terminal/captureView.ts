@@ -40,7 +40,7 @@ export async function captureTerminalView(opts: {
 }): Promise<CaptureDone> {
   const state = useAppStore.getState()
   if (!state.tabs.some((tab) => tab.id === opts.termId)) {
-    throw new Error(tr('Terminal not found; connect first'))
+    throw new Error(tr('capture.terminal_not_found_connect_first'))
   }
   if (state.activeTabId !== opts.termId) state.setActiveTab(opts.termId)
   await waitVisible(opts.termId)
@@ -48,22 +48,22 @@ export async function captureTerminalView(opts: {
   if (opts.mode === 'viewport') {
     if (composeOn()) {
       const info = terminalPool.pageInfo(opts.termId)
-      if (!info) throw new Error(tr('Terminal is not on screen'))
+      if (!info) throw new Error(tr('capture.terminal_is_not_on_screen'))
       const start = info.viewportY
       const end = Math.min(info.length, start + Math.max(1, info.rows))
-      if (end <= start) throw new Error(tr('Nothing to capture'))
+      if (end <= start) throw new Error(tr('capture.nothing_to_capture'))
       const done = await captureReplay(opts.termId, start, end, info.length, start, end)
       const last = end - 1
-      return { paths: done.paths, note: tr('Current screen is lines {from}–{to}', { from: start, to: Math.max(start, last) }) }
+      return { paths: done.paths, note: tr('capture.current_screen_is_lines_from_to', { from: start, to: Math.max(start, last) }) }
     }
     const shot = await grab(opts.termId)
     const paths = await window.api.capture.save([shot.png])
     const last = shot.viewportY + shot.rows - 1
-    return { paths, note: tr('Current screen is lines {from}–{to}', { from: shot.viewportY, to: Math.max(shot.viewportY, last) }) }
+    return { paths, note: tr('capture.current_screen_is_lines_from_to', { from: shot.viewportY, to: Math.max(shot.viewportY, last) }) }
   }
 
   const info = terminalPool.pageInfo(opts.termId)
-  if (!info) throw new Error(tr('Terminal is not on screen'))
+  if (!info) throw new Error(tr('capture.terminal_is_not_on_screen'))
   const rows = Math.max(1, info.rows)
   const total = info.length
   const wantStart = opts.startLine ?? 0
@@ -71,10 +71,10 @@ export async function captureTerminalView(opts: {
   let start = wantStart
   let end = wantEnd
   if (opts.cropOnly) {
-    if (start >= total) throw new Error(tr('Line number beyond the buffer ({total} lines in total)', { total }))
+    if (start >= total) throw new Error(tr('capture.line_number_beyond_the_buffer_total_lines_in_tot', { total }))
     end = Math.min(end, total)
     wantEnd = end
-    if (end <= start) throw new Error(tr('No lines in that range'))
+    if (end <= start) throw new Error(tr('capture.no_lines_in_that_range'))
   } else if (end <= start) {
     end = start + rows
     wantEnd = end
@@ -105,7 +105,7 @@ export async function captureTerminalView(opts: {
   } finally {
     terminalPool.scrollTo(opts.termId, saved)
   }
-  if (shots.length === 0) throw new Error(tr('Nothing to capture'))
+  if (shots.length === 0) throw new Error(tr('capture.nothing_to_capture'))
 
   const longPaths = await window.api.capture.save(await stitch(shots))
   const rangeNote = bufferNote(total, start, covered, wantStart, wantEnd)
@@ -114,11 +114,11 @@ export async function captureTerminalView(opts: {
   if (shots.length === 1 && shots[0]?.skipRows === 0 && shots[0].keepRows === shots[0].rows) {
     return { paths: framePaths, note: rangeNote }
   }
-  const note = tr('{frames} screenshots are live captures; {long} are stitched line by line. {range}', { frames: framePaths.length, long: longPaths.length, range: rangeNote })
+  const note = tr('capture.frames_screenshots_are_live_captures_long_are_st', { frames: framePaths.length, long: longPaths.length, range: rangeNote })
   return { paths: [...framePaths, ...longPaths], note }
 }
 
-const COMPOSE_FAILED = tr('Compositing produced no image. Turn off "compose" in Settings.')
+const COMPOSE_FAILED = tr('capture.compositing_produced_no_image_turn_off_compose_i')
 
 function composeOn(): boolean {
   return useAppStore.getState().appearance.experimentalScreenshot
@@ -143,7 +143,7 @@ async function replayCanvases(
 ): Promise<{ pngs: string[]; covered: number }> {
   const look = terminalPool.look(termId)
   const rect = terminalPool.screenRect(termId)
-  if (!look || !rect) throw new Error(tr('Terminal is not on screen'))
+  if (!look || !rect) throw new Error(tr('capture.terminal_is_not_on_screen'))
   const pageRows = Math.max(1, look.rows)
   const deadline = performance.now() + CAPTURE_BUDGET_MS
   const pngs: string[] = []
@@ -156,7 +156,7 @@ async function replayCanvases(
     )
     covered = chunkEnd
   }
-  if (pngs.length === 0) throw new Error(tr('Nothing to capture'))
+  if (pngs.length === 0) throw new Error(tr('capture.nothing_to_capture'))
   return { pngs, covered }
 }
 
@@ -170,10 +170,10 @@ async function paintRange(
 ): Promise<string> {
   try {
     const png = terminalPool.composeRange(termId, start, end, cellWidth, cellHeight)
-    if (!png) throw new Error(tr('Terminal is not on screen'))
+    if (!png) throw new Error(tr('capture.terminal_is_not_on_screen'))
     return png
   } catch (error) {
-    if (error instanceof Error && error.message === tr('Terminal is not on screen')) throw error
+    if (error instanceof Error && error.message === tr('capture.terminal_is_not_on_screen')) throw error
     throw new Error(COMPOSE_FAILED)
   }
 }
@@ -195,7 +195,7 @@ async function deliverReplay(
 /** 没截全时必须写出来。以前先把起点收到末尾，截完又刚好盖住这段，提示就不会出现。 */
 function bufferNote(total: number, from: number, covered: number, wantStart: number, wantEnd: number): string {
   const to = Math.max(from, covered - 1)
-  const text = tr('Buffer has {total} lines; captured lines {from}–{to}', { total, from, to })
+  const text = tr('capture.buffer_has_total_lines_captured_lines_from_to', { total, from, to })
   if (from > wantStart || covered < wantEnd) return `${text}（超出上限）`
   return text
 }
@@ -239,7 +239,7 @@ async function grab(termId: string): Promise<{ png: string; viewportY: number; r
   await paint()
   const rect = terminalPool.screenRect(termId)
   const info = terminalPool.pageInfo(termId)
-  if (!rect || !info) throw new Error(tr('Terminal is not on screen'))
+  if (!rect || !info) throw new Error(tr('capture.terminal_is_not_on_screen'))
   return { png: await shoot(rect), viewportY: info.viewportY, rows: info.rows }
 }
 
@@ -289,14 +289,14 @@ async function waitVisible(termId: string): Promise<void> {
     if (terminalPool.screenRect(termId)) return
     await new Promise((resolve) => requestAnimationFrame(resolve))
   }
-  throw new Error(tr('Terminal is not on screen'))
+  throw new Error(tr('capture.terminal_is_not_on_screen'))
 }
 
 async function stitch(shots: PageShot[]): Promise<string[]> {
   const images = await Promise.all(shots.map((shot) => loadImage(shot.png)))
   const slices = images.map((image, index) => crop(image, shots[index]!))
   const width = slices[0]?.image.naturalWidth ?? 0
-  if (width < 2) throw new Error(tr('The screenshot is empty'))
+  if (width < 2) throw new Error(tr('capture.the_screenshot_is_empty'))
   const pages: Array<{ image: HTMLImageElement; sy: number; sh: number }[]> = []
   let batch: Array<{ image: HTMLImageElement; sy: number; sh: number }> = []
   let batchHeight = 0

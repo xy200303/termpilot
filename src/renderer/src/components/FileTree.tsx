@@ -73,7 +73,7 @@ export function FileTree() {
       if (fallback && path !== '.') {
         try {
           await showRoot(id, '.')
-          setError(t('The previous directory could not be opened; back to the home directory'))
+          setError(t('files.the_previous_directory_could_not_be_opened_back_'))
           setPicking(false)
           return
         } catch (again) {
@@ -144,15 +144,15 @@ export function FileTree() {
   }
 
   if (!session) {
-    return <Hint text={t('Pick an SSH connection under Connections to browse its files.')} />
+    return <Hint text={t('files.pick_an_ssh_connection_under_connections_to_brow')} />
   }
   if (!forward) {
     return (
       <Hint
         text={
           (session.protocol ?? 'ssh') === 'ssh'
-            ? t('The file tree follows SSH connections. Reverse listeners only carry a shell.')
-            : t('Telnet and serial carry a terminal stream only, no file channel.')
+            ? t('files.the_file_tree_follows_ssh_connections_reverse_li')
+            : t('files.telnet_and_serial_carry_a_terminal_stream_only_n')
         }
       />
     )
@@ -171,7 +171,7 @@ export function FileTree() {
     if (!renaming) return
     const name = raw.trim()
     if (!name || name.includes('/') || name.includes('\\')) {
-      setRenameError(t('Name is required and must not contain slashes'))
+      setRenameError(t('files.name_is_required_and_must_not_contain_slashes'))
       return
     }
     if (name === renaming.name) {
@@ -194,7 +194,7 @@ export function FileTree() {
 
   const remove = async (item: RemoteFile) => {
     const message =
-      item.kind === 'dir' ? t('Delete the folder {name} and everything inside?', { name: item.name }) : t('Delete {name}?', { name: item.name })
+      item.kind === 'dir' ? t('files.delete_the_folder_name_and_everything_inside', { name: item.name }) : t('files.delete_name', { name: item.name })
     if (!confirm(message)) return
     try {
       await window.api.sftp.remove(forward.id, item.path, item.kind)
@@ -228,7 +228,7 @@ export function FileTree() {
   const mkdir = async (raw: string) => {
     const name = raw.trim()
     if (!name || name.includes('/') || name.includes('\\')) {
-      setFolderError(t('Name is required and must not contain slashes'))
+      setFolderError(t('files.name_is_required_and_must_not_contain_slashes'))
       return
     }
     const dest = directoryOf(selected)
@@ -316,7 +316,7 @@ export function FileTree() {
               <ContextMenuContent>
                 {item.kind === 'dir' && (
                   <ContextMenuItem onClick={() => void loadRoot(forward.id, item.path)}>
-                    <FolderInput /> {t('Open this folder')}
+                    <FolderInput /> {t('files.open_this_folder')}
                   </ContextMenuItem>
                 )}
                 {item.kind !== 'dir' && (
@@ -334,15 +334,15 @@ export function FileTree() {
                     })
                   }
                 >
-                  <Pencil /> {t('Rename')}
+                  <Pencil /> {t('files.rename')}
                 </ContextMenuItem>
                 {item.kind !== 'dir' && (
                   <ContextMenuItem onClick={() => download(item)}>
-                    <Download /> {t('Download')}
+                    <Download /> {t('files.download')}
                   </ContextMenuItem>
                 )}
                 <ContextMenuItem variant="destructive" onClick={() => remove(item)}>
-                  <Trash2 /> {t('Delete')}
+                  <Trash2 /> {t('files.delete')}
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
@@ -350,7 +350,7 @@ export function FileTree() {
             <div>
               {loading[item.path] && !listing && (
                 <p className="flex h-[22px] items-center text-[12px] text-muted-foreground" style={{ paddingLeft: (depth + 1) * TREE_INDENT + TREE_TWISTIE }}>
-                  {t('Loading')}
+                  {t('files.loading')}
                 </p>
               )}
               {listing?.error && (
@@ -360,7 +360,7 @@ export function FileTree() {
               )}
               {listing && listing.entries.length === 0 && !listing.error && (
                 <p className="flex h-[22px] items-center text-[12px] text-muted-foreground" style={{ paddingLeft: (depth + 1) * TREE_INDENT + TREE_TWISTIE }}>
-                  {t('Empty folder')}
+                  {t('files.empty_folder')}
                 </p>
               )}
               {listing && renderNodes(listing.entries, depth + 1)}
@@ -380,7 +380,7 @@ export function FileTree() {
         <Button
           variant="ghost"
           size="icon-sm"
-          title={t('Open folder')}
+          title={t('files.open_folder')}
           aria-expanded={picking}
           onClick={() => {
             setPathError('')
@@ -389,7 +389,7 @@ export function FileTree() {
         >
           <FolderInput />
         </Button>
-        <Button variant="ghost" size="icon-sm" title={t('Refresh')} disabled={busy} onClick={() => void refresh()}>
+        <Button variant="ghost" size="icon-sm" title={t('files.refresh')} disabled={busy} onClick={() => void refresh()}>
           <RefreshCw />
         </Button>
         {!unsupported && (
@@ -397,7 +397,7 @@ export function FileTree() {
             <Button
               variant="ghost"
               size="icon-sm"
-              title={t('New folder')}
+              title={t('files.new_folder')}
               onClick={() => {
                 setFolderError('')
                 setMaking(true)
@@ -405,18 +405,18 @@ export function FileTree() {
             >
               <FolderPlus />
             </Button>
-            <Button variant="ghost" size="icon-sm" title={t('Upload')} disabled={busy} onClick={() => void upload()}>
+            <Button variant="ghost" size="icon-sm" title={t('files.upload')} disabled={busy} onClick={() => void upload()}>
               <Upload />
             </Button>
           </>
         )}
       </div>
       {unsupported ? (
-        <Hint text={t('The built-in SFTP could not start and the existing file channel is unavailable. Changing sshd needs root or passwordless sudo.')} />
+        <Hint text={t('files.the_built_in_sftp_could_not_start_and_the_existi')} />
       ) : (
         <>
           {busy && entries.length === 0 && !error && (
-            <Hint text={t('Preparing SFTP over the current SSH connection; no extra port is opened.')} />
+            <Hint text={t('files.preparing_sftp_over_the_current_ssh_connection_n')} />
           )}
           {error && <p className="px-3 pb-1 text-[11px] text-destructive">{error}</p>}
           {!(busy && entries.length === 0 && root === '.') && !(error && entries.length === 0 && root === '.') && (
@@ -447,7 +447,7 @@ export function FileTree() {
                 <ContextMenuContent>
                   {parentDir(root) && (
                     <ContextMenuItem onClick={() => void loadRoot(forward.id, parentDir(root)!)}>
-                      {t('Open parent folder')}
+                      {t('files.open_parent_folder')}
                     </ContextMenuItem>
                   )}
                   <ContextMenuItem
@@ -458,7 +458,7 @@ export function FileTree() {
                       })
                     }
                   >
-                    <FolderInput /> {t('Open another folder')}
+                    <FolderInput /> {t('files.open_another_folder')}
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
@@ -466,7 +466,7 @@ export function FileTree() {
                 <>
                   {entries.length === 0 && !busy && !error && (
                     <p className="flex h-[22px] items-center text-[12px] text-muted-foreground" style={{ paddingLeft: TREE_INDENT + TREE_TWISTIE }}>
-                      {t('Empty folder')}
+                      {t('files.empty_folder')}
                     </p>
                   )}
                   {renderNodes(entries, 1)}
@@ -494,7 +494,7 @@ export function FileTree() {
       />
       <RemarkDialog
         open={making}
-        title={t('New folder')}
+        title={t('files.new_folder')}
         description="在当前目录新建一个文件夹。"
         initial=""
         placeholder="文件夹名"
@@ -509,7 +509,7 @@ export function FileTree() {
       />
       <RemarkDialog
         open={picking}
-        title={t('Open folder')}
+        title={t('files.open_folder')}
         description="填写这台机器上的目录。"
         initial={root === '.' ? '/' : root}
         placeholder="/root 或 /home"

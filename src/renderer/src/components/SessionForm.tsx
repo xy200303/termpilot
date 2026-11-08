@@ -206,7 +206,7 @@ export function SessionForm() {
   const applyCommand = (text: string) => {
     const parsed = parseSshCommand(text)
     if (!parsed) {
-      setError(t('Could not parse this ssh command'))
+      setError(t('form.could_not_parse_this_ssh_command'))
       return
     }
     setError('')
@@ -258,7 +258,7 @@ export function SessionForm() {
     if (mode === 'forward' && protocol === 'ssh' && command.trim() && (!form.host.trim() || !form.username.trim())) {
       const parsed = parseSshCommand(command)
       if (!parsed) {
-        setError(t('Could not parse this ssh command'))
+        setError(t('form.could_not_parse_this_ssh_command'))
         return
       }
       next = {
@@ -283,37 +283,37 @@ export function SessionForm() {
       next = { ...next, name: synced.name, host: synced.host }
     }
     if (!next.name.trim()) {
-      reject(t('Name is required'), 'connect')
+      reject(t('form.name_is_required'), 'connect')
       return
     }
     if (mode === 'forward') {
       if (protocol === 'serial') {
         if (!next.serialPath?.trim()) {
-          reject(t('Serial path is required, e.g. COM3 or /dev/ttyUSB0'), 'connect')
+          reject(t('form.serial_path_is_required_e_g_com3_or_dev_ttyusb0'), 'connect')
           return
         }
       } else {
         if (!next.host.trim()) {
-          reject(t('Host is required'), 'connect')
+          reject(t('form.host_is_required'), 'connect')
           return
         }
         if (protocol === 'ssh') {
           if (!next.username.trim()) {
-            reject(t('Username is required'), 'auth')
+            reject(t('form.username_is_required'), 'auth')
             return
           }
           if (creating && next.authType === 'password' && !next.secret) {
-            reject(t('Password is required for password authentication'), 'auth')
+            reject(t('form.password_is_required_for_password_authentication'), 'auth')
             return
           }
           if (next.jumpHost?.trim() && !next.jumpUsername?.trim()) {
-            reject(t('Jump host username is required'), 'jump')
+            reject(t('form.jump_host_username_is_required'), 'jump')
             return
           }
         }
       }
     } else if (!next.listenPort || next.listenPort < 1 || next.listenPort > 65535) {
-      setError(t('Listen port must be between 1 and 65535'))
+      setError(t('form.listen_port_must_be_between_1_and_65535'))
       return
     }
     try {
@@ -347,30 +347,30 @@ export function SessionForm() {
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {lockedHost ? t('New connection on {host}', { host: lockedHost }) : creating ? t('New') : t('Edit')}
-            {!lockedHost && (mode === 'forward' ? (protocol === 'ssh' ? t('SSH') : t(protocolLabel(protocol))) : t('Reverse listener'))}
+            {lockedHost ? t('form.new_connection_on_host', { host: lockedHost }) : creating ? t('form.new') : t('form.edit')}
+            {!lockedHost && (mode === 'forward' ? (protocol === 'ssh' ? t('form.ssh') : t(protocolLabel(protocol))) : t('form.reverse_listener'))}
           </DialogTitle>
           <DialogDescription>
             {lockedHost
-              ? t('Host is fixed; just fill in the account for this connection.')
+              ? t('form.host_is_fixed_just_fill_in_the_account_for_this_')
               : mode === 'forward'
                 ? protocol === 'ssh'
-                  ? t('This machine connects out to a reachable SSH server.')
+                  ? t('form.this_machine_connects_out_to_a_reachable_ssh_ser')
                   : protocol === 'telnet'
-                    ? t('Telnet is plaintext; use it only on trusted networks. Sign-in happens in the terminal.')
+                    ? t('form.telnet_is_plaintext_use_it_only_on_trusted_netwo')
                     : protocol === 'serial'
-                      ? t('Connect to a local serial device. Byte stream only, no file transfer; match the device baud rate.')
+                      ? t('form.connect_to_a_local_serial_device_byte_stream_onl')
                       : protocol === 'rdp'
-                        ? t('Uses embedded IronRDP by default; FreeRDP native window is optional.')
-                        : t('Uses embedded noVNC; the desktop is shown in the tab.')
-                : t('Listens on 127.0.0.1 for an incoming shell; expose the port with a tunnel for public access.')}
+                        ? t('form.uses_embedded_ironrdp_by_default_freerdp_native_')
+                        : t('form.uses_embedded_novnc_the_desktop_is_shown_in_the_')
+                : t('form.listens_on_127_0_0_1_for_an_incoming_shell_expos')}
           </DialogDescription>
         </DialogHeader>
 
         {mode === 'forward' ? (
           <>
             {!lockedHost && (
-              <Field label={t('Protocol')}>
+              <Field label={t('form.protocol')}>
                 <Select value={protocol} onValueChange={(v) => switchProtocol(v as SessionProtocol)}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -378,7 +378,7 @@ export function SessionForm() {
                   <SelectContent>
                     <SelectItem value="ssh">SSH</SelectItem>
                     <SelectItem value="telnet">Telnet</SelectItem>
-                    <SelectItem value="serial">{t('Serial')}</SelectItem>
+                    <SelectItem value="serial">{t('form.serial')}</SelectItem>
                     <SelectItem value="rdp">RDP</SelectItem>
                     <SelectItem value="vnc">VNC</SelectItem>
                   </SelectContent>
@@ -387,13 +387,13 @@ export function SessionForm() {
             )}
             {protocol !== 'ssh' ? (
               <div className="grid min-h-52 content-start gap-3">
-                <Field label={t('Name')}>
+                <Field label={t('form.name')}>
                   <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
                 </Field>
-                <Field label={t('Note')}>
+                <Field label={t('form.note')}>
                   <Input
                     value={form.remark ?? ''}
-                    placeholder={t('What this connection is for (only you see it)')}
+                    placeholder={t('form.what_this_connection_is_for_only_you_see_it')}
                     onChange={(e) => set('remark', e.target.value)}
                   />
                 </Field>
@@ -401,14 +401,14 @@ export function SessionForm() {
                   <DesktopFields protocol={protocol} form={form} set={set} />
                 ) : protocol === 'telnet' ? (
                   <div className="grid grid-cols-[1fr_6rem] gap-2">
-                    <Field label={t('Host')}>
+                    <Field label={t('desktop.host')}>
                       <Input
                         value={form.host}
-                        placeholder={t('IP or hostname')}
+                        placeholder={t('desktop.ip_or_hostname')}
                         onChange={(e) => set('host', e.target.value)}
                       />
                     </Field>
-                    <Field label={t('Port')}>
+                    <Field label={t('desktop.port')}>
                       <Input
                         type="number"
                         value={form.port}
@@ -418,19 +418,19 @@ export function SessionForm() {
                   </div>
                 ) : (
                   <>
-                    <Field label={t('Serial path')}>
+                    <Field label={t('form.serial_path')}>
                       {manualPath ? (
                         <div className="flex gap-2">
                           <Input
                             value={form.serialPath ?? ''}
-                            placeholder={t('COM3 or /dev/ttyUSB0')}
+                            placeholder={t('form.com3_or_dev_ttyusb0')}
                             onChange={(e) => set('serialPath', e.target.value)}
                           />
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            title={t('Rescan and pick a serial port')}
+                            title={t('form.rescan_and_pick_a_serial_port')}
                             onClick={() => {
                               scanSerial()
                               setManualPath(false)
@@ -451,10 +451,10 @@ export function SessionForm() {
                               <SelectValue
                                 placeholder={
                                   serialPorts === null
-                                    ? t('Scanning serial ports…')
+                                    ? t('form.scanning_serial_ports')
                                     : serialPorts.length
-                                      ? t('Select a serial port')
-                                      : t('No serial port found')
+                                      ? t('form.select_a_serial_port')
+                                      : t('form.no_serial_port_found')
                                 }
                               />
                             </SelectTrigger>
@@ -470,17 +470,17 @@ export function SessionForm() {
                               {form.serialPath &&
                                 !(serialPorts ?? []).some((port) => port.path === form.serialPath) && (
                                   <SelectItem value={form.serialPath}>
-                                    {form.serialPath}{t(' (not detected now)')}
+                                    {form.serialPath}{t('form.not_detected_now')}
                                   </SelectItem>
                                 )}
-                              <SelectItem value={MANUAL_SERIAL}>{t('Enter manually…')}</SelectItem>
+                              <SelectItem value={MANUAL_SERIAL}>{t('form.enter_manually')}</SelectItem>
                             </SelectContent>
                           </Select>
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            title={t('Rescan serial ports')}
+                            title={t('form.rescan_serial_ports')}
                             onClick={scanSerial}
                           >
                             <RefreshCw />
@@ -489,14 +489,14 @@ export function SessionForm() {
                       )}
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
-                      <Field label={t('Baud rate')}>
+                      <Field label={t('form.baud_rate')}>
                         <Input
                           type="number"
                           value={form.baudRate ?? SERIAL_DEFAULTS.baudRate}
                           onChange={(e) => set('baudRate', Number(e.target.value) || SERIAL_DEFAULTS.baudRate)}
                         />
                       </Field>
-                      <Field label={t('Data bits')}>
+                      <Field label={t('form.data_bits')}>
                         <Select
                           value={String(form.dataBits ?? SERIAL_DEFAULTS.dataBits)}
                           onValueChange={(v) => set('dataBits', Number(v))}
@@ -513,7 +513,7 @@ export function SessionForm() {
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field label={t('Stop bits')}>
+                      <Field label={t('form.stop_bits')}>
                         <Select
                           value={String(form.stopBits ?? SERIAL_DEFAULTS.stopBits)}
                           onValueChange={(v) => set('stopBits', Number(v))}
@@ -527,7 +527,7 @@ export function SessionForm() {
                           </SelectContent>
                         </Select>
                       </Field>
-                      <Field label={t('Parity')}>
+                      <Field label={t('form.parity')}>
                         <Select
                           value={form.parity ?? SERIAL_DEFAULTS.parity}
                           onValueChange={(v) => set('parity', v as SessionInput['parity'])}
@@ -536,9 +536,9 @@ export function SessionForm() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">{t('None')}</SelectItem>
-                            <SelectItem value="even">{t('Even')}</SelectItem>
-                            <SelectItem value="odd">{t('Odd')}</SelectItem>
+                            <SelectItem value="none">{t('form.none')}</SelectItem>
+                            <SelectItem value="even">{t('form.even')}</SelectItem>
+                            <SelectItem value="odd">{t('form.odd')}</SelectItem>
                             <SelectItem value="mark">Mark</SelectItem>
                             <SelectItem value="space">Space</SelectItem>
                           </SelectContent>
@@ -551,17 +551,17 @@ export function SessionForm() {
             ) : (
           <Tabs value={page} onValueChange={setPage}>
             <TabsList className="w-full">
-              <TabsTrigger value="connect">{t('Connections')}</TabsTrigger>
-              <TabsTrigger value="auth">{t('Authentication')}</TabsTrigger>
-              <TabsTrigger value="jump">{t('Jump host')}</TabsTrigger>
-              <TabsTrigger value="advanced">{t('Advanced')}</TabsTrigger>
+              <TabsTrigger value="connect">{t('form.connections')}</TabsTrigger>
+              <TabsTrigger value="auth">{t('form.authentication')}</TabsTrigger>
+              <TabsTrigger value="jump">{t('form.jump_host')}</TabsTrigger>
+              <TabsTrigger value="advanced">{t('form.advanced')}</TabsTrigger>
             </TabsList>
             <TabsContent value="connect" className="grid min-h-52 gap-3">
               {creating && configHosts.length > 0 && (
-                <Field label={t('Import from ssh_config')}>
+                <Field label={t('form.import_from_ssh_config')}>
                   <Select value="" onValueChange={applyImport}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t('Pick a Host from ~/.ssh/config to fill the form')} />
+                      <SelectValue placeholder={t('form.pick_a_host_from_ssh_config_to_fill_the_form')} />
                     </SelectTrigger>
                     <SelectContent>
                       {configHosts.map((host) => (
@@ -574,7 +574,7 @@ export function SessionForm() {
                 </Field>
               )}
               {!lockedHost && (
-                <Field label={t('Paste command')}>
+                <Field label={t('form.paste_command')}>
                   <Input
                     value={command}
                     placeholder="ssh -J user@jump:22 user@host -p 22"
@@ -597,27 +597,27 @@ export function SessionForm() {
                   />
                 </Field>
               )}
-              <Field label={t('Name')}>
+              <Field label={t('form.name')}>
                 <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
               </Field>
-              <Field label={t('Note')}>
+              <Field label={t('form.note')}>
                 <Input
                   value={form.remark ?? ''}
-                  placeholder={t('What this connection is for (only you see it)')}
+                  placeholder={t('form.what_this_connection_is_for_only_you_see_it')}
                   onChange={(e) => set('remark', e.target.value)}
                 />
               </Field>
               <div className={lockedHost ? '' : 'grid grid-cols-[1fr_6rem] gap-2'}>
                 {!lockedHost && (
-                  <Field label={t('Host')}>
+                  <Field label={t('desktop.host')}>
                     <Input
                       value={form.host}
-                      placeholder={t('IP or hostname')}
+                      placeholder={t('desktop.ip_or_hostname')}
                       onChange={(e) => set('host', e.target.value)}
                     />
                   </Field>
                 )}
-                <Field label={t('Port')}>
+                <Field label={t('desktop.port')}>
                   <Input
                     type="number"
                     value={form.port}
@@ -627,22 +627,22 @@ export function SessionForm() {
               </div>
             </TabsContent>
             <TabsContent value="auth" className="grid min-h-52 gap-3">
-              <Field label={t('Username')}>
+              <Field label={t('desktop.username')}>
                 <Input value={form.username} onChange={(e) => set('username', e.target.value)} />
               </Field>
-              <Field label={t('Authentication')}>
+              <Field label={t('form.authentication')}>
                 <Select value={form.authType} onValueChange={(v) => set('authType', v as AuthType)}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="password">{t('Password')}</SelectItem>
-                    <SelectItem value="key">{t('Private key')}</SelectItem>
+                    <SelectItem value="password">{t('form.password')}</SelectItem>
+                    <SelectItem value="key">{t('form.private_key')}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
               {form.authType === 'key' && (
-                <Field label={t('Private key')}>
+                <Field label={t('form.private_key')}>
                   <div className="flex gap-2">
                     <Input
                       value={form.keyPath}
@@ -664,18 +664,18 @@ export function SessionForm() {
                   </div>
                 </Field>
               )}
-              <Field label={form.authType === 'key' ? t('Key passphrase') : t('Password')}>
+              <Field label={form.authType === 'key' ? t('form.key_passphrase') : t('form.password')}>
                 <Input
                   type="password"
                   value={form.secret}
                   placeholder={
                     form.authType === 'key'
                       ? creating
-                        ? t('Leave empty if the key has no passphrase')
-                        : t('Leave empty to keep current')
+                        ? t('form.leave_empty_if_the_key_has_no_passphrase')
+                        : t('form.leave_empty_to_keep_current')
                       : creating
                         ? ''
-                        : t('Leave empty to keep current')
+                        : t('form.leave_empty_to_keep_current')
                   }
                   onChange={(e) => set('secret', e.target.value)}
                 />
@@ -683,17 +683,17 @@ export function SessionForm() {
             </TabsContent>
             <TabsContent value="jump" className="grid min-h-52 gap-3">
               <p className="text-xs text-muted-foreground">
-                {t('Same as ssh -J. Keep everything after the colon in the username. Leave empty to connect directly. The target password goes under Authentication.')}
+                {t('form.same_as_ssh_j_keep_everything_after_the_colon_in')}
               </p>
               <div className="grid grid-cols-[1fr_6rem] gap-2">
-                <Field label={t('Jump host')}>
+                <Field label={t('form.jump_host')}>
                   <Input
                     value={form.jumpHost ?? ''}
-                    placeholder={t('IP or hostname')}
+                    placeholder={t('desktop.ip_or_hostname')}
                     onChange={(e) => set('jumpHost', e.target.value)}
                   />
                 </Field>
-                <Field label={t('Port')}>
+                <Field label={t('desktop.port')}>
                   <Input
                     type="number"
                     value={form.jumpPort ?? 22}
@@ -701,14 +701,14 @@ export function SessionForm() {
                   />
                 </Field>
               </div>
-              <Field label={t('Jump username')}>
+              <Field label={t('form.jump_username')}>
                 <Input value={form.jumpUsername ?? ''} onChange={(e) => set('jumpUsername', e.target.value)} />
               </Field>
-              <Field label={t('Jump password')}>
+              <Field label={t('form.jump_password')}>
                 <Input
                   type="password"
                   value={form.jumpSecret ?? ''}
-                  placeholder={creating ? t('Fill only if the jump host needs a password') : session?.hasJumpSecret ? t('Leave empty to keep current') : ''}
+                  placeholder={creating ? t('form.fill_only_if_the_jump_host_needs_a_password') : session?.hasJumpSecret ? t('form.leave_empty_to_keep_current') : ''}
                   onChange={(e) => set('jumpSecret', e.target.value)}
                 />
               </Field>
@@ -720,24 +720,24 @@ export function SessionForm() {
             </TabsContent>
             <TabsContent value="advanced" className="grid min-h-52 gap-3">
               <div className="grid grid-cols-2 gap-2">
-                <Field label={t('Connect timeout (s)')}>
+                <Field label={t('form.connect_timeout_s')}>
                   <Input
                     type="number"
                     value={secondsOf(options?.readyTimeoutMs)}
-                    placeholder={t('Default 15')}
+                    placeholder={t('form.default_15')}
                     onChange={(e) => setOption('readyTimeoutMs', secondsToMs(e.target.value))}
                   />
                 </Field>
-                <Field label={t('Keepalive interval (s)')}>
+                <Field label={t('form.keepalive_interval_s')}>
                   <Input
                     type="number"
                     value={secondsOf(options?.keepaliveIntervalMs)}
-                    placeholder={t('Default 15, 0 disables')}
+                    placeholder={t('form.default_15_0_disables')}
                     onChange={(e) => setOption('keepaliveIntervalMs', secondsToMs(e.target.value))}
                   />
                 </Field>
               </div>
-              <Field label={t('Host key')}>
+              <Field label={t('form.host_key')}>
                 <Select
                   value={hostKey}
                   onValueChange={(v) => setOption('strictHostKeyChecking', v === 'skip' ? 'no' : undefined)}
@@ -746,13 +746,13 @@ export function SessionForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">{t('Verify with defaults')}</SelectItem>
-                    <SelectItem value="skip">{t('Do not verify')}</SelectItem>
+                    <SelectItem value="default">{t('form.verify_with_defaults')}</SelectItem>
+                    <SelectItem value="skip">{t('form.do_not_verify')}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label={t('Address family')}>
+                <Field label={t('form.address_family')}>
                   <Select
                     value={family}
                     onValueChange={(v) => setOption('family', v === '4' ? 4 : v === '6' ? 6 : undefined)}
@@ -761,13 +761,13 @@ export function SessionForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="any">{t('Auto')}</SelectItem>
-                      <SelectItem value="4">{t('IPv4 only')}</SelectItem>
-                      <SelectItem value="6">{t('IPv6 only')}</SelectItem>
+                      <SelectItem value="any">{t('form.auto')}</SelectItem>
+                      <SelectItem value="4">{t('form.ipv4_only')}</SelectItem>
+                      <SelectItem value="6">{t('form.ipv6_only')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label={t('Compression')}>
+                <Field label={t('form.compression')}>
                   <Select
                     value={options?.compress ? 'on' : 'off'}
                     onValueChange={(v) => setOption('compress', v === 'on' ? true : undefined)}
@@ -776,13 +776,13 @@ export function SessionForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="off">{t('Close')}</SelectItem>
-                      <SelectItem value="on">{t('Open')}</SelectItem>
+                      <SelectItem value="off">{t('editor.close')}</SelectItem>
+                      <SelectItem value="on">{t('form.open')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
               </div>
-              <Field label={t('File channel')}>
+              <Field label={t('form.file_channel')}>
                 <Select
                   value={form.sftpMode ?? 'auto'}
                   onValueChange={(v) => set('sftpMode', v as SessionInput['sftpMode'])}
@@ -791,19 +791,19 @@ export function SessionForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto">{t('Auto (dial separately when SFTP is missing)')}</SelectItem>
-                    <SelectItem value="shared">{t('Reuse terminal connection')}</SelectItem>
-                    <SelectItem value="fresh">{t('Always dial separately')}</SelectItem>
+                    <SelectItem value="auto">{t('form.auto_dial_separately_when_sftp_is_missing')}</SelectItem>
+                    <SelectItem value="shared">{t('form.reuse_terminal_connection')}</SelectItem>
+                    <SelectItem value="fresh">{t('form.always_dial_separately')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {t('For jump hosts that authorize a single forwarding, choose Reuse; a separate dial will be rejected.')}
+                  {t('form.for_jump_hosts_that_authorize_a_single_forwardin')}
                 </p>
               </Field>
               <Field label="ProxyCommand">
                 <Input
                   value={options?.proxyCommand ?? ''}
-                  placeholder={t('Local command used instead of a direct connection when there is no jump host')}
+                  placeholder={t('form.local_command_used_instead_of_a_direct_connectio')}
                   onChange={(e) => setOption('proxyCommand', e.target.value.trim() ? e.target.value : undefined)}
                 />
               </Field>
@@ -814,20 +814,20 @@ export function SessionForm() {
           </>
         ) : (
           <div className="grid gap-3">
-            <Field label={t('Name')}>
+            <Field label={t('form.name')}>
               <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
             </Field>
-            <Field label={t('Local port')}>
+            <Field label={t('form.local_port')}>
               <Input
                 type="number"
                 value={form.listenPort}
                 onChange={(e) => set('listenPort', Number(e.target.value) || 0)}
               />
             </Field>
-            <Field label={t('Note')}>
+            <Field label={t('form.note')}>
               <Input
                 value={form.remark}
-                placeholder={t('What this connection is for, or its public address')}
+                placeholder={t('form.what_this_connection_is_for_or_its_public_addres')}
                 onChange={(e) => set('remark', e.target.value)}
               />
             </Field>
@@ -838,9 +838,9 @@ export function SessionForm() {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setEditing(null)}>
-            {t('Cancel')}
+            {t('editor.cancel')}
           </Button>
-          <Button onClick={submit}>{t('Save')}</Button>
+          <Button onClick={submit}>{t('editor.save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

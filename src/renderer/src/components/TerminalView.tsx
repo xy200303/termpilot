@@ -58,7 +58,7 @@ export function TerminalView(props: { termId: string }) {
     if (!selection) return
     const range = selection
     setShotError(null)
-    setNotice(t('Capturing…'))
+    setNotice(t('terminal.capturing'))
     void (async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve))
       try {

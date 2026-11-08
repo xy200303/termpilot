@@ -31,9 +31,9 @@ const panes: { id: Pane; label: string; icon: typeof Server }[] = [
 ]
 
 const appThemes: { id: AppTheme; label: string }[] = [
-  { id: 'light', label: 'Light' },
-  { id: 'dark', label: 'Dark' },
-  { id: 'system', label: 'Follow system' }
+  { id: 'light', label: 'theme.light' },
+  { id: 'dark', label: 'theme.dark' },
+  { id: 'system', label: 'theme.system' }
 ]
 
 const empty = (): McpSettingsInput => ({
@@ -216,13 +216,13 @@ export function SettingsDialog() {
             {pane === 'appearance' && (
               <section className="grid gap-4">
                 <div>
-                  <h2 className="text-base font-medium">{t('Appearance')}</h2>
+                  <h2 className="text-base font-medium">{t('settings.appearance')}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t('App and terminal themes are independent; changes apply immediately.')}
+                    {t('settings.app_and_terminal_themes_are_independent_changes_')}
                   </p>
                 </div>
                 <Card>
-                  <Row title={t('App theme')} detail={t('Sidebar, settings and file editor')}>
+                  <Row title={t('settings.app_theme')} detail={t('settings.sidebar_settings_and_file_editor')}>
                     <Select
                       value={appearance.app}
                       onValueChange={(value) => void changeAppearance({ app: value as AppTheme })}
@@ -244,8 +244,8 @@ export function SettingsDialog() {
                   <div className="grid gap-3 px-4 py-3">
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <div className="text-sm">{t('Terminal theme')}</div>
-                        <div className="text-xs text-muted-foreground">{t('Only affects terminals, independent of the app theme')}</div>
+                        <div className="text-sm">{t('settings.terminal_theme')}</div>
+                        <div className="text-xs text-muted-foreground">{t('settings.only_affects_terminals_independent_of_the_app_th')}</div>
                       </div>
                       <Select
                         value={appearance.terminal}
@@ -267,7 +267,7 @@ export function SettingsDialog() {
                   </div>
                 </Card>
                 <Card>
-                  <Row title={t('Language')} detail={t('Follow the system or choose one')}>
+                  <Row title={t('settings.language')} detail={t('settings.follow_the_system_or_choose_one')}>
                     <Select
                       value={appearance.language}
                       onValueChange={(value) => void changeAppearance({ language: value as 'auto' | 'zh' | 'en' })}
@@ -276,7 +276,7 @@ export function SettingsDialog() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="auto">{t('Follow system')}</SelectItem>
+                        <SelectItem value="auto">{t('settings.follow_system')}</SelectItem>
                         <SelectItem value="zh">中文</SelectItem>
                         <SelectItem value="en">English</SelectItem>
                       </SelectContent>

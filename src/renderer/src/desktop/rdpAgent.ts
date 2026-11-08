@@ -13,6 +13,11 @@ import type { ClipboardItem } from 'ironrdp-wasm'
 import wasmUrl from '../../../../node_modules/ironrdp-wasm/pkg/rdp_client_bg.wasm?url'
 import type { DesktopAgentInput } from '../../../shared/desktop-agent'
 import { captureCanvas, scaleToCanvas, waitForCanvas } from './capture'
+import i18n from '../i18n'
+
+const tr = (key: string, params?: Record<string, string | number>): string =>
+  String(i18n.t(key, { ...(params ?? {}), defaultValue: key }))
+
 
 let wasmReady: Promise<unknown> | null = null
 
@@ -41,7 +46,7 @@ export function unregisterRdp(viewId: string): void {
 
 export async function runRdpAgentById(viewId: string, input: DesktopAgentInput): Promise<{ pngBase64?: string; note: string }> {
   const connection = connections.get(viewId)
-  if (!connection) throw new Error('RDP 画面不存在或已断开，请先打开该 RDP 标签')
+  if (!connection) throw new Error(tr('common.rdp_desktop_not_found_or_disconnected_open_the_r'))
   if (input.action === 'wait') return waitForCanvas(connection.canvas, input)
   return runRdpAgent(connection, input)
 }
@@ -49,7 +54,7 @@ export async function runRdpAgentById(viewId: string, input: DesktopAgentInput):
 /** 桌面标签里的「发送文字」入口，走 RDP 剪贴板 + 粘贴快捷键。 */
 export async function sendTextToRdp(viewId: string, text: string, pasteKeys = 'ctrl-v'): Promise<void> {
   const connection = connections.get(viewId)
-  if (!connection) throw new Error('RDP 画面不存在或已断开')
+  if (!connection) throw new Error(tr('common.rdp_desktop_not_found_or_disconnected'))
   await pasteIntoRdp(connection, text, pasteKeys)
 }
 
@@ -153,7 +158,7 @@ async function runRdpAgentUnsafe(
     const shot = captureCanvas(canvas)
     return {
       pngBase64: shot.pngBase64,
-      note: `RDP 画面已截取（${shot.width}×${shot.height}）`
+      note: tr('common.rdp_screen_captured_w_h', { w: shot.width, h: shot.height })
     }
   }
   if (input.action === 'click') {
@@ -166,19 +171,19 @@ async function runRdpAgentUnsafe(
       events.push(DeviceEvent.mouseButtonPressed(button), DeviceEvent.mouseButtonReleased(button))
     }
     applyEvents(session, events)
-    return { note: `已发送 RDP 点击（图片坐标 ${target.x}, ${target.y}${target.scaled ? '，已按截图尺寸换算' : ''}）` }
+    return { note: tr('common.rdp_click_sent_image_coordinates_x_y_scaled', { x: target.x, y: target.y, scaled: target.scaled ? tr('common.scaled_from_the_screenshot_size') : '' }) }
   }
   if (input.action === 'key') {
     canvas.focus()
     sendCombo(session, input.keys)
-    return { note: `已发送 RDP 按键 ${input.keys}` }
+    return { note: tr('common.rdp_key_sent_keys', { keys: input.keys }) }
   }
   if (input.action === 'type') {
     canvas.focus()
     const count = Array.from(input.text).length
     if (input.method === 'clipboard') {
       const combo = await pasteIntoRdp({ session, canvas }, input.text, input.pasteKeys)
-      return { note: `已把 ${count} 个字符写入远端剪贴板，并发送 ${combo} 粘贴` }
+      return { note: tr('common.wrote_count_characters_to_the_remote_clipboard_a', { count, combo }) }
     }
     const events: DeviceEvent[] = []
     for (const char of input.text) {
@@ -188,7 +193,7 @@ async function runRdpAgentUnsafe(
       if (needsShift) events.push(DeviceEvent.keyReleased(0x2a))
     }
     applyEvents(session, events)
-    return { note: `已逐字输入 ${count} 个字符` }
+    return { note: tr('common.typed_count_characters', { count }) }
   }
   const events: DeviceEvent[] = []
   if (input.x !== undefined && input.y !== undefined) {
@@ -199,12 +204,12 @@ async function runRdpAgentUnsafe(
   const amount = input.deltaY > 0 ? -1 : 1
   events.push(DeviceEvent.wheelRotations(true, amount, RotationUnit.Line))
   applyEvents(session, events)
-  return { note: `已发送 RDP 滚动 ${input.deltaY}` }
+  return { note: tr('common.rdp_scroll_sent_delta', { delta: input.deltaY }) }
 }
 
 function rdpPoint(canvas: HTMLCanvasElement, x: number, y: number): { x: number; y: number } {
   if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
-    throw new Error(`坐标 (${x}, ${y}) 超出图片范围 ${canvas.width}×${canvas.height}`)
+    throw new Error(tr('common.coordinates_x_y_are_outside_the_image_w_h', { x, y, w: canvas.width, h: canvas.height }))
   }
   return { x: Math.round(x), y: Math.round(y) }
 }
@@ -312,15 +317,15 @@ const DIGITS: Record<string, number> = {
 function sendCombo(session: Session, combo: string): void {
   const parts = combo.toLowerCase().split('-').filter(Boolean)
   const main = parts.pop()
-  if (!main) throw new Error('按键不能为空')
+  if (!main) throw new Error(tr('common.key_cannot_be_empty'))
   const events: DeviceEvent[] = []
   for (const modifier of parts) {
     const scancode = MODIFIERS[modifier]
-    if (!scancode) throw new Error(`不认识的修饰键 ${modifier}`)
+    if (!scancode) throw new Error(tr('common.unknown_modifier_key', { key: modifier }))
     events.push(DeviceEvent.keyPressed(scancode))
   }
   const scancode = SPECIAL[main] ?? LETTERS[main] ?? DIGITS[main]
-  if (!scancode) throw new Error(`不认识的按键 ${main}`)
+  if (!scancode) throw new Error(tr('common.unknown_key_key', { key: main }))
   events.push(DeviceEvent.keyPressed(scancode), DeviceEvent.keyReleased(scancode))
   for (const modifier of [...parts].reverse()) {
     events.push(DeviceEvent.keyReleased(MODIFIERS[modifier]))

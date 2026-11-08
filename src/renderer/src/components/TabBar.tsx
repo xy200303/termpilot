@@ -95,7 +95,7 @@ export function TabBar() {
       else await sendTextToRdp(activeTab.id, sayText, pasteKeys)
       setSayOpen(false)
       setSayText('')
-      setNotice(pasteKeys === 'ctrl-shift-v' ? tr('Pasted as terminal input') : tr('Pasted to desktop'))
+      setNotice(pasteKeys === 'ctrl-shift-v' ? tr('tabbar.pasted_as_terminal_input') : tr('tabbar.pasted_to_desktop'))
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error))
     } finally {
@@ -116,7 +116,7 @@ export function TabBar() {
           const result = await window.api.desktop.agent.run(termId, { action: 'screenshot' })
           const split = result.lastIndexOf('\n')
           const file = result.slice(split + 1).trim()
-          if (split < 0 || !file) throw new Error(tr('Screenshot returned no image'))
+          if (split < 0 || !file) throw new Error(tr('tabbar.screenshot_returned_no_image'))
           done = { note: result.slice(0, split), paths: [file] }
         } else {
           done = await captureTerminalView({ termId, mode })
@@ -196,14 +196,14 @@ export function TabBar() {
                 >
                   复制为 Agent 提示词
                 </ContextMenuItem>
-                <ContextMenuItem onClick={() => openAfterMenu(() => setRenamingId(t.id))}>{tr('Rename')}</ContextMenuItem>
-                <ContextMenuItem onClick={() => openAfterMenu(() => setRemarkingId(t.id))}>{tr('Note')}</ContextMenuItem>
+                <ContextMenuItem onClick={() => openAfterMenu(() => setRenamingId(t.id))}>{tr('files.rename')}</ContextMenuItem>
+                <ContextMenuItem onClick={() => openAfterMenu(() => setRemarkingId(t.id))}>{tr('form.note')}</ContextMenuItem>
                 {t.kind !== 'reverse' &&
                 (termState[t.id]?.status === 'disconnected' || termState[t.id]?.status === 'error') ? (
-                  <ContextMenuItem onClick={() => reconnectTab(t.id)}>{tr('Reconnect')}</ContextMenuItem>
+                  <ContextMenuItem onClick={() => reconnectTab(t.id)}>{tr('sidebar.reconnect')}</ContextMenuItem>
                 ) : null}
                 <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => closeTab(t.id)}>{tr('Close')}</ContextMenuItem>
+                <ContextMenuItem onClick={() => closeTab(t.id)}>{tr('editor.close')}</ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
             </Fragment>
@@ -219,7 +219,7 @@ export function TabBar() {
         <Button
           variant={desktopPerformance ? 'secondary' : 'ghost'}
           size="icon-sm"
-          title={desktopPerformance ? tr('Hide desktop performance overlay') : tr('Show desktop performance overlay')}
+          title={desktopPerformance ? tr('tabbar.hide_desktop_performance_overlay') : tr('tabbar.show_desktop_performance_overlay')}
           onClick={toggleDesktopPerformance}
         >
           <Gauge />
@@ -229,21 +229,21 @@ export function TabBar() {
         <Button
           variant={desktopIme[activeTab.id] ? 'secondary' : 'ghost'}
           size="icon-sm"
-          title={desktopIme[activeTab.id] ? tr('Exit Chinese keyboard mode') : tr('Chinese keyboard (type with local IME)')}
+          title={desktopIme[activeTab.id] ? tr('tabbar.exit_chinese_keyboard_mode') : tr('tabbar.chinese_keyboard_type_with_local_ime')}
           onClick={() => setDesktopIme(activeTab.id, !desktopIme[activeTab.id])}
         >
           <Keyboard />
         </Button>
       )}
       {isDesktop && (
-        <Button variant="ghost" size="icon-sm" title={tr('Send text (via remote clipboard)')} onClick={() => setSayOpen(true)}>
+        <Button variant="ghost" size="icon-sm" title={tr('tabbar.send_text_via_remote_clipboard')} onClick={() => setSayOpen(true)}>
           <Type />
         </Button>
       )}
       <Button
         variant="ghost"
         size="icon-sm"
-        title={tr('Capture current screen')}
+        title={tr('tabbar.capture_current_screen')}
         disabled={!activeTabId}
         onClick={() => shoot('viewport')}
       >
@@ -252,7 +252,7 @@ export function TabBar() {
       <Button
         variant="ghost"
         size="icon-sm"
-        title={isDesktop ? tr('Desktop tabs have no scrollback') : tr('Capture scrollback')}
+        title={isDesktop ? tr('tabbar.desktop_tabs_have_no_scrollback') : tr('tabbar.capture_scrollback')}
         disabled={!activeTabId || isDesktop}
         onClick={() => shoot('scrollback')}
       >
@@ -261,10 +261,10 @@ export function TabBar() {
     </div>
     <RemarkDialog
       open={renamingId !== null}
-      title={tr('Rename')}
+      title={tr('files.rename')}
       description={`给「${tabs.find((tab) => tab.id === renamingId)?.title ?? ''}」换个名字。`}
       initial={tabs.find((tab) => tab.id === renamingId)?.title ?? ''}
-      placeholder={tr('Window name')}
+      placeholder={tr('sidebar.window_name')}
       onOpenChange={(open) => !open && setRenamingId(null)}
       onSave={(value) => {
         if (renamingId) renameTab(renamingId, value)
@@ -273,10 +273,10 @@ export function TabBar() {
     />
     <RemarkDialog
       open={remarkingId !== null}
-      title={tr('Note')}
+      title={tr('form.note')}
       description={`给「${tabs.find((tab) => tab.id === remarkingId)?.title ?? ''}」写一句，方便以后认出它。留空就是清掉。`}
       initial={tabs.find((tab) => tab.id === remarkingId)?.remark ?? ''}
-      placeholder={tr('What is this window doing')}
+      placeholder={tr('sidebar.what_is_this_window_doing')}
       onOpenChange={(open) => !open && setRemarkingId(null)}
       onSave={(value) => {
         if (remarkingId) setTabRemark(remarkingId, value)
@@ -286,16 +286,16 @@ export function TabBar() {
     <Dialog open={sayOpen} onOpenChange={(open) => !open && setSayOpen(false)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{tr('Send text')}</DialogTitle>
+          <DialogTitle>{tr('tabbar.send_text')}</DialogTitle>
           <DialogDescription>
-            {tr('Type locally, then the whole text is written to the remote clipboard and pasted. Use "Paste to terminal" for terminal apps.')}
+            {tr('tabbar.type_locally_then_the_whole_text_is_written_to_t')}
           </DialogDescription>
         </DialogHeader>
         <textarea
           autoFocus
           value={sayText}
           onChange={(event) => setSayText(event.target.value)}
-          placeholder={tr('Text to send')}
+          placeholder={tr('tabbar.text_to_send')}
           className="h-24 w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus-visible:ring-1"
         />
         <div className="flex justify-end gap-2">
@@ -304,10 +304,10 @@ export function TabBar() {
             disabled={sayBusy || !sayText || !activeTab}
             onClick={() => void sendSay('ctrl-shift-v')}
           >
-            {tr('Paste to terminal')}
+            {tr('tabbar.paste_to_terminal')}
           </Button>
           <Button disabled={sayBusy || !sayText || !activeTab} onClick={() => void sendSay('ctrl-v')}>
-            {tr('Paste')}
+            {tr('tabbar.paste')}
           </Button>
         </div>
       </DialogContent>

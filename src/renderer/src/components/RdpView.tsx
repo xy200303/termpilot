@@ -23,7 +23,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
       try {
         const result = await window.api.desktop.open(props.viewId, props.session.id)
         if (disposed || !canvasRef.current) return
-        if (result.mode !== 'embedded') throw new Error(t('RDP did not enter embedded mode'))
+        if (result.mode !== 'embedded') throw new Error(t('rdp.rdp_did_not_enter_embedded_mode'))
         const size = rdpDesktopSize(props.session, canvasRef.current.parentElement)
         const opened = await connectRdp({
           url: result.url,
@@ -56,7 +56,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
             viewId: props.viewId,
             sessionId: props.session.id,
             status: 'disconnected',
-            message: reason || t('RDP session ended')
+            message: reason || t('rdp.rdp_session_ended')
           })
         }).catch((error) => {
           if (disposed) return
@@ -103,7 +103,7 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
       {status?.status !== 'connected' && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/90 px-8 text-center">
           <div className="text-sm text-muted-foreground">
-            {status?.status === 'connecting' ? t('Connecting to RDP…') : error ? t('RDP connection failed') : t('RDP disconnected')}
+            {status?.status === 'connecting' ? t('rdp.connecting_to_rdp') : error ? t('rdp.rdp_connection_failed') : t('rdp.rdp_disconnected')}
           </div>
           {status?.error && <pre className="max-w-2xl whitespace-pre-wrap text-xs text-destructive">{status.error}</pre>}
           <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>

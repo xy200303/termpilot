@@ -3,10 +3,10 @@ import type { DesktopMetrics } from '../../../shared/types'
 import { useT } from '../i18n'
 
 const PROFILE_LABEL: Record<string, string> = {
-  auto: 'Auto',
-  quality: 'Quality',
-  balanced: 'Balanced',
-  speed: 'Speed'
+  auto: 'perf.auto',
+  quality: 'perf.quality',
+  balanced: 'perf.balanced',
+  speed: 'perf.speed'
 }
 
 export function DesktopPerfHud(props: {
