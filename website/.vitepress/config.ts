@@ -80,6 +80,7 @@ export default defineConfig({
       { text: '下载', link: '/download' },
       { text: '文档', link: '/guide/quickstart' },
       { text: '更新日志', link: '/changelog' },
+      { text: 'English', link: '/en/' },
       { text: 'GitHub', link: REPO }
     ],
     sidebar: {
