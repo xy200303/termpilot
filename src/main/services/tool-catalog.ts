@@ -19,8 +19,8 @@ const sessionFields: ZodRawShape = {
   host: z.string().optional().describe('Host for SSH, Telnet, RDP or VNC'),
   port: z.number().int().min(1).max(65535).optional().describe('SSH 22，Telnet 23，RDP 3389，VNC 5900'),
   username: z.string().optional().describe('SSH login user'),
-  authType: z.enum(['password', 'key']).optional().describe('password 或 key'),
-  keyPath: z.string().optional().describe('私钥文件的本机绝对路径'),
+  authType: z.enum(['password', 'key']).optional().describe('password or key'),
+  keyPath: z.string().optional().describe('Absolute local path to the private key file'),
   secret: z
     .string()
     .optional()
@@ -79,12 +79,12 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'connection_create',
     description:
       'Create and save a connection, returning its conn- id. protocol is ssh (default), telnet, serial, rdp or vnc. ssh needs host/username/secret; telnet needs host (port defaults to 23); serial needs serialPath; rdp defaults to 3389 and vnc to 5900. Desktop protocols only show a picture and have no exec/SFTP; RDP uses embedded IronRDP unless nativeClient=true (FreeRDP). Passwords and key passphrases are stored encrypted on this machine.',
-    input: { name: z.string().describe('显示名称，不能和已有连接重名'), ...sessionFields }
+    input: { name: z.string().describe('Display name; must be unique among saved connections'), ...sessionFields }
   },
   {
     name: 'connection_update',
     description: 'Update a saved connection. connection is the conn- id; remark writes the note. Names and notes are not used for lookup. Open terminals are not reconnected automatically.',
-    input: { connection: connId, name: z.string().optional().describe('新的显示名称'), ...sessionFields }
+    input: { connection: connId, name: z.string().optional().describe('New display name'), ...sessionFields }
   },
   {
     name: 'connection_delete',
@@ -108,23 +108,23 @@ export const TOOLS: readonly ToolDef[] = [
       'Default tool for running commands (formerly term_exec2). Runs on a separate exec channel without occupying the terminal, can run concurrently, and needs no open terminal. Returns JSON: stdout and stderr separately, both raw byte streams (no wrapping, no echo, no ANSI); exitCode comes from protocol events; plus duration (seconds), timedOut and truncated. The command is passed to remote bash (or sh) as-is; multi-line, heredoc and quoting are supported, so do not escape it yourself. Reusing the same session name carries cd and export across calls (stored under ~/.cache/termpilot/exec/ on the remote); omit it for a fresh environment each time. prelude is injected before every run. Use term_pty for interactive work, TUIs, or when you need the terminal picture or a screenshot.',
     input: {
       connection: connId,
-      command: z.string().describe('要执行的命令，原样嵌入远端脚本，不需要转义'),
-      session: z.string().optional().describe('环境会话名。填了就在同名会话间承接 cd 和 export；不填每次全新环境'),
-      prelude: z.string().optional().describe('每次执行前先注入的片段，比如 source 环境脚本。固定不变的环境配置放这里'),
+      command: z.string().describe('Command to run; passed to the remote script as-is, no escaping needed'),
+      session: z.string().optional().describe('Environment session name. With it, cd and export carry across calls with the same name; omit for a fresh environment each time'),
+      prelude: z.string().optional().describe('Snippet injected before each run, e.g. sourcing an environment script. Put fixed environment setup here'),
       timeout: z
         .number()
         .int()
         .min(1)
         .max(3600)
         .optional()
-        .describe('最多等多少秒，默认 20。到点后断开通道（timedOut 为 true）并返回已经收到的内容，远端进程可能已被挂断。命令预计要跑很久时，把这个值调大。'),
+        .describe('Seconds to wait, default 20. When it expires the channel is closed (timedOut is true) and whatever arrived is returned; the remote process may be killed. Increase it for long-running commands.'),
       maxBytes: z
         .number()
         .int()
         .min(1000)
         .max(1_000_000)
         .optional()
-        .describe('stdout 和 stderr 各自最多返回多少字符，默认 50000。超出时保留开头和结尾，truncated 为 true')
+        .describe('Maximum characters returned for stdout and stderr each, default 50000. When exceeded, the beginning and end are kept and truncated is true')
     }
   },
   {
@@ -133,14 +133,14 @@ export const TOOLS: readonly ToolDef[] = [
       'Type a command into an opened terminal (formerly term_exec). Waits until it finishes (the prompt returns) and returns only the new output; POSIX shells also report the exit code. Output is what the terminal renders: echoed, wrapped to the window width, possibly coloured; do not parse it in programs — use term_exec for that. If it is still running at timeout, returns what has arrived so far and the command keeps running remotely. Do not use it while menus, installers or TUIs are running; use term_write instead. Stop a foreground command with term_write and keys ["ctrl-c"].',
     input: {
       termId,
-      command: z.string().describe('要执行的命令。末尾没有换行时会自动补上'),
+      command: z.string().describe('Command to run; a trailing newline is added when missing'),
       timeout: z
         .number()
         .int()
         .min(1)
         .max(3600)
         .optional()
-        .describe('这次调用最多等多少秒，默认 20。不是命令的时限。到点后还没回到提示符，就先把已经回来的内容交出去，命令还在远端跑。命令预计要跑很久时，把这个值调大。')
+        .describe('Seconds this call waits, default 20. It is not a deadline for the command: if the prompt has not returned, what arrived is returned and the command keeps running remotely. Increase it for long-running commands.')
     }
   },
   {
@@ -149,10 +149,10 @@ export const TOOLS: readonly ToolDef[] = [
       'Send keys or text to the current terminal: arrow-key selection, typing, Enter, TUIs. PTY terminals only. keys are sent in order, then text, and a final Enter when submit is true. Returns the current screen. Never fill in passwords or verification codes.',
     input: {
       termId,
-      keys: z.array(z.enum(TERM_KEYS)).max(40).optional().describe('按键名，按顺序发送'),
-      text: z.string().max(4096).optional().describe('紧接在 keys 后面输入的文字'),
-      submit: z.boolean().optional().describe('输入后再补一次回车'),
-      data: z.string().max(65_536).optional().describe('原始字节，只在 keys 无法表达时使用')
+      keys: z.array(z.enum(TERM_KEYS)).max(40).optional().describe('Key names, sent in order'),
+      text: z.string().max(4096).optional().describe('Text typed right after keys'),
+      submit: z.boolean().optional().describe('Send one more Enter after the input'),
+      data: z.string().max(65_536).optional().describe('Raw bytes; use only when keys cannot express it')
     }
   },
   {
@@ -168,7 +168,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'term_update',
     description: 'Write a note on an opened terminal so you can recognise it later. The id does not change.',
-    input: { termId, remark: z.string().describe('这扇终端正在做什么。空字符串表示清掉') }
+    input: { termId, remark: z.string().describe('What this terminal is doing. Empty string clears it') }
   },
   {
     name: 'term_open_local',
@@ -188,7 +188,7 @@ export const TOOLS: readonly ToolDef[] = [
     images: 'always',
     input: {
       ...lineFields,
-      scope: z.enum(['viewport', 'buffer']).optional().describe('viewport 只截当前屏（默认），buffer 截整段缓冲')
+      scope: z.enum(['viewport', 'buffer']).optional().describe('viewport captures the current screen (default); buffer captures the whole scrollback')
     }
   },
   {
@@ -197,21 +197,21 @@ export const TOOLS: readonly ToolDef[] = [
     readOnly: true,
     input: {
       connection: connId,
-      path: z.string().optional().describe('远端目录，默认家目录')
+      path: z.string().optional().describe('Remote directory; defaults to the home directory')
     }
   },
   {
     name: 'sftp_mkdir',
     description: 'Create a remote directory over the current SSH session. path is the full remote path.',
-    input: { connection: connId, path: z.string().describe('完整远端路径') }
+    input: { connection: connId, path: z.string().describe('Full remote path') }
   },
   {
     name: 'sftp_upload',
     description: 'Upload a local file to a remote path. Files over 512MB are rejected.',
     input: {
       connection: connId,
-      localPath: z.string().describe('本机绝对路径'),
-      remotePath: z.string().describe('远端路径')
+      localPath: z.string().describe('Absolute local path'),
+      remotePath: z.string().describe('Remote path')
     }
   },
   {
@@ -219,8 +219,8 @@ export const TOOLS: readonly ToolDef[] = [
     description: 'Download a remote file to a local absolute path. Files over 512MB are rejected; keep multi-GB files on the remote machine.',
     input: {
       connection: connId,
-      remotePath: z.string().describe('远端路径'),
-      localPath: z.string().describe('本机绝对路径')
+      remotePath: z.string().describe('Remote path'),
+      localPath: z.string().describe('Absolute local path')
     }
   },
   {
@@ -228,8 +228,8 @@ export const TOOLS: readonly ToolDef[] = [
     description: 'Rename or move a remote file. from and to are remote paths.',
     input: {
       connection: connId,
-      from: z.string().describe('原远端路径'),
-      to: z.string().describe('新远端路径')
+      from: z.string().describe('Current remote path'),
+      to: z.string().describe('New remote path')
     }
   },
   {
@@ -237,8 +237,8 @@ export const TOOLS: readonly ToolDef[] = [
     description: 'Delete a remote file or directory. Directories are removed recursively.',
     input: {
       connection: connId,
-      path: z.string().describe('远端路径'),
-      kind: z.enum(['file', 'dir', 'link']).describe('file、dir 或 link')
+      path: z.string().describe('Remote path'),
+      kind: z.enum(['file', 'dir', 'link']).describe('file, dir or link')
     }
   },
   {
@@ -253,7 +253,7 @@ export const TOOLS: readonly ToolDef[] = [
     images: 'always',
     input: {
       viewId,
-      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('默认 100px 网格；false 关闭，或自定义间距'),
+      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('Default 100px grid; false disables it, or pass a custom spacing'),
       region: z
         .object({
           x: z.number().int().min(0),
@@ -262,7 +262,7 @@ export const TOOLS: readonly ToolDef[] = [
           height: z.number().int().min(8)
         })
         .optional()
-        .describe('只截这块区域（整屏像素坐标），缺省截整屏')
+        .describe('Capture only this area (full-screen pixel coordinates); the whole screen by default')
     }
   },
   {
@@ -271,20 +271,20 @@ export const TOOLS: readonly ToolDef[] = [
       'Click a desktop. x/y are pixels in the image returned by desktop_screenshot: canvas coordinates for VNC / embedded RDP, window-frame coordinates for native RDP (the picture includes the system title bar, the same basis as clicks). Pass back the shotId from the screenshot so coordinates are scaled when the window was resized, the VNC resolution changed or RDP renegotiated; without shotId the latest screenshot for that desktop is used, and imageWidth/imageHeight can be passed explicitly. button defaults to left, double=true double-clicks. View-only VNC rejects input.',
     input: {
       viewId,
-      x: z.number().int().min(0).describe('图片横坐标'),
-      y: z.number().int().min(0).describe('图片纵坐标'),
-      button: z.enum(['left', 'middle', 'right']).optional().describe('默认 left'),
-      double: z.boolean().optional().describe('是否双击'),
-      imageWidth: z.number().int().min(1).optional().describe('截图时的图片宽度，缺省用最近一张截图'),
-      imageHeight: z.number().int().min(1).optional().describe('截图时的图片高度'),
-      shotId: z.string().optional().describe('desktop_screenshot 返回的截图编号，按那张图的坐标换算')
+      x: z.number().int().min(0).describe('Image x coordinate'),
+      y: z.number().int().min(0).describe('Image y coordinate'),
+      button: z.enum(['left', 'middle', 'right']).optional().describe('Defaults to left'),
+      double: z.boolean().optional().describe('Double-click when true'),
+      imageWidth: z.number().int().min(1).optional().describe('Image width of the screenshot; defaults to the latest screenshot'),
+      imageHeight: z.number().int().min(1).optional().describe('Image height of the screenshot'),
+      shotId: z.string().optional().describe('shotId returned by desktop_screenshot; coordinates are scaled against that image')
     }
   },
   {
     name: 'desktop_key',
     description:
       'Send a key or key combination, e.g. enter, tab, esc, up/down/left/right, ctrl-c, ctrl-shift-t, alt-tab. Punctuation can be named minus, slash, comma, period, etc.',
-    input: { viewId, keys: z.string().describe('按键组合，用 - 连接') }
+    input: { viewId, keys: z.string().describe('Key combination, joined with -') }
   },
   {
     name: 'desktop_type',
@@ -292,9 +292,9 @@ export const TOOLS: readonly ToolDef[] = [
       'Type text into a desktop. The default method=keys sends characters one by one (VNC uses Unicode keysyms, embedded RDP uses Unicode key events); Chinese may be intercepted by the remote input method. For longer Chinese text use method=clipboard: the whole text is written to the remote clipboard and a paste shortcut is sent. pasteKeys defaults to ctrl-v; terminals usually need ctrl-shift-v. Native Windows windows always paste through the local clipboard. Ask the user before typing passwords or sensitive text.',
     input: {
       viewId,
-      text: z.string().describe('要输入的文字'),
-      method: z.enum(['keys', 'clipboard']).optional().describe('keys 逐字按键（默认）；clipboard 写远端剪贴板后粘贴'),
-      pasteKeys: z.string().optional().describe('clipboard 模式用的粘贴快捷键，默认 ctrl-v；终端用 ctrl-shift-v')
+      text: z.string().describe('Text to type'),
+      method: z.enum(['keys', 'clipboard']).optional().describe('keys types characters one by one (default); clipboard writes to the remote clipboard and pastes'),
+      pasteKeys: z.string().optional().describe('Paste shortcut used by clipboard mode; defaults to ctrl-v, terminals usually need ctrl-shift-v')
     }
   },
   {
@@ -304,10 +304,10 @@ export const TOOLS: readonly ToolDef[] = [
       viewId,
       x: z.number().int().min(0).optional(),
       y: z.number().int().min(0).optional(),
-      deltaY: z.number().int().describe('滚动量，正负均可'),
-      imageWidth: z.number().int().min(1).optional().describe('截图时的图片宽度，缺省用最近一张截图'),
-      imageHeight: z.number().int().min(1).optional().describe('截图时的图片高度'),
-      shotId: z.string().optional().describe('desktop_screenshot 返回的截图编号，按那张图的坐标换算')
+      deltaY: z.number().int().describe('Scroll amount; positive or negative'),
+      imageWidth: z.number().int().min(1).optional().describe('Image width of the screenshot; defaults to the latest screenshot'),
+      imageHeight: z.number().int().min(1).optional().describe('Image height of the screenshot'),
+      shotId: z.string().optional().describe('shotId returned by desktop_screenshot; coordinates are scaled against that image')
     }
   },
   {
@@ -315,9 +315,9 @@ export const TOOLS: readonly ToolDef[] = [
     description: 'Wait for a fixed time, or until the picture is stable. ms defaults to 500; stableMs > 0 waits for a stable picture, timeoutMs defaults to 10000. Native windows only support a fixed wait.',
     input: {
       viewId,
-      ms: z.number().int().min(0).max(60000).optional().describe('固定等待毫秒'),
-      stableMs: z.number().int().min(0).max(60000).optional().describe('连续稳定多少毫秒后返回'),
-      timeoutMs: z.number().int().min(100).max(60000).optional().describe('稳定检测超时时间')
+      ms: z.number().int().min(0).max(60000).optional().describe('Fixed wait in milliseconds'),
+      stableMs: z.number().int().min(0).max(60000).optional().describe('Return after the picture has been stable for this many milliseconds'),
+      timeoutMs: z.number().int().min(100).max(60000).optional().describe('Timeout for stability detection')
     }
   },
   {
@@ -326,14 +326,14 @@ export const TOOLS: readonly ToolDef[] = [
     images: 'always',
     input: {
       viewId,
-      actions: z.array(z.record(z.string(), z.unknown())).min(1).max(50).describe('最多 50 个操作')
+      actions: z.array(z.record(z.string(), z.unknown())).min(1).max(50).describe('At most 50 operations')
     }
   },
   {
     name: 'desktop_perf',
     description: 'Read accumulated traffic, current up/down kbps and packet rate for a desktop. Use it to tell whether a slow desktop is limited by bandwidth, quality or the desktop itself.',
     readOnly: true,
-    input: { viewId: z.string().optional().describe('留空返回所有已打开桌面') }
+    input: { viewId: z.string().optional().describe('Leave empty to return every open desktop') }
   },
   {
     name: 'desktop_a11y',
@@ -341,9 +341,9 @@ export const TOOLS: readonly ToolDef[] = [
       'Read the AT-SPI control tree of a Linux VNC desktop, or click a control by its path. Uses an existing forward SSH connection to the same host; does not install dependencies. operation=tree returns name, role, coordinates, actions and path; operation=click needs path, and action is optional.',
     input: {
       viewId,
-      operation: z.enum(['tree', 'click']).optional().describe('默认 tree'),
-      path: z.string().optional().describe('tree 返回的控件路径，例如 0/1/2'),
-      action: z.string().optional().describe('无障碍动作名，默认依次尝试 click、press、activate')
+      operation: z.enum(['tree', 'click']).optional().describe('Defaults to tree'),
+      path: z.string().optional().describe('Control path returned by tree, e.g. 0/1/2'),
+      action: z.string().optional().describe('Accessibility action name; tries click, press, activate in order by default')
     }
   },
   {
@@ -352,7 +352,7 @@ export const TOOLS: readonly ToolDef[] = [
       'Capture the whole TermPilot window: sidebar, tab bar and terminal together, saved as a PNG and returned with a path; the image is attached to the result. A 100px coordinate grid is drawn by default; pass grid=false to disable or 20–500 for custom spacing. Useful to confirm UI state or record demo material. Nothing is captured while the window is minimised. Only this app window is captured, not other system windows.',
     images: 'always',
     input: {
-      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('默认 100px 网格；false 关闭，或自定义间距')
+      grid: z.union([z.boolean(), z.number().int().min(20).max(500)]).optional().describe('Default 100px grid; false disables it, or pass a custom spacing')
     }
   },
   {
@@ -360,15 +360,15 @@ export const TOOLS: readonly ToolDef[] = [
     description:
       'Record the TermPilot window to WebM. action=start begins (fps defaults to 15, maxSeconds to 120, at most 600); action=stop ends and returns the file path. Only one recording at a time; it stops and saves automatically at maxSeconds, and a later stop returns the saved file. Useful for demos; only the app window is recorded, without other system windows or sound.',
     input: {
-      action: z.enum(['start', 'stop']).describe('start 开始录制，stop 结束并保存'),
-      fps: z.number().int().min(5).max(30).optional().describe('帧率，默认 15'),
+      action: z.enum(['start', 'stop']).describe('start begins recording, stop ends and saves'),
+      fps: z.number().int().min(5).max(30).optional().describe('Frame rate, default 15'),
       maxSeconds: z
         .number()
         .int()
         .min(5)
         .max(600)
         .optional()
-        .describe('最长录制秒数，默认 120，超过自动停止并保存')
+        .describe('Maximum recording seconds, default 120; stops and saves automatically when exceeded')
     }
   }
 ]
