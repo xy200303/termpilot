@@ -125,6 +125,7 @@ export class StorageService {
       'CREATE UNIQUE INDEX IF NOT EXISTS sessions_config_host ON sessions(config_host) WHERE config_host IS NOT NULL'
     )
     this.importLegacyJson(join(dir, 'sessions.json'))
+    this.pruneAudit()
   }
 
   private backfillPublicIds(): void {
@@ -502,10 +503,19 @@ export class StorageService {
     this.getAppearance()
     this.db
       .prepare(
-        'UPDATE appearance SET app_theme = ?, terminal_theme = ?, language = ?, experimental_screenshot = ? WHERE id = 1'
+        'UPDATE appearance SET app_theme = ?, terminal_theme = ?, language = ?, scrollback = ?, experimental_screenshot = ? WHERE id = 1'
       )
-      .run(next.app, next.terminal, next.language, next.experimentalScreenshot ? 1 : 0)
+      .run(next.app, next.terminal, next.language, next.scrollback, next.experimentalScreenshot ? 1 : 0)
     return next
+  }
+
+  /** 调用记录只留最近 30 天、最多 5000 条，避免长期使用把库撑大。删除后的空闲页由 WAL 复用。 */
+  pruneAudit(): void {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+    this.db.prepare('DELETE FROM mcp_audit WHERE at < ?').run(cutoff)
+    this.db
+      .prepare('DELETE FROM mcp_audit WHERE id NOT IN (SELECT id FROM mcp_audit ORDER BY id DESC LIMIT 5000)')
+      .run()
   }
 
   saveMcpSettings(input: McpSettingsInput): McpSettings {
