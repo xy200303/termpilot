@@ -51,6 +51,7 @@ export const IPC = {
 
   appearanceGet: 'appearance:get',
   appearanceSave: 'appearance:save',
+  appLocale: 'app:locale',
   mcpState: 'mcp:state',
   mcpStateEvent: 'mcp:state-event',
   mcpBound: 'mcp:bound',

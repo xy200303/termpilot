@@ -14,7 +14,8 @@ import {
   type SessionInput,
   type SessionStatus,
   type Tab,
-  type TermStatusEvent
+  type TermStatusEvent,
+  resolveUiLocale
 } from '../../../shared/types'
 import { isDesktopProtocol, type SessionProtocol } from '../../../shared/protocol'
 import { newTermId, newViewId } from '../../../shared/ids'
@@ -52,6 +53,8 @@ interface AppState {
 
   /** 侧边栏整体收纳（收成图标栏） */
   sidebarCollapsed: boolean
+  /** 界面语言，由系统 locale + 外观设置合成 */
+  locale: 'zh' | 'en'
   /** 桌面性能浮层 */
   desktopPerformance: boolean
   /** 哪些桌面标签开着「中文键盘」接管 */
@@ -119,6 +122,7 @@ interface AppState {
 
   toggleSidebar: () => void
   toggleDesktopPerformance: () => void
+  setLocale: (locale: 'zh' | 'en') => void
   setDesktopIme: (viewId: string, active: boolean) => void
   setSidebarPane: (pane: 'connect' | 'files') => void
   toggleGroup: (group: string) => void
@@ -150,6 +154,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tabs: [],
   activeTabId: null,
   sidebarCollapsed: false,
+  locale: typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en',
   desktopPerformance: false,
   desktopIme: {},
   sidebarPane: 'connect',
@@ -204,8 +209,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   loadAppearance: async () => {
-    const appearance = await window.api.appearance.get()
-    set({ appearance, resolvedApp: applyAppearance(appearance) })
+    const [appearance, systemLocale] = await Promise.all([window.api.appearance.get(), window.api.locale()])
+    set({ appearance, resolvedApp: applyAppearance(appearance), locale: resolveUiLocale(appearance.language, systemLocale) })
   },
 
   setAppearance: async (patch) => {
@@ -214,7 +219,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ appearance: next, resolvedApp: applyAppearance(next, false) })
     try {
       const saved = await window.api.appearance.save(next)
-      set({ appearance: saved, resolvedApp: applyAppearance(saved) })
+      const systemLocale = await window.api.locale()
+      set({ appearance: saved, resolvedApp: applyAppearance(saved), locale: resolveUiLocale(saved.language, systemLocale) })
     } catch (error) {
       set({ appearance: prev, resolvedApp: applyAppearance(prev) })
       throw error
@@ -560,6 +566,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
   toggleDesktopPerformance: () => set({ desktopPerformance: !get().desktopPerformance }),
+  setLocale: (locale) => set({ locale }),
   setDesktopIme: (viewId, active) => set({ desktopIme: { ...get().desktopIme, [viewId]: active } }),
   setSidebarPane: (pane) => set({ sidebarPane: pane }),
   toggleGroup: (group) =>

@@ -160,6 +160,7 @@ export function registerIpc(
   )
 
   // --------------------------------------------------------------- MCP
+  ipcMain.handle(IPC.appLocale, () => app.getLocale())
   ipcMain.handle(IPC.appearanceGet, () => storage.getAppearance())
 
   ipcMain.handle(IPC.appearanceSave, (event, input: Appearance) => {

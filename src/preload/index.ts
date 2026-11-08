@@ -151,6 +151,7 @@ const api = {
     get: () => ipcRenderer.invoke(IPC.appearanceGet) as Promise<Appearance>,
     save: (input: Appearance) => ipcRenderer.invoke(IPC.appearanceSave, input) as Promise<Appearance>
   },
+  locale: () => ipcRenderer.invoke(IPC.appLocale) as Promise<string>,
   mcp: {
     get: () => ipcRenderer.invoke(IPC.mcpGet),
     audit: () => ipcRenderer.invoke(IPC.mcpAudit) as Promise<McpAuditEntry[]>,

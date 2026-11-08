@@ -17,6 +17,7 @@ import {
   type UpdateCheck
 } from '../../../shared/types'
 import { useAppStore } from '../stores/useAppStore'
+import { useT } from '../i18n'
 import { terminalPalette, terminalPalettes } from '../theme/terminalThemes'
 
 type Pane = 'appearance' | 'mcp' | 'agents' | 'audit' | 'about'
@@ -44,6 +45,7 @@ const empty = (): McpSettingsInput => ({
 
 /** 设置：左侧栏目，右侧是当前项。Agent 接入生成指引，由 Agent 自己执行。 */
 export function SettingsDialog() {
+  const t = useT()
   const open = useAppStore((s) => s.settingsOpen)
   const setOpen = useAppStore((s) => s.setSettingsOpen)
   const mcp = useAppStore((s) => s.mcp)
@@ -197,7 +199,7 @@ export function SettingsDialog() {
                 }}
               >
                 <item.icon className="size-4 shrink-0" />
-                {item.label}
+                {t(item.label)}
               </button>
             ))}
           </nav>
@@ -214,13 +216,13 @@ export function SettingsDialog() {
             {pane === 'appearance' && (
               <section className="grid gap-4">
                 <div>
-                  <h2 className="text-base font-medium">外观</h2>
+                  <h2 className="text-base font-medium">{t('外观')}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    应用和终端分开配色，改完立刻生效。
+                    {t('应用和终端分开配色，改完立刻生效。')}
                   </p>
                 </div>
                 <Card>
-                  <Row title="应用主题" detail="侧边栏、设置和文件编辑器">
+                  <Row title={t('应用主题')} detail={t('侧边栏、设置和文件编辑器')}>
                     <Select
                       value={appearance.app}
                       onValueChange={(value) => void changeAppearance({ app: value as AppTheme })}
@@ -242,8 +244,8 @@ export function SettingsDialog() {
                   <div className="grid gap-3 px-4 py-3">
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <div className="text-sm">终端主题</div>
-                        <div className="text-xs text-muted-foreground">只影响终端画面，不跟着应用主题走</div>
+                        <div className="text-sm">{t('终端主题')}</div>
+                        <div className="text-xs text-muted-foreground">{t('只影响终端画面，不跟着应用主题走')}</div>
                       </div>
                       <Select
                         value={appearance.terminal}
@@ -263,6 +265,23 @@ export function SettingsDialog() {
                     </div>
                     <TerminalPreview id={appearance.terminal} />
                   </div>
+                </Card>
+                <Card>
+                  <Row title={t('界面语言')} detail={t('跟随系统或手动指定')}>
+                    <Select
+                      value={appearance.language}
+                      onValueChange={(value) => void changeAppearance({ language: value as 'auto' | 'zh' | 'en' })}
+                    >
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">{t('跟随系统')}</SelectItem>
+                        <SelectItem value="zh">中文</SelectItem>
+                        <SelectItem value="en">English</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Row>
                 </Card>
                 {themeError && <p className="text-xs text-destructive">{themeError}</p>}
               </section>

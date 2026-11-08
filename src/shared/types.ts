@@ -411,9 +411,13 @@ export const TERMINAL_THEMES = [
 ] as const
 export type TerminalThemeId = (typeof TERMINAL_THEMES)[number]
 
+export type UiLanguage = 'auto' | 'zh' | 'en'
+
 export interface Appearance {
   app: AppTheme
   terminal: TerminalThemeId
+  /** 界面语言：auto 跟随系统，zh 中文，en 英文 */
+  language: UiLanguage
   /** 打开后所有截图都按缓冲拼图。默认关闭，沿用逐屏拍摄。 */
   experimentalScreenshot: boolean
 }
@@ -421,12 +425,20 @@ export interface Appearance {
 export const DEFAULT_APPEARANCE: Appearance = {
   app: 'light',
   terminal: 'light',
+  language: 'auto',
   experimentalScreenshot: false
+}
+
+/** 把系统 locale 和应用设置合成实际界面语言。 */
+export function resolveUiLocale(language: UiLanguage | undefined, systemLocale: string): 'zh' | 'en' {
+  if (language === 'zh' || language === 'en') return language
+  return systemLocale.toLowerCase().startsWith('zh') ? 'zh' : 'en'
 }
 
 export function parseAppearance(input: unknown): Appearance {
   const row = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const app = APP_THEMES.find((id) => id === row.app) ?? DEFAULT_APPEARANCE.app
   const terminal = TERMINAL_THEMES.find((id) => id === row.terminal) ?? DEFAULT_APPEARANCE.terminal
-  return { app, terminal, experimentalScreenshot: row.experimentalScreenshot === true }
+  const language = row.language === 'zh' || row.language === 'en' ? row.language : DEFAULT_APPEARANCE.language
+  return { app, terminal, language, experimentalScreenshot: row.experimentalScreenshot === true }
 }
