@@ -31,7 +31,7 @@ const shotEl = ref<HTMLElement | null>(null)
 
 const stats = [
   { value: '5', label: '类连接协议', note: 'SSH / Telnet / 串口 / VNC / RDP' },
-  { value: '37', label: '个 Agent 工具', note: '连接 / 终端 / exec / SFTP / 桌面 / 应用' },
+  { value: '35', label: '个 Agent 工具', note: '连接 / 终端 / exec / SFTP / 桌面 / 应用' },
   { value: '0', label: '遥测上报', note: '没有统计、没有 crash 上报通道' },
   { value: '6', label: '个安装包', note: 'Windows · macOS · Linux 各两种' }
 ]
@@ -120,7 +120,7 @@ const compare = {
     ['登录', '每次敲完整命令，密码靠 ssh-agent 兜底', '保存会话，双击连接', '保存连接，双击或由助手代开'],
     ['中途交互', '菜单、向导、sudo 都要本人', '本人操作', '本人或助手代按，画面实时可见'],
     ['继续下一步', '同一窗口继续', '同一窗口继续，助手进不来', '同一条会话助手接着做，不重连'],
-    ['批量与脚本', '自己写 shell 脚本', '基本靠手动', '37 个 MCP 工具 + 本机 CLI'],
+    ['批量与脚本', '自己写 shell 脚本', '基本靠手动', '35 个 MCP 工具 + 本机 CLI'],
     ['凭据', 'ssh_config / ssh-agent', '软件内保存', '系统钥匙串加密，只存本机']
   ]
 }
@@ -133,7 +133,7 @@ const specs = [
   ['通道', 'shell / exec（stdout、stderr 分流，协议级退出码）/ SFTP，同一条 SSH 复用'],
   ['文件传输', '上传、下载、新建目录、改名、删除；单文件 512MB 以内；文本在线编辑'],
   ['凭据存储', 'safeStorage 加密 → 本机 SQLite，不出本机'],
-  ['Agent 接口', '内置 MCP Server（37 个工具，只绑 127.0.0.1 + 令牌）；Go 写的本机 CLI'],
+  ['Agent 接口', '内置 MCP Server（35 个工具，只绑 127.0.0.1 + 令牌）；Go 写的本机 CLI'],
   ['平台', 'Windows x64 / macOS（Apple Silicon）/ Linux x64'],
   ['安装包', 'Windows Setup 146MB · macOS dmg 168MB · AppImage 167MB · deb 129MB'],
   ['许可证', 'MIT']

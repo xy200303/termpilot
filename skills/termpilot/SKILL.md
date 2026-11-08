@@ -66,7 +66,7 @@ termpilot call term_exec --json-file args.json --json
 
 要截指定行时，先 `term_lines` 看行号（不填范围就是当前画面），再把 `startLine` 和 `endLine` 传给 `term_screenshot`。两端都包含，返回的是这一段已经裁好的一张图，不要自己按像素裁。整段历史用 `scope=buffer`（或直接给范围），不要再找单独的滚动截图工具。
 
-要看整个窗口（侧边栏 + 标签栏 + 终端）用 `app_screenshot`。录操作演示用 `app_record`：`action=start` 开始，`action=stop` 结束并返回 WebM 路径；`fps` 默认 15，`maxSeconds` 默认 120，到点自动停止并保存。录的是应用窗口本身，不含系统其他窗口和声音。
+要看整个窗口（侧边栏 + 标签栏 + 终端）用 `app_screenshot`，默认带 100px 坐标网格，`grid=false` 关闭。录操作演示用 `app_record`：`action=start` 开始，`action=stop` 结束并返回 WebM 路径；`fps` 默认 15，`maxSeconds` 默认 120，到点自动停止并保存。录的是应用窗口本身，不含系统其他窗口和声音。
 
 人和你看的是同一个终端。密码和验证码由用户在窗口里输入。菜单和 TUI 用 `term_write`：`keys` 取 `up`、`down`、`left`、`right`，文字放 `text`，回车用 `submit: true`。已经回到 shell 提示符时再用 `term_pty`。`term_pty` 只返回这次新出现的输出，不是整段滚动缓冲。前台命令停不下来时用 `term_write`，`keys` 填 `["ctrl-c"]`，不要再开一扇终端去结束它。
 

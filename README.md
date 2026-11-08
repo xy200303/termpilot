@@ -111,7 +111,7 @@ MCP 不可用时，可运行本机命令 `termpilot`。窗口未打开时，该�
 
 ### 应用界面（2）
 
-- `app_screenshot`：截取整个应用窗口（侧边栏、标签栏、终端一起），保存为 PNG 并返回路径，图片同时附在结果里
+- `app_screenshot`：截取整个应用窗口（侧边栏、标签栏、终端一起），默认带 100px 坐标网格（`grid=false` 关闭），保存为 PNG 并返回路径
 - `app_record`：录制应用窗口画面，`action` 取 `start` / `stop`；`fps` 默认 15，`maxSeconds` 默认 120（最长 600），到点自动停止并保存为 WebM
 
 ### 推荐用法
