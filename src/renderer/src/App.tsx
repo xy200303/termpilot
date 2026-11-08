@@ -10,9 +10,12 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { McpConfirmDialog } from './components/McpConfirmDialog'
 import { SftpInstallDialog } from './components/SftpInstallDialog'
 import { TerminalView } from './components/TerminalView'
-import { VncView } from './components/VncView'
-import { RdpView } from './components/RdpView'
-import { ExternalDesktopView } from './components/ExternalDesktopView'
+/* 桌面视图各自成块：没打开 VNC/RDP 时不必下载它们的代码 */
+const VncView = lazy(() => import('./components/VncView').then((m) => ({ default: m.VncView })))
+const RdpView = lazy(() => import('./components/RdpView').then((m) => ({ default: m.RdpView })))
+const ExternalDesktopView = lazy(() =>
+  import('./components/ExternalDesktopView').then((m) => ({ default: m.ExternalDesktopView }))
+)
 /* Monaco 只在第一次打开文件时下载并初始化，不参与首屏解析 */
 const RemoteEditor = lazy(() =>
   import('./components/RemoteEditor').then((m) => ({ default: m.RemoteEditor }))
@@ -22,8 +25,6 @@ import { useAppStore } from './stores/useAppStore'
 import { runCapture } from './terminal/captureView'
 import { terminalPool } from './terminal/TerminalPool'
 import { startRecording, stopRecording } from './terminal/windowRecorder'
-import { runVncAgent } from './desktop/vncAgent'
-import { runRdpAgentById } from './desktop/rdpAgent'
 import i18n, { syncLanguage } from './i18n'
 
 export default function App() {
@@ -79,7 +80,10 @@ export default function App() {
       window.api.desktop.agent.onRun((job) => {
         void (async () => {
           try {
-            const result = job.protocol === 'rdp' ? await runRdpAgentById(job.viewId, job.input) : await runVncAgent(job.viewId, job.input)
+            const result =
+              job.protocol === 'rdp'
+                ? await (await import('./desktop/rdpAgent')).runRdpAgentById(job.viewId, job.input)
+                : await (await import('./desktop/vncAgent')).runVncAgent(job.viewId, job.input)
             window.api.desktop.agent.reply({ id: job.id, ...result })
           } catch (error) {
             window.api.desktop.agent.reply({
@@ -190,11 +194,13 @@ export default function App() {
                 if (!session) return null
                 return (
                   <div key={tab.id} className={activeTabId === tab.id ? 'contents' : 'hidden'}>
-                    {tab.kind === 'rdp' ? (
-                      <RdpView viewId={tab.id} session={session} active={activeTabId === tab.id} />
-                    ) : (
-                      <VncView viewId={tab.id} session={session} active={activeTabId === tab.id} />
-                    )}
+                    <Suspense fallback={<div className="h-full" />}>
+                      {tab.kind === 'rdp' ? (
+                        <RdpView viewId={tab.id} session={session} active={activeTabId === tab.id} />
+                      ) : (
+                        <VncView viewId={tab.id} session={session} active={activeTabId === tab.id} />
+                      )}
+                    </Suspense>
                   </div>
                 )
               })}
@@ -203,7 +209,9 @@ export default function App() {
                 <RemoteEditor key={currentFile.key} tab={currentFile} />
               </Suspense>
             ) : activeTab?.kind === 'vnc' || (activeTab?.kind === 'rdp' && !activeSession?.desktopOptions?.nativeClient) ? null : activeTab?.kind === 'rdp' && activeSession ? (
-              <ExternalDesktopView key={activeTab.id} viewId={activeTab.id} session={activeSession} />
+              <Suspense fallback={<div className="h-full" />}>
+                <ExternalDesktopView key={activeTab.id} viewId={activeTab.id} session={activeSession} />
+              </Suspense>
             ) : activeTab ? (
               <TerminalView key={activeTab.id} termId={activeTab.id} />
             ) : (

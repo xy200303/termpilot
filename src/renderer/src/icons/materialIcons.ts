@@ -1,6 +1,6 @@
 /**
  * VS Code Material Icon Theme：按文件名、扩展名、文件夹名选图标。
- * 声明模块类型，避免把整份清单推断成巨大的字面量类型。
+ * 图标清单 0.43 MB，只在第一次渲染文件图标时加载，不参与首屏。
  */
 export type IconTheme = {
   iconDefinitions: Record<string, { iconPath: string }>
@@ -25,13 +25,19 @@ export type IconTheme = {
   }
 }
 
-import rawTheme from 'material-icon-theme/dist/material-icons.json'
+type NameMaps = {
+  fileNames: Record<string, string>
+  fileExtensions: Record<string, string>
+  folderNames: Record<string, string>
+  folderNamesExpanded: Record<string, string>
+  rootFolderNames: Record<string, string>
+  rootFolderNamesExpanded: Record<string, string>
+}
 
-const theme = rawTheme as unknown as IconTheme
-
+/* 图标 URL 本身很小，仍随首屏一起打包；重的清单按需加载 */
 const iconUrls = import.meta.glob('../../../../node_modules/material-icon-theme/icons/*.svg', {
   eager: true,
-  query: '?url',
+  query: '?url&no-inline',
   import: 'default'
 }) as Record<string, string>
 
@@ -40,25 +46,63 @@ for (const [path, url] of Object.entries(iconUrls)) {
   urls.set(path.slice(path.lastIndexOf('/') + 1), url)
 }
 
-const light = theme.light
-const darkMaps = {
-  fileNames: theme.fileNames,
-  fileExtensions: theme.fileExtensions,
-  folderNames: theme.folderNames,
-  folderNamesExpanded: theme.folderNamesExpanded,
-  rootFolderNames: theme.rootFolderNames ?? {},
-  rootFolderNamesExpanded: theme.rootFolderNamesExpanded ?? {}
+let theme: IconTheme | null = null
+let darkMaps: NameMaps | null = null
+let lightMaps: NameMaps | null = null
+let loading: Promise<void> | null = null
+const listeners = new Set<() => void>()
+
+function build(): void {
+  if (!theme) return
+  const light = theme.light
+  darkMaps = {
+    fileNames: theme.fileNames,
+    fileExtensions: theme.fileExtensions,
+    folderNames: theme.folderNames,
+    folderNamesExpanded: theme.folderNamesExpanded,
+    rootFolderNames: theme.rootFolderNames ?? {},
+    rootFolderNamesExpanded: theme.rootFolderNamesExpanded ?? {}
+  }
+  lightMaps = {
+    fileNames: { ...theme.fileNames, ...light?.fileNames },
+    fileExtensions: { ...theme.fileExtensions, ...light?.fileExtensions },
+    folderNames: { ...theme.folderNames, ...light?.folderNames },
+    folderNamesExpanded: { ...theme.folderNamesExpanded, ...light?.folderNamesExpanded },
+    rootFolderNames: { ...theme.rootFolderNames, ...light?.rootFolderNames },
+    rootFolderNamesExpanded: { ...theme.rootFolderNamesExpanded, ...light?.rootFolderNamesExpanded }
+  }
 }
-const lightMaps = {
-  fileNames: { ...theme.fileNames, ...light?.fileNames },
-  fileExtensions: { ...theme.fileExtensions, ...light?.fileExtensions },
-  folderNames: { ...theme.folderNames, ...light?.folderNames },
-  folderNamesExpanded: { ...theme.folderNamesExpanded, ...light?.folderNamesExpanded },
-  rootFolderNames: { ...theme.rootFolderNames, ...light?.rootFolderNames },
-  rootFolderNamesExpanded: { ...theme.rootFolderNamesExpanded, ...light?.rootFolderNamesExpanded }
+
+/** 加载并构建图标映射；重复调用只加载一次。 */
+export function ensureMaterialIcons(): Promise<void> {
+  if (loading) return loading
+  loading = import('material-icon-theme/dist/material-icons.json')
+    .then((mod) => {
+      theme = (mod.default ?? (mod as unknown)) as IconTheme
+      build()
+    })
+    .catch(() => {
+      /* 清单加载失败就退回无图标，不影响文件树 */
+    })
+    .finally(() => {
+      for (const notify of listeners) notify()
+      listeners.clear()
+    })
+  return loading
+}
+
+/** 图标就绪后重渲染一次。返回取消订阅函数。 */
+export function subscribeMaterialIcons(notify: () => void): () => void {
+  if (theme) return () => undefined
+  listeners.add(notify)
+  void ensureMaterialIcons()
+  return () => {
+    listeners.delete(notify)
+  }
 }
 
 function srcOf(id: string | undefined): string {
+  if (!theme) return ''
   const def = (id && theme.iconDefinitions[id]) || theme.iconDefinitions[theme.file]
   if (!def) return ''
   const file = def.iconPath.slice(def.iconPath.lastIndexOf('/') + 1)
@@ -72,6 +116,7 @@ export function materialIconSrc(
   root = false,
   lightMode = true
 ): string {
+  if (!theme || !darkMaps || !lightMaps) return ''
   const maps = lightMode ? lightMaps : darkMaps
   const lower = name.toLowerCase()
   if (kind === 'dir') {
