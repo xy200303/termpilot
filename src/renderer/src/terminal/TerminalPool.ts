@@ -5,6 +5,11 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { terminalPalette } from '../theme/terminalThemes'
 
+/** 每次落库只存尾部这么多行，够下次启动画回来，也不至于每次全量重扫。 */
+const SAVE_LINES = 2000
+/** 落库间隔。终端输出不停时也不必每 2 秒写一次库。 */
+const SAVE_INTERVAL_MS = 10_000
+
 /**
  * 进程级 xterm 单例池（关键设计，见 docs/技术方案.md §4.2）：
  *
@@ -37,6 +42,13 @@ class TerminalPool {
   /** 存盘定时器的清理。终端销毁时停掉。 */
   private savers = new Map<string, () => void>()
   private palette: ITheme = terminalPalette('light').theme
+  /** 每个终端保留的历史行数，跟随外观设置 */
+  private scrollback = 10000
+
+  setScrollback(lines: number): void {
+    this.scrollback = lines
+    for (const entry of this.entries.values()) entry.term.options.scrollback = lines
+  }
 
   /** 换终端配色。已经打开的终端一起改，后面新建的也用这一套。 */
   setTheme(theme: ITheme): void {
@@ -54,7 +66,7 @@ class TerminalPool {
       lineHeight: 1.2,
       cursorBlink: true,
       cursorStyle: 'block',
-      scrollback: 50000,
+      scrollback: this.scrollback,
       allowProposedApi: true,
       theme: this.palette
     })
@@ -104,9 +116,16 @@ class TerminalPool {
     }
     return run().finally(() => {
       window.api.term.bindView(termId)
-      const save = () => window.api.term.saveScrollback(termId, this.snapshot(termId))
+      /* 只存尾部，内容没变就不写：原来每 2 秒重扫整个缓冲，空闲时也有 CPU 抖动和磁盘写 */
+      let lastSaved = ''
+      const save = () => {
+        const text = this.snapshot(termId, SAVE_LINES)
+        if (!text || text === lastSaved) return
+        lastSaved = text
+        window.api.term.saveScrollback(termId, text)
+      }
       save()
-      const timer = setInterval(save, 2000)
+      const timer = setInterval(save, SAVE_INTERVAL_MS)
       window.addEventListener('beforeunload', save)
       this.savers.set(termId, () => {
         clearInterval(timer)
@@ -116,10 +135,10 @@ class TerminalPool {
   }
 
   /** 当前缓冲里的行，带颜色。行与行之间是换行，不再含回车和光标移动。 */
-  private snapshot(termId: string): string {
+  private snapshot(termId: string, limit = SAVE_LINES): string {
     const term = this.entries.get(termId)?.term
     if (!term) return ''
-    return ansiLines(term)
+    return ansiLines(term, limit)
   }
 
   /** 挂载到指定容器（re-parent），并做一次同步 fit + 下一帧 refit 强制重绘 */
@@ -374,13 +393,14 @@ function ansiSlice(term: Terminal, start: number, end: number): string {
 }
 
 /** 整段缓冲按行转成 ANSI。行尾空白去掉，不藏光标，不含定位序列。 */
-function ansiLines(term: Terminal): string {
+function ansiLines(term: Terminal, limit = 2000): string {
   const buffer = term.buffer.active
   const cols = Math.max(2, term.cols)
   const cell = buffer.getNullCell()
   const parts: string[] = []
+  const start = Math.max(0, buffer.length - Math.max(1, limit))
   let style = ''
-  for (let y = 0; y < buffer.length; y++) {
+  for (let y = start; y < buffer.length; y++) {
     const line = buffer.getLine(y)
     const row: string[] = []
     if (line) {

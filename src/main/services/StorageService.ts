@@ -77,6 +77,7 @@ export class StorageService {
     `)
     this.ensureColumn('appearance', 'experimental_screenshot', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('appearance', 'language', "TEXT NOT NULL DEFAULT 'auto'")
+    this.ensureColumn('appearance', 'scrollback', 'INTEGER NOT NULL DEFAULT 10000')
     this.ensureColumn('sessions', 'jump_host', 'TEXT')
     this.ensureColumn('sessions', 'jump_port', 'INTEGER')
     this.ensureColumn('sessions', 'jump_username', 'TEXT')
@@ -485,12 +486,13 @@ export class StorageService {
       .prepare(`INSERT OR IGNORE INTO appearance (id, app_theme, terminal_theme) VALUES (1, 'light', 'light')`)
       .run()
     const row = this.db
-      .prepare('SELECT app_theme, terminal_theme, experimental_screenshot, language FROM appearance WHERE id = 1')
+      .prepare('SELECT app_theme, terminal_theme, experimental_screenshot, language, scrollback FROM appearance WHERE id = 1')
       .get()
     return parseAppearance({
       app: row?.app_theme,
       terminal: row?.terminal_theme,
       language: row?.language,
+      scrollback: row?.scrollback,
       experimentalScreenshot: flag(row?.experimental_screenshot ?? 0)
     })
   }

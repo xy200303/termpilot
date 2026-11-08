@@ -413,11 +413,15 @@ export type TerminalThemeId = (typeof TERMINAL_THEMES)[number]
 
 export type UiLanguage = 'auto' | 'zh' | 'en'
 
+export type ScrollbackLines = 1000 | 10000 | 50000
+
 export interface Appearance {
   app: AppTheme
   terminal: TerminalThemeId
   /** 界面语言：auto 跟随系统，zh 中文，en 英文 */
   language: UiLanguage
+  /** 每个终端保留的历史行数。行数越多占内存越多。 */
+  scrollback: ScrollbackLines
   /** 打开后所有截图都按缓冲拼图。默认关闭，沿用逐屏拍摄。 */
   experimentalScreenshot: boolean
 }
@@ -426,6 +430,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   app: 'light',
   terminal: 'light',
   language: 'auto',
+  scrollback: 10000,
   experimentalScreenshot: false
 }
 
@@ -440,5 +445,9 @@ export function parseAppearance(input: unknown): Appearance {
   const app = APP_THEMES.find((id) => id === row.app) ?? DEFAULT_APPEARANCE.app
   const terminal = TERMINAL_THEMES.find((id) => id === row.terminal) ?? DEFAULT_APPEARANCE.terminal
   const language = row.language === 'zh' || row.language === 'en' ? row.language : DEFAULT_APPEARANCE.language
-  return { app, terminal, language, experimentalScreenshot: row.experimentalScreenshot === true }
+  const scrollback: ScrollbackLines =
+    row.scrollback === 1000 || row.scrollback === 10000 || row.scrollback === 50000
+      ? row.scrollback
+      : DEFAULT_APPEARANCE.scrollback
+  return { app, terminal, language, scrollback, experimentalScreenshot: row.experimentalScreenshot === true }
 }

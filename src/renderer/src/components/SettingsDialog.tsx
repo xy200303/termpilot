@@ -13,6 +13,7 @@ import {
   type AppTheme,
   type McpAuditEntry,
   type McpSettingsInput,
+  type ScrollbackLines,
   type TerminalThemeId,
   type UpdateCheck
 } from '../../../shared/types'
@@ -279,6 +280,27 @@ export function SettingsDialog() {
                         <SelectItem value="auto">{t('settings.follow_system')}</SelectItem>
                         <SelectItem value="zh">{t('settings.language_zh')}</SelectItem>
                         <SelectItem value="en">English</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Row>
+                </Card>
+                <Card>
+                  <Row title={t('settings.scrollback')} detail={t('settings.scrollback_detail')}>
+                    <Select
+                      value={String(appearance.scrollback)}
+                      onValueChange={(value) =>
+                        void changeAppearance({ scrollback: Number(value) as ScrollbackLines })
+                      }
+                    >
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {([1000, 10000, 50000] as ScrollbackLines[]).map((lines) => (
+                          <SelectItem key={lines} value={String(lines)}>
+                            {t('settings.scrollback_lines', { lines: lines.toLocaleString() })}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </Row>

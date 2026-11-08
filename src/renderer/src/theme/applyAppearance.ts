@@ -36,6 +36,7 @@ export function applyAppearance(appearance: Appearance, persist = true): Resolve
   const palette = terminalPalette(appearance.terminal)
   document.documentElement.style.setProperty('--terminal-background', palette.theme.background ?? '#ffffff')
   terminalPool.setTheme(palette.theme)
+  terminalPool.setScrollback(appearance.scrollback)
   if (persist) localStorage.setItem(CACHE_KEY, JSON.stringify(appearance))
   return resolved
 }
