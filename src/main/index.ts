@@ -1,7 +1,7 @@
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, session, shell } from 'electron'
 import { t as mt } from './i18n'
 import { followAppTheme, titleBarOverlay, watchSystemChrome, windowBackground } from './window-chrome'
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // 固定到 %APPDATA%\TermPilot。必须在 ready 之前设置，
@@ -11,6 +11,8 @@ app.setPath('userData', userDataDir)
 const legacySessions = join(app.getPath('appData'), 'termpilot', 'sessions.json')
 const currentSessions = join(userDataDir, 'sessions.json')
 const databaseFile = join(userDataDir, 'termpilot.db')
+// Chromium 的磁盘缓存会跟着用户目录一直长，给个上限；升级后旧版本缓存再清一次。
+app.commandLine.appendSwitch('disk-cache-size', String(64 * 1024 * 1024))
 // 只在还没有数据库时把旧目录里的 JSON 拷过来，交给 StorageService 导入一次。
 if (!existsSync(databaseFile) && !existsSync(currentSessions) && existsSync(legacySessions)) {
   mkdirSync(userDataDir, { recursive: true })
@@ -43,6 +45,18 @@ function appIcon(): string {
   const packaged = join(process.resourcesPath, 'icon.png')
   if (app.isPackaged && existsSync(packaged)) return packaged
   return join(app.getAppPath(), 'resources', 'icon.png')
+}
+
+/** 版本变化时清一次 Chromium 磁盘缓存（旧版本的代码缓存没有复用价值）。 */
+async function clearCachesOnVersionChange(): Promise<void> {
+  const marker = join(userDataDir, '.cache-version')
+  try {
+    if (existsSync(marker) && readFileSync(marker, 'utf8').trim() === app.getVersion()) return
+    await session.defaultSession.clearCache()
+    writeFileSync(marker, app.getVersion())
+  } catch {
+    /* 清缓存失败不影响启动 */
+  }
 }
 
 async function appPainted(win: BrowserWindow): Promise<boolean> {
@@ -205,6 +219,7 @@ if (!single) {
     setMainLocale(resolveUiLocale(sessions.getAppearance().language, app.getLocale()))
     sessions.setLaunch(process.execPath, app.isPackaged ? [] : [app.getAppPath()])
     installCli({ app: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] })
+    void clearCachesOnVersionChange()
     createWindow(sessions)
 
     app.on('activate', () => {
