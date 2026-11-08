@@ -125,7 +125,6 @@ export class StorageService {
       'CREATE UNIQUE INDEX IF NOT EXISTS sessions_config_host ON sessions(config_host) WHERE config_host IS NOT NULL'
     )
     this.importLegacyJson(join(dir, 'sessions.json'))
-    this.pruneAudit()
   }
 
   private backfillPublicIds(): void {

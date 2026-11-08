@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { t as mt } from './i18n'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app } from 'electron'
@@ -21,8 +21,12 @@ export function installCli(launch: { app: string; args: string[] }): string {
   const target = join(dir, binName)
   if (existsSync(source)) {
     try {
-      copyFileSync(source, target)
-      if (process.platform !== 'win32') chmodSync(target, 0o755)
+      /* 每次启动都复制 6 MB 的 CLI 没有意义，大小一致就当作已是最新 */
+      const upToDate = existsSync(target) && statSync(target).size === statSync(source).size
+      if (!upToDate) {
+        copyFileSync(source, target)
+        if (process.platform !== 'win32') chmodSync(target, 0o755)
+      }
       for (const stale of ['termpilot.cmd', 'termpilot.mjs']) {
         const file = join(dir, stale)
         if (existsSync(file)) unlinkSync(file)
@@ -33,9 +37,21 @@ export function installCli(launch: { app: string; args: string[] }): string {
   } else {
     console.error('[TermPilot] CLI binary missing:', source)
   }
-  writeFileSync(join(dir, 'launch.json'), `${JSON.stringify(launch, null, 2)}\n`, 'utf8')
+  const launchFile = join(dir, 'launch.json')
+  const launchText = `${JSON.stringify(launch, null, 2)}\n`
+  let launchCurrent = ''
+  try {
+    launchCurrent = readFileSync(launchFile, 'utf8')
+  } catch {
+    launchCurrent = ''
+  }
+  if (launchCurrent !== launchText) writeFileSync(launchFile, launchText, 'utf8')
   const script = uninstallScript()
-  if (script && existsSync(script)) copyFileSync(script, join(dir, 'uninstall-path.ps1'))
+  const scriptTarget = join(dir, 'uninstall-path.ps1')
+  if (script && existsSync(script)) {
+    const sameScript = existsSync(scriptTarget) && statSync(scriptTarget).size === statSync(script).size
+    if (!sameScript) copyFileSync(script, scriptTarget)
+  }
   if (process.platform === 'win32') ensureWindowsPath(dir)
   else linkUserBin(target)
   return target
@@ -48,6 +64,9 @@ function uninstallScript(): string {
 }
 
 function ensureWindowsPath(dir: string): void {
+  /* PATH 只需要写一次；用标记文件避免每次启动都拉起 PowerShell */
+  const marker = join(dir, '.path-ok')
+  if (existsSync(marker)) return
   const script = `
 $dir = $env:TERMPILOT_BIN
 if (-not $dir) { exit 0 }
@@ -70,6 +89,7 @@ $items.Add($dir)
       env: { ...process.env, TERMPILOT_BIN: dir },
       windowsHide: true
     })
+    writeFileSync(marker, '1', 'utf8')
   } catch (error) {
     console.error(mt('cli.path_failed'), error)
   }

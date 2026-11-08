@@ -218,9 +218,17 @@ if (!single) {
     storage = sessions
     setMainLocale(resolveUiLocale(sessions.getAppearance().language, app.getLocale()))
     sessions.setLaunch(process.execPath, app.isPackaged ? [] : [app.getAppPath()])
-    installCli({ app: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] })
     void clearCachesOnVersionChange()
     createWindow(sessions)
+    /* 装 CLI 要复制二进制、Windows 上还要写 PATH，不挡首屏 */
+    setImmediate(() => {
+      try {
+        installCli({ app: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] })
+      } catch (error) {
+        console.error('[TermPilot] CLI install failed:', error)
+      }
+      sessions.pruneAudit()
+    })
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow(sessions)
