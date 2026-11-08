@@ -5,7 +5,7 @@ import DotField from './components/DotField.vue'
 import SignalStrip from './components/SignalStrip.vue'
 import { initSmoothScroll, prefersReduced, hasFinePointer, loadMotion } from './motion/engine'
 
-const VERSION = '0.8.4'
+const VERSION = '0.8.5'
 const REPO = 'https://github.com/xy200303/termpilot'
 const RELEASE = `${REPO}/releases/latest`
 const RELEASE_TAG = `${REPO}/releases/tag/v${VERSION}`
@@ -141,6 +141,13 @@ const specs = [
 
 const changelog = [
   {
+    version: '0.8.5',
+    items: [
+      '合并重复工具：term_read 并入 term_lines，滚动截图并入 term_screenshot，工具总数 35',
+      '应用截图默认带 100px 网格；desktop_type 支持剪贴板粘贴，中文绕开远端输入法'
+    ]
+  },
+  {
     version: '0.8.4',
     items: [
       '桌面截图返回 shotId，点击/滚动按它换算坐标，窗口或分辨率变化不再点偏',
@@ -152,13 +159,6 @@ const changelog = [
     items: [
       'desktop_screenshot 支持 region 只截一块区域，角标标出原画面起点坐标',
       '网格线按局部底色在 OKLCH 里选色，并用 APCA 对比度校验，亮暗各半也看得清'
-    ]
-  },
-  {
-    version: '0.8.2',
-    items: [
-      'desktop_screenshot 默认带 100px 坐标网格，Agent 不传参就能按刻度算坐标',
-      '需要干净画面时传 grid=false 关闭，也可自定义 20–500 的网格间距'
     ]
   }
 ]

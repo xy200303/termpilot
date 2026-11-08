@@ -3,6 +3,7 @@
 - 合并重复工具：`term_screenshot_scrollback` 并入 `term_screenshot`（`scope=buffer` 截整段缓冲，给 `startLine` / `endLine` 仍只裁那一段）；`term_read` 并入 `term_lines`（不填范围就是当前画面）。工具总数 37 → 35。
 - `app_screenshot` 默认叠加 100px 坐标网格，传 `grid=false` 关闭，或填 20–500 自定义间距。
 - 终端截图不加网格：终端按行定位、没有点击坐标，叠网格只会挡住文字。
+- `desktop_type` 新增 `method=clipboard`：先把整段文字写进远端剪贴板，再发粘贴快捷键（`pasteKeys` 默认 `ctrl-v`，终端用 `ctrl-shift-v`），避免 VNC 下中文被远端输入法拦截。默认仍是逐字发按键。
 
 安装包没有代码签名。
 
