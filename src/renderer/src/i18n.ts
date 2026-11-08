@@ -1,7 +1,7 @@
 import i18n from 'i18next'
 import { initReactI18next, useTranslation } from 'react-i18next'
-import en from './locales/en.json'
-import zh from './locales/zh.json'
+import en from '../../shared/locales/en.json'
+import zh from '../../shared/locales/zh.json'
 
 /**
  * 英文原文就是 key（i18next 标准资源格式），zh.json 提供中文映射，en 直接返回 key。
