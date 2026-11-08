@@ -110,15 +110,21 @@ function textFromClipboard(data: ClipboardData): string | null {
   return null
 }
 
-export function runRdpAgent(connection: RdpConnection, input: Exclude<DesktopAgentInput, { action: 'wait' }>): { pngBase64?: string; note: string } {
+export async function runRdpAgent(
+  connection: RdpConnection,
+  input: Exclude<DesktopAgentInput, { action: 'wait' }>
+): Promise<{ pngBase64?: string; note: string }> {
   try {
-    return runRdpAgentUnsafe(connection, input)
+    return await runRdpAgentUnsafe(connection, input)
   } catch (error) {
     throw new Error(rdpErrorText(error))
   }
 }
 
-function runRdpAgentUnsafe(connection: RdpConnection, input: Exclude<DesktopAgentInput, { action: 'wait' }>): { pngBase64?: string; note: string } {
+async function runRdpAgentUnsafe(
+  connection: RdpConnection,
+  input: Exclude<DesktopAgentInput, { action: 'wait' }>
+): Promise<{ pngBase64?: string; note: string }> {
   const { session, canvas } = connection
   if (input.action === 'screenshot') {
     const shot = captureCanvas(canvas)
@@ -146,6 +152,21 @@ function runRdpAgentUnsafe(connection: RdpConnection, input: Exclude<DesktopAgen
   }
   if (input.action === 'type') {
     canvas.focus()
+    const count = Array.from(input.text).length
+    if (input.method === 'clipboard') {
+      // RDP 剪贴板：先推给远端，再发粘贴快捷键
+      const data = new ClipboardData()
+      data.addText('text/plain', input.text)
+      try {
+        await session.onClipboardPaste(data)
+      } finally {
+        data.free()
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      const combo = input.pasteKeys ?? 'ctrl-v'
+      sendCombo(session, combo)
+      return { note: `已把 ${count} 个字符写入远端剪贴板，并发送 ${combo} 粘贴` }
+    }
     const events: DeviceEvent[] = []
     for (const char of input.text) {
       const needsShift = /[A-Z~!@#$%^&*()_+{}|:"<>?]/.test(char)
@@ -154,7 +175,7 @@ function runRdpAgentUnsafe(connection: RdpConnection, input: Exclude<DesktopAgen
       if (needsShift) events.push(DeviceEvent.keyReleased(0x2a))
     }
     applyEvents(session, events)
-    return { note: `已逐字输入 ${Array.from(input.text).length} 个字符` }
+    return { note: `已逐字输入 ${count} 个字符` }
   }
   const events: DeviceEvent[] = []
   if (input.x !== undefined && input.y !== undefined) {

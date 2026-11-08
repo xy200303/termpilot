@@ -470,7 +470,11 @@ export class McpService {
       case 'desktop_key':
         return this.desktopAgent.run(need(raw, 'viewId'), { action: 'key', keys: need(raw, 'keys') })
       case 'desktop_type':
-        return this.desktopAgent.run(need(raw, 'viewId'), { action: 'type', text: need(raw, 'text') })
+        return this.desktopAgent.run(need(raw, 'viewId'), {
+          action: 'type',
+          text: need(raw, 'text'),
+          ...desktopTypeOptions(raw)
+        })
       case 'desktop_scroll':
         return this.desktopAgent.run(need(raw, 'viewId'), {
           action: 'scroll',
@@ -1342,6 +1346,15 @@ function desktopGrid(raw: Record<string, unknown>): boolean | number {
   throw new Error('grid 只能是 100px 网格开关（true/false），或 20–500 的网格像素间距')
 }
 
+/** desktop_type 的输入方式：keys 逐字按键（默认），clipboard 走远端剪贴板。 */
+function desktopTypeOptions(raw: Record<string, unknown>): { method?: 'keys' | 'clipboard'; pasteKeys?: string } {
+  const method = textArg(raw, 'method')
+  if (method !== undefined && method !== 'keys' && method !== 'clipboard') {
+    throw new Error('method 只能是 keys 或 clipboard')
+  }
+  return { method, pasteKeys: textArg(raw, 'pasteKeys') }
+}
+
 /** 显式指定截图尺寸时透传；不传则由主进程用最近一张截图兜底。 */
 function desktopScaleSource(raw: Record<string, unknown>): {
   fromWidth?: number
@@ -1383,7 +1396,9 @@ function desktopAction(raw: Record<string, unknown>): DesktopAgentInput {
     }
   }
   if (action === 'key') return { action, keys: need(raw, 'keys') }
-  if (action === 'type') return { action, text: need(raw, 'text') }
+  if (action === 'type') {
+    return { action, text: need(raw, 'text'), ...desktopTypeOptions(raw) }
+  }
   if (action === 'scroll') {
     return {
       action,

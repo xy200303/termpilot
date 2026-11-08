@@ -20,6 +20,10 @@ export interface DesktopKeyInput {
 
 export interface DesktopTypeInput {
   text: string
+  /** keys 逐字发按键（默认）；clipboard 先写远端剪贴板再发粘贴快捷键。 */
+  method?: 'keys' | 'clipboard'
+  /** clipboard 模式用的粘贴快捷键，默认 ctrl-v；终端一般是 ctrl-shift-v。 */
+  pasteKeys?: string
 }
 
 export interface DesktopScrollInput extends DesktopScaleSource {

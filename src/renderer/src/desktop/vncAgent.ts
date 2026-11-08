@@ -52,8 +52,17 @@ export async function runVncAgent(viewId: string, input: DesktopAgentInput): Pro
   }
   if (input.action === 'type') {
     rfb.focus()
+    const count = Array.from(input.text).length
+    if (input.method === 'clipboard') {
+      // VNC 没有文本通道：先把整段写进远端剪贴板，再让目标应用自己粘贴
+      rfb.clipboardPasteFrom(input.text)
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      const combo = input.pasteKeys ?? 'ctrl-v'
+      sendCombo(rfb, combo)
+      return { note: `已把 ${count} 个字符写入远端剪贴板，并发送 ${combo} 粘贴` }
+    }
     for (const char of input.text) sendChar(rfb, char)
-    return { note: `已逐字输入 ${Array.from(input.text).length} 个字符` }
+    return { note: `已逐字输入 ${count} 个字符` }
   }
   const rect = canvas.getBoundingClientRect()
   const scaled = scaleToCanvas(canvas, input.x ?? canvas.width / 2, input.y ?? canvas.height / 2, input.fromWidth, input.fromHeight)

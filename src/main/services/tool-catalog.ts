@@ -289,8 +289,13 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_type',
     description:
-      '向图形桌面逐字输入文字。VNC 发送 Unicode keysym，内嵌 RDP 发送 Unicode 按键，支持标点、中文和 Emoji，不再只是写剪贴板。原生 Windows 窗口仍通过本机剪贴板粘贴。输入密码等敏感文本前先征得用户同意。',
-    input: { viewId, text: z.string().describe('要输入的文字') }
+      '向图形桌面输入文字。默认 method=keys 逐字发按键（VNC 用 Unicode keysym、内嵌 RDP 用 Unicode 键盘事件），中文可能被远端输入法拦截；中文长文本建议 method=clipboard：先把文字写进远端剪贴板，再发粘贴快捷键。pasteKeys 默认 ctrl-v，终端一般是 ctrl-shift-v。原生 Windows 窗口始终走本机剪贴板粘贴。输入密码等敏感文本前先征得用户同意。',
+    input: {
+      viewId,
+      text: z.string().describe('要输入的文字'),
+      method: z.enum(['keys', 'clipboard']).optional().describe('keys 逐字按键（默认）；clipboard 写远端剪贴板后粘贴'),
+      pasteKeys: z.string().optional().describe('clipboard 模式用的粘贴快捷键，默认 ctrl-v；终端用 ctrl-shift-v')
+    }
   },
   {
     name: 'desktop_scroll',
