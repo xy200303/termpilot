@@ -347,6 +347,14 @@ export class McpService {
         return this.connectSession(need(raw, 'connection'))
       case 'connection_close':
         return this.disconnectSession(need(raw, 'connection'))
+      case 'desktop_close': {
+        const viewId = need(raw, 'viewId')
+        const found = this.desktop.list().find((item) => item.viewId === viewId)
+        if (!found) throw new Error(mt('desktop.missing'))
+        this.desktop.close(viewId)
+        this.send(IPC.mcpCloseTab, viewId)
+        return mt('mcp.desktop_closed', { id: viewId })
+      }
       case 'connection_create':
         return this.createSession({ name: need(raw, 'name'), ...sessionPatch(raw) })
       case 'connection_update':
@@ -764,7 +772,8 @@ export class McpService {
     }
     this.sftp.close(session.id)
     const desktops = this.desktop.closeSession(session.id)
-    return mt('mcp.closed_connection', { name: session.name, terms: terms.length, desktops })
+    for (const viewId of desktops) this.send(IPC.mcpCloseTab, viewId)
+    return mt('mcp.closed_connection', { name: session.name, terms: terms.length, desktops: desktops.length })
   }
 
   private async openLocal(): Promise<string> {

@@ -54,7 +54,7 @@ termpilot call term_exec --json-file args.json --json
 
 `~/.ssh/config` 只读不写：新建连接的表单里有「从 ssh_config 导入」，选中一个 `Host` 会把主机、端口、用户、私钥和跳板填进表单，保存后就是一条普通连接。应用不会自动导入，也不会回写这个文件。带通配符的 `Host` 和 `Match` 不出现在导入列表里。
 
-先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete`、`term_exec` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_pty`、`term_write`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号。
+先调用 `connection_list` 或 `term_list`。列表包含编号、名称、备注和 `status`。`connection_open`、`connection_close`、`connection_update`、`connection_delete`、`term_exec` 以及 `sftp_*` 的 `connection` 填写 `conn-` 编号。`term_pty`、`term_write`、`term_reconnect`、`term_close`、`term_lines` 和截图的 `termId` 填写 `term-` 编号；桌面族的 `viewId` 填写 `view-` 编号，`desktop_close` 关闭整个桌面标签。
 
 `term_exec` 是执行命令的默认工具。它走独立 exec 通道，不占终端画面，可以并发，也不需要先开终端。返回 JSON：stdout 和 stderr 分流返回，都是原始字节流（不折行、无回显、无 ANSI），另有 exitCode、duration（秒）、timedOut、truncated。输出要被程序解析（CSV、JSON、路径、逐行处理）时只能用它——PTY 会按窗口宽度折行，解析就是数据损坏。命令原样交给远端 bash 执行，多行、heredoc、引号都直接写，不要自己转义。`session` 填同一个名字时 `cd` 和 `export` 跨调用承接，不填则每次全新环境；每次都要的环境配置放 `prelude`。`maxBytes` 控制 stdout 和 stderr 各自最多返回多少，默认 50000，超出保留头尾。`timeout` 单位是秒，到点会断开通道，timedOut 为 true。
 
@@ -62,7 +62,7 @@ termpilot call term_exec --json-file args.json --json
 
 终端在关闭前保持存在。应用重启后，同一编号、标题和备注仍在，上次退出时已经画好的行会按行写回，新会话从下一行开始。`status` 不是 `connected` 时，用 `term_reconnect` 恢复这一扇，不要再 `connection_open`。先用 `term_lines` 查看已有记录（不填范围就是当前画面）。没有这扇终端时，才用 `connection_open` 新开。`term_pty` 的命令以换行结束。修改远程文件前先确认目录。用户未明确要求删除时，不调用 `sftp_remove`，也不在命令中使用 `rm`。`sftp_download` 和 `sftp_upload` 只传 512MB 以内的文件。几个 GB 的文件留在远程机器上处理，不要下载到本机。危险操作在 TermPilot 窗口中等待用户确认。
 
-可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_pty`、`term_write`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`app_screenshot`、`app_record`、`desktop_list`、`desktop_screenshot`、`desktop_click`、`desktop_key`、`desktop_type`、`desktop_scroll`、`desktop_wait`、`desktop_actions`、`desktop_a11y`、`desktop_perf`。
+可用工具：`connection_list`、`connection_open`、`connection_close`、`connection_create`、`connection_update`、`connection_delete`、`term_list`、`term_exec`、`term_pty`、`term_write`、`term_reconnect`、`term_close`、`term_update`、`term_open_local`、`sftp_list`、`sftp_mkdir`、`sftp_upload`、`sftp_download`、`sftp_rename`、`sftp_remove`、`term_lines`、`term_screenshot`、`app_screenshot`、`app_record`、`desktop_list`、`desktop_close`、`desktop_screenshot`、`desktop_click`、`desktop_key`、`desktop_type`、`desktop_scroll`、`desktop_wait`、`desktop_actions`、`desktop_a11y`、`desktop_perf`。
 
 要截指定行时，先 `term_lines` 看行号（不填范围就是当前画面），再把 `startLine` 和 `endLine` 传给 `term_screenshot`。两端都包含，返回的是这一段已经裁好的一张图，不要自己按像素裁。整段历史用 `scope=buffer`（或直接给范围），不要再找单独的滚动截图工具。
 

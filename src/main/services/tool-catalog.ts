@@ -61,6 +61,11 @@ const lineFields: ZodRawShape = {
 /** MCP 注册和命令行 tools / schema / call 共用这一份。 */
 export const TOOLS: readonly ToolDef[] = [
   {
+    name: 'desktop_close',
+    description: 'Close one desktop tab (VNC or RDP) and release its session. The saved connection stays; call connection_open to open it again. Use it when you are done with a desktop so it does not keep pixels and memory.',
+    input: { viewId }
+  },
+  {
     name: 'connection_list',
     description:
       'List saved connections. id is the conn- id used for calls. name and remark only help you recognise a connection; do not pass them as parameters. Passwords are not included. Each connection reports protocol (ssh / telnet / serial) and capabilities: only ssh has an exec channel (term_exec), SFTP (sftp_*) and concurrent channels; telnet and serial only carry a terminal byte stream, so use term_pty / term_write / term_lines / term_screenshot for them.',

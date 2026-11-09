@@ -172,14 +172,14 @@ export class DesktopService {
     if (sessionId) this.status(viewId, sessionId, 'disconnected')
   }
 
-  closeSession(sessionId: string): number {
-    let count = 0
+  closeSession(sessionId: string): string[] {
+    const closed: string[] = []
     for (const [viewId, id] of [...this.sessions]) {
       if (id !== sessionId) continue
       this.close(viewId)
-      count++
+      closed.push(viewId)
     }
-    return count
+    return closed
   }
 
   dispose(): void {

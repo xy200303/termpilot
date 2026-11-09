@@ -660,5 +660,6 @@
   "rdp.rdp_component_not_ready": "RDP component did not become ready",
   "rdp.rdp_connect_timeout": "RDP connection timed out",
   "rdp.rdp_canvas_not_visible": "RDP screen is not visible; open the desktop tab first",
-  "rdp.rdp_stale_session_hint": "A previous session may still be alive on the server. Wait a moment and click Reconnect; if it keeps failing, end the stale session on the server (for example pkill -u <user>)."
+  "rdp.rdp_stale_session_hint": "A previous session may still be alive on the server. Wait a moment and click Reconnect; if it keeps failing, end the stale session on the server (for example pkill -u <user>).",
+  "mcp.desktop_closed": "Closed desktop {{id}}"
 }

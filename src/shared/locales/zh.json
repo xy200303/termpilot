@@ -657,5 +657,6 @@
   "rdp.rdp_component_not_ready": "RDP 组件没有就绪",
   "rdp.rdp_connect_timeout": "RDP 连接超时",
   "rdp.rdp_canvas_not_visible": "RDP 画面没有显示，请先打开桌面标签",
-  "rdp.rdp_stale_session_hint": "服务器上可能还留着上一次的会话。稍等片刻再点「重新连接」；一直失败的话，在服务器上结束残留会话（例如 pkill -u <用户名>）。"
+  "rdp.rdp_stale_session_hint": "服务器上可能还留着上一次的会话。稍等片刻再点「重新连接」；一直失败的话，在服务器上结束残留会话（例如 pkill -u <用户名>）。",
+  "mcp.desktop_closed": "已关闭桌面 {{id}}"
 }

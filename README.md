@@ -40,7 +40,7 @@ When no system keychain is available (for example a minimal XFCE session), passw
 - **Terminals**: SSH, Telnet, serial, local terminals and reverse shells share one tab row. SSH reuses a single session for PTY, exec and SFTP; Telnet and serial carry a terminal byte stream only.
 - **Desktops**: VNC uses embedded noVNC; RDP uses embedded IronRDP by default and can switch to the FreeRDP native window. Each connection keeps one desktop tab.
 - **Desktop capabilities**: screenshot grid, pixel-coordinate clicks, character-by-character Chinese and Emoji input, keys, scrolling, batch operations, waiting for a stable picture; VNC / embedded RDP share the text clipboard with this machine in both directions.
-- **Agent**: a built-in MCP server with 35 tools covering connections, terminals, exec, SFTP, graphical desktops and app window screenshot / recording. Desktop tools can also read the Linux AT-SPI control tree and live traffic metrics.
+- **Agent**: a built-in MCP server with 36 tools covering connections, terminals, exec, SFTP, graphical desktops and app window screenshot / recording. Desktop tools can also read the Linux AT-SPI control tree and live traffic metrics.
 
 ## Session model
 
@@ -64,7 +64,7 @@ When MCP is unavailable, run the local `termpilot` command. If the window is not
 
 ## Agent tools
 
-35 tools in seven families. Calls only accept ids: `conn-` for a connection, `term-` for a terminal, `view-` for a graphical desktop; names and notes only help you recognise them. Connections come in three protocols: SSH (terminal, exec channel, SFTP, concurrent channels), Telnet and serial (terminal byte stream only; `term_exec` and `sftp_*` return a capability message, while the screen tools behave the same for all three).
+36 tools in seven families. Calls only accept ids: `conn-` for a connection, `term-` for a terminal, `view-` for a graphical desktop; names and notes only help you recognise them. Connections come in three protocols: SSH (terminal, exec channel, SFTP, concurrent channels), Telnet and serial (terminal byte stream only; `term_exec` and `sftp_*` return a capability message, while the screen tools behave the same for all three).
 
 ### Connection management (6)
 
