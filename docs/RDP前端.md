@@ -99,7 +99,7 @@ cp dist/{iron-remote-desktop-rdp.js,index.d.ts,package.json,CHANGELOG.md} \
 
 ## 已知限制
 
-- **中文输入要走剪贴板**：xrdp 会丢掉 Unicode 键盘事件里的非 ASCII 字符，用 `desktop_type` 的 keys 方式打中文只留下空格。xrdp 0.10 源码里 `xrdp_wm_key_unicode` 只把字符查 keymap 表，查不到（CJK 都不在表里）就直接丢弃，所以这不是版本问题。Agent 的 `desktop_type` 现在检测到非 ASCII 会自动改走剪贴板；本机输入法直接打字仍不支持，界面用「发送文字」走剪贴板。
+- **中文输入要走剪贴板**：xrdp 会丢掉 Unicode 键盘事件里的非 ASCII 字符，用 `desktop_type` 的 keys 方式打中文只留下空格。xrdp 0.10 源码里 `xrdp_wm_key_unicode` 只把字符查 keymap 表，查不到（CJK 都不在表里）就直接丢弃，所以这不是版本问题。Agent 的 `desktop_type` 检测到非 ASCII 会自动改走剪贴板，默认按终端习惯发 `ctrl-shift-v`（实测在 xfce4-terminal 里中文完整粘贴并执行），GUI 程序需要 `pasteKeys=ctrl-v`；本机输入法直接打字仍不支持，界面用「发送文字」走剪贴板。
 - **接回仍然存活的 xrdp 会话会失败**：客户端断开后服务端会话还在时，再次连入有两种表现——回放的首个 fast-path 帧触发 `invalid fastPath_length` 解析错误，或者连上后没有任何 PDU（画面空白）；服务端 `/var/log/xrdp.log` 会记 `++ reconnected session`，有时跟随 sesman 的 `login failed for display 0`。官方 wasm + 官方演示客户端同样如此，不是这次接入引入的。
   - `RdpView` 在 connect/run 失败时会自动关掉桥接、1.5 秒后重试一次；会话已被 xrdp 回收时重试即可恢复。
   - 仍失败时界面会提示「服务器上可能还留着上一次的会话」，等 xrdp 回收（或服务端 `pkill -u <用户>`）后再点「重新连接」即可。

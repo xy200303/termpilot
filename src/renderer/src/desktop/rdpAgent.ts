@@ -119,8 +119,10 @@ async function runRdpAgentUnsafe(
     canvas.focus({ preventScroll: true })
     const count = Array.from(input.text).length
     // xrdp 会丢掉 Unicode 键盘事件里的非 ASCII 字符，含中文时直接走剪贴板
-    if (input.method === 'clipboard' || /[^\x00-\x7f]/.test(input.text)) {
-      const combo = await pasteIntoRdp(connection, input.text, input.pasteKeys)
+    const autoClipboard = input.method !== 'clipboard' && /[^\x00-\x7f]/.test(input.text)
+    if (input.method === 'clipboard' || autoClipboard) {
+      // 自动切换时按终端习惯用 ctrl-shift-v：ctrl-v 在 shell 里是 quoted-insert，会留下状态
+      const combo = await pasteIntoRdp(connection, input.text, input.pasteKeys ?? (autoClipboard ? 'ctrl-shift-v' : undefined))
       return { note: tr('common.wrote_count_characters_to_the_remote_clipboard_a', { count, combo }) }
     }
     typeText(input.text)
