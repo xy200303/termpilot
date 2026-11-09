@@ -1,5 +1,16 @@
 # 更新日志
 
+## 0.10.0
+
+- 自研 RDP 前端：改用 IronRDP 官方 web-client 的构建产物替换社区包 ironrdp-wasm，修掉连 xrdp 0.9.x 时白屏、画面撕裂的问题；官方 wasm 改为独立文件分发，RDP 懒加载代码从 7.7 MB 降到约 140 KB。
+- 中文输入：RDP 下检测到非 ASCII 文本自动改走剪贴板（默认按终端习惯发 `ctrl-shift-v`，实测 xfce4-terminal 完整粘贴）；GUI 程序可显式传 `ctrl-v`。
+- 断线重连：接回仍存活的 xrdp 会话失败时自动退避重试两次，并在错误里提示残留会话；实测 xrdp 0.10.6.1 上接回正常，升级步骤与回滚方式写在 `docs/RDP前端.md`。
+- MCP 新增 `desktop_close`，可以只关一个桌面标签；`connection_close` 现在会真正关闭桌面标签，关闭后内存回收（实测 643.5 → 567.3 MB）。工具总数 35 → 36。
+- 安装包优化：node-pty 的编译中间产物不再入包，resources 目录 55 → 39 MB；启用最高压缩，Windows 安装包 115.45 → 113.0 MB。
+- 文档新增 `docs/RDP前端.md`（构建、根因、验证、已知限制）与 `docs/性能优化.md` 的第二轮记录。
+
+安装包没有代码签名。
+
 ## 0.9.1
 
 - 增加了 AppStream 元数据：AppImage 内附带软件名称、简介、分类、截图与许可证，Linux 应用目录可以读取，打包测试不再提示缺少 appdata 文件。
