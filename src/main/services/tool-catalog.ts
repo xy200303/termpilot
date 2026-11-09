@@ -290,7 +290,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'desktop_type',
     description:
-      'Type text into a desktop. The default method=keys sends characters one by one (VNC uses Unicode keysyms, embedded RDP uses Unicode key events); Chinese may be intercepted by the remote input method. For longer Chinese text use method=clipboard: the whole text is written to the remote clipboard and a paste shortcut is sent. pasteKeys defaults to ctrl-v; terminals usually need ctrl-shift-v. Native Windows windows always paste through the local clipboard. Ask the user before typing passwords or sensitive text.',
+      'Type text into a desktop. The default method=keys sends characters one by one (VNC uses Unicode keysyms, embedded RDP uses Unicode key events). Text containing non-ASCII characters is always pasted through method=clipboard because xrdp drops non-ASCII Unicode key events: the whole text is written to the remote clipboard and a paste shortcut is sent. pasteKeys defaults to ctrl-v; terminals usually need ctrl-shift-v. pasteKeys defaults to ctrl-v; terminals usually need ctrl-shift-v. Native Windows windows always paste through the local clipboard. Ask the user before typing passwords or sensitive text.',
     input: {
       viewId,
       text: z.string().describe('Text to type'),

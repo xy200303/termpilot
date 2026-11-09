@@ -118,7 +118,8 @@ async function runRdpAgentUnsafe(
     const canvas = requireVisibleCanvas(connection)
     canvas.focus({ preventScroll: true })
     const count = Array.from(input.text).length
-    if (input.method === 'clipboard') {
+    // xrdp 会丢掉 Unicode 键盘事件里的非 ASCII 字符，含中文时直接走剪贴板
+    if (input.method === 'clipboard' || /[^\x00-\x7f]/.test(input.text)) {
       const combo = await pasteIntoRdp(connection, input.text, input.pasteKeys)
       return { note: tr('common.wrote_count_characters_to_the_remote_clipboard_a', { count, combo }) }
     }

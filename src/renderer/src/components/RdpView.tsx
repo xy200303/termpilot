@@ -20,16 +20,18 @@ export function RdpView(props: { viewId: string; session: SessionConfig; active:
     let connection: RdpConnection | null = null
     let disposed = false
     let settleTimer: ReturnType<typeof setTimeout> | null = null
-    // xrdp 在客户端突然断开后重新连入时，首个 fast-path 帧会解析失败，画面停在空白。
-    // 关掉旧桥接、稍等一秒再连一次即可恢复，不必让用户手动点「重新连接」。
+    // xrdp 在客户端突然断开后重新连入时，会有一段时间接不回旧会话（服务端 scp_process_msg failed），
+    // 首个 fast-path 帧也可能解析失败；关掉旧桥接、退避重试两次，多数情况下能落到新会话。
+    const retryDelays = [1500, 4000]
     const retryLater = (): boolean => {
-      if (retries.current >= 1) return false
-      retries.current += 1
+      const index = retries.current
+      if (index >= retryDelays.length) return false
+      retries.current = index + 1
       onStatus({ viewId: props.viewId, sessionId: props.session.id, status: 'connecting' })
       void window.api.desktop.close(props.viewId).catch(() => undefined).then(() => {
         setTimeout(() => {
           if (!disposed) setAttempt((value) => value + 1)
-        }, 1500)
+        }, retryDelays[index])
       })
       return true
     }

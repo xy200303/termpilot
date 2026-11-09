@@ -99,13 +99,39 @@ cp dist/{iron-remote-desktop-rdp.js,index.d.ts,package.json,CHANGELOG.md} \
 
 ## 已知限制
 
-- **中文输入要走剪贴板**：xrdp 会丢掉 Unicode 键盘事件里的非 ASCII 字符，用 `desktop_type` 的 keys 方式打中文只留下空格；`method=clipboard` 正常。官方组件的 canvas 不是可编辑元素，也没有处理 `compositionend`，所以本机输入法直接打字同样不适用于中文，界面上用「发送文字」走剪贴板。
+- **中文输入要走剪贴板**：xrdp 会丢掉 Unicode 键盘事件里的非 ASCII 字符，用 `desktop_type` 的 keys 方式打中文只留下空格。xrdp 0.10 源码里 `xrdp_wm_key_unicode` 只把字符查 keymap 表，查不到（CJK 都不在表里）就直接丢弃，所以这不是版本问题。Agent 的 `desktop_type` 现在检测到非 ASCII 会自动改走剪贴板；本机输入法直接打字仍不支持，界面用「发送文字」走剪贴板。
 - **接回仍然存活的 xrdp 会话会失败**：客户端断开后服务端会话还在时，再次连入有两种表现——回放的首个 fast-path 帧触发 `invalid fastPath_length` 解析错误，或者连上后没有任何 PDU（画面空白）；服务端 `/var/log/xrdp.log` 会记 `++ reconnected session`，有时跟随 sesman 的 `login failed for display 0`。官方 wasm + 官方演示客户端同样如此，不是这次接入引入的。
   - `RdpView` 在 connect/run 失败时会自动关掉桥接、1.5 秒后重试一次；会话已被 xrdp 回收时重试即可恢复。
   - 仍失败时界面会提示「服务器上可能还留着上一次的会话」，等 xrdp 回收（或服务端 `pkill -u <用户>`）后再点「重新连接」即可。
   - 全新会话、以及登录框阶段的断线重连都正常。
+  - **已在服务端解决**：升级到 xrdp 0.10.6.1 + xorgxrdp 0.10.5 后实测接回正常，`sesman_data_in: scp_process_msg failed` 不再出现，详见下面「服务端升级到 xrdp 0.10」。
 - 官方组件把会话藏在元素内部，只有 `Session` 的少量接口外露，Agent 的点击/按键只能通过给 canvas 派发合成 DOM 事件实现（已验证有效）。
 - `vendor` 里是未做 `wasm-opt` 的产物，比上游发布流程的产物大一些；本机访问不了 GitHub Releases，暂时保持现状。
+
+## 服务端升级到 xrdp 0.10（2026-11-09 实测）
+
+Ubuntu 22.04 源里只有 0.9.17，这台机器访问 PPA 返回 403，所以从源码装到 `/usr/local`：
+
+```bash
+apt-get install -y build-essential libssl-dev libpam0g-dev libx11-dev   libxfixes-dev libxrandr-dev libxext-dev libxrender-dev libxdamage-dev   libxfont-dev libxkbfile-dev libjpeg-dev libfuse3-dev nasm xserver-xorg-dev x11proto-dev
+
+# xrdp 0.10.6.1：要用 release 的 tar.gz，GitHub 自动生成的 archive 缺 ulalaca/Makefile.in
+curl -L -o xrdp.tar.gz https://github.com/neutrinolabs/xrdp/releases/download/v0.10.6.1/xrdp-0.10.6.1.tar.gz
+tar xzf xrdp.tar.gz && cd xrdp-0.10.6.1
+./configure --enable-fuse --enable-jpeg --sysconfdir=/etc --localstatedir=/var
+make -j"$(nproc)" && make install
+
+# xorgxrdp 0.10.5（要能找到 /usr/local/lib/pkgconfig/xrdp.pc）
+curl -L -o xorgxrdp.tar.gz https://github.com/neutrinolabs/xorgxrdp/releases/download/v0.10.5/xorgxrdp-0.10.5.tar.gz
+tar xzf xorgxrdp.tar.gz && cd xorgxrdp-0.10.5
+PKG_CONFIG_PATH=/usr/local/lib/pkgconfig ./configure && make -j"$(nproc)" && make install
+```
+
+- `make install` 会把 systemd unit 改成 `/usr/local/sbin/xrdp`，`systemctl daemon-reload && systemctl restart xrdp-sesman xrdp` 即可
+- 0.10 通过 sesexec 以登录用户身份启动 Xorg，必须把 `/etc/X11/Xwrapper.config` 改成 `allowed_users=anybody`（0.9 由 root 启动，不需要），否则报 `waitforx: Unable to open display` / `X server could not be started`
+- 回滚：0.9.17 的 xorgxrdp 模块备份在 `/root/xorgxrdp-old/`，`apt install --reinstall xrdp xorgxrdp` 后放回即可；`/etc/xrdp` 备份在 `/root/xrdp-etc-backup.tgz`
+
+实测：断开客户端后服务端会话保留，重新连入输密码后直接回到原来的 XFCE 桌面；`xrdp-sesman.log` 记录 `++ reconnected session ... display :13.0`，0.9.17 上的 `scp_process_msg failed` 不再出现。
 
 ## 当前进展
 
@@ -114,3 +140,4 @@ cp dist/{iron-remote-desktop-rdp.js,index.d.ts,package.json,CHANGELOG.md} \
 - [x] React 面板换成官方自定义元素，复用 RdpBridge
 - [x] 截图、坐标点击、键盘输入、剪贴板双向、断线重连端到端验证
 - [x] `npm run typecheck`、`npm run build` 通过；首屏 index 约 1.1 MB，RDP chunk 懒加载
+- [x] 服务端升级 xrdp 0.10.6.1 + xorgxrdp 0.10.5，断线接回同一会话实测恢复

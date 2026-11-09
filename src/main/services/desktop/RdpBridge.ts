@@ -3,6 +3,7 @@ import { t as mt } from '../../i18n'
 import { connect as connectTcp, type Socket } from 'node:net'
 import { connect as connectTls, type TLSSocket, type DetailedPeerCertificate } from 'node:tls'
 import { randomUUID } from 'node:crypto'
+import { appendFileSync } from 'node:fs'
 import { WebSocketServer, WebSocket, type RawData } from 'ws'
 import { TrafficMeter, type TrafficSnapshot } from './TrafficMeter'
 
@@ -250,8 +251,15 @@ export class RdpBridge {
 
   private relay(ws: WebSocket, socket: TLSSocket): void {
     socket.setNoDelay(true)
+    const dump = process.env.TERMPILOT_RDP_DUMP
+    const file = dump ? `${dump}-${Date.now()}.bin` : ''
+    let dumped = 0
     socket.on('data', (data) => {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data)
+      if (file && dumped < 8 * 1024 * 1024) {
+        appendFileSync(file, buffer)
+        dumped += buffer.length
+      }
       this.traffic.addIn(buffer.length)
       this.outgoing.push(buffer)
       this.pump(ws, socket)
