@@ -263,6 +263,16 @@ export function registerIpc(
     clipboard.writeText(text)
   })
   ipcMain.handle(IPC.desktopMetrics, (_event, viewId: string) => desktop.metrics(viewId))
+  let rdpWasm: Buffer | null = null
+  ipcMain.handle(IPC.desktopRdpWasm, () => {
+    if (!rdpWasm) {
+      const file = app.isPackaged
+        ? join(process.resourcesPath, 'ironrdp_web_bg.wasm')
+        : join(app.getAppPath(), 'vendor', 'iron-remote-desktop-rdp', 'ironrdp_web_bg.wasm')
+      rdpWasm = readFileSync(file)
+    }
+    return rdpWasm
+  })
   ipcMain.handle(IPC.desktopAgent, (_event, viewId: string, input: DesktopAgentInput) =>
     desktopAgent.run(viewId, input)
   )

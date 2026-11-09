@@ -230,6 +230,7 @@ const api = {
       write: (text: string) => ipcRenderer.invoke(IPC.desktopClipboardWrite, text) as Promise<void>
     },
     metrics: (viewId: string) => ipcRenderer.invoke(IPC.desktopMetrics, viewId) as Promise<DesktopMetrics | null>,
+    rdpWasm: () => ipcRenderer.invoke(IPC.desktopRdpWasm) as Promise<Uint8Array>,
     agent: {
       run: (viewId: string, input: DesktopAgentInput) =>
         ipcRenderer.invoke(IPC.desktopAgent, viewId, input) as Promise<string>,

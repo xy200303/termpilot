@@ -85,6 +85,7 @@ export const IPC = {
   desktopClipboardRead: 'desktop:clipboard-read',
   desktopClipboardWrite: 'desktop:clipboard-write',
   desktopMetrics: 'desktop:metrics',
+  desktopRdpWasm: 'desktop:rdp-wasm',
   /** 桌面 Agent：GUI / MCP → main → 对应桌面实现 */
   desktopAgent: 'desktop:agent',
   desktopAgentRun: 'desktop:agent-run',

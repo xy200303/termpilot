@@ -15,7 +15,8 @@
     "dist:win": "npm run cli:build && npm run rebuild:native && electron-vite build && electron-builder --win --publish never",
     "dist:mac": "npm run cli:build && npm run rebuild:native && electron-vite build && electron-builder --mac --publish never",
     "dist:linux": "npm run cli:build && npm run rebuild:native && electron-vite build && electron-builder --linux --publish never",
-    "cli:build": "node scripts/build-cli.mjs"
+    "cli:build": "node scripts/build-cli.mjs",
+    "vendor:patch": "node scripts/patch-ironrdp-vendor.mjs"
   },
   "dependencies": {
     "node-pty": "^1.1.0",
@@ -75,7 +76,17 @@
     "files": [
       "out/**/*",
       "package.json",
-      "!node_modules/cpu-features/**"
+      "!node_modules/cpu-features/**",
+      "!node_modules/node-pty/build/deps/**",
+      "!node_modules/node-pty/build/obj/**",
+      "!node_modules/node-pty/build/**/*.iobj",
+      "!node_modules/node-pty/build/**/*.ipdb",
+      "!node_modules/node-pty/build/**/*.obj",
+      "!node_modules/node-pty/build/**/*.pdb",
+      "!node_modules/node-pty/build/**/*.lib",
+      "!node_modules/node-pty/build/**/*.exp",
+      "!node_modules/node-pty/build/**/*.ilk",
+      "!node_modules/node-pty/build/**/*.tlog"
     ],
     "extraResources": [
       {
@@ -121,6 +132,10 @@
       {
         "from": "node_modules/ironrdp-wasm/LICENSE",
         "to": "licenses/ironrdp-wasm/LICENSE"
+      },
+      {
+        "from": "vendor/iron-remote-desktop-rdp/ironrdp_web_bg.wasm",
+        "to": "ironrdp_web_bg.wasm"
       }
     ],
     "asarUnpack": [
@@ -190,6 +205,7 @@
     "electronLanguages": [
       "en-US",
       "zh-CN"
-    ]
+    ],
+    "compression": "maximum"
   }
 }

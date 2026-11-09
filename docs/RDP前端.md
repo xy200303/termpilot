@@ -81,11 +81,14 @@ cp ../iron-remote-desktop/dist/{iron-remote-desktop.js,index.d.ts,package.json,C
    <termpilot>/vendor/iron-remote-desktop/
 cp dist/{iron-remote-desktop-rdp.js,index.d.ts,package.json,CHANGELOG.md} \
    <termpilot>/vendor/iron-remote-desktop-rdp/
+
+# 把 base64 内联的 wasm 拆成独立文件（安装包小约 2 MB）
+cd <termpilot> && npm run vendor:patch
 ```
 
-`crates/ironrdp-web` 打出来的 wasm 有 5.5 MB，`iron-remote-desktop-rdp` 构建时以 base64 内联进 `iron-remote-desktop-rdp.js`（7.7 MB）。这份产物按需加载：`RdpView` 是懒加载路由，`rdpAgent` 又是独立 chunk（约 7.4 MB），不影响首屏。
+`crates/ironrdp-web` 打出来的 wasm 有 5.5 MB，上游构建时以 base64 内联进 `iron-remote-desktop-rdp.js`（7.7 MB）。`npm run vendor:patch` 会把它拆成独立的 `ironrdp_web_bg.wasm` 并改成运行时取全局变量：主进程通过 `desktop:rdp-wasm` 读字节给渲染进程，wasm 以 `extraResources` 随安装包分发。这样 JS chunk 从 7.7 MB 降到约 140 KB，安装包少约 2 MB。
 
-页面 CSP 要放行 `data:` 的 `connect-src`：wasm-bindgen 用 `fetch('data:application/wasm;base64,...')` 初始化，漏掉会直接报 `Failed to fetch`。`src/renderer/index.html` 里已加上。
+页面 CSP 里的 `connect-src` 需要 `data:`：上游构建用 `fetch('data:application/wasm;base64,...')` 初始化 wasm，漏掉会直接报 `Failed to fetch`。现在改成 IPC 传字节后不再依赖它，但保留无副作用，`src/renderer/index.html` 已加上。
 
 ## 端到端验证（2026-11-09）
 

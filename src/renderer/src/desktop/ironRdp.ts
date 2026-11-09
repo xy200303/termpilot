@@ -1,5 +1,4 @@
 import '@devolutions/iron-remote-desktop'
-import { Backend, displayControl, init as initBackend } from '@devolutions/iron-remote-desktop-rdp'
 import type { NewSessionInfo, Session, UserInteraction } from '@devolutions/iron-remote-desktop'
 import i18n from '../i18n'
 
@@ -17,11 +16,24 @@ type IronRdpElement = HTMLElement & {
   flexcenter?: string
 }
 
-let backendReady: Promise<void> | null = null
+type RdpBackend = typeof import('@devolutions/iron-remote-desktop-rdp')
 
-/** 官方 wasm 只初始化一次：init 必须在 connect() 之前完成。 */
-export function initIronRdp(): Promise<void> {
-  backendReady ??= initBackend('WARN')
+let backendReady: Promise<RdpBackend> | null = null
+
+/**
+ * wasm 不再以 base64 内联在 JS 里（那样会多占三分之一体积），改成主进程把
+ * .wasm 字节读出来经 IPC 传过来；动态 import 前先把它挂到全局变量上。
+ */
+export function initIronRdp(): Promise<RdpBackend> {
+  backendReady ??= (async () => {
+    const bytes = await window.api.desktop.rdpWasm()
+    ;(globalThis as Record<string, unknown>).__TERMPILOT_IRONRDP_WASM__ = bytes
+    const backend = await import('@devolutions/iron-remote-desktop-rdp')
+    await backend.init('WARN')
+    // wasm 实例化后这份字节（约 5.7 MB）不再需要，别让它挂在全局上
+    delete (globalThis as Record<string, unknown>).__TERMPILOT_IRONRDP_WASM__
+    return backend
+  })()
   return backendReady
 }
 
@@ -80,7 +92,7 @@ function waitForReady(element: IronRdpElement): Promise<UserInteraction> {
 }
 
 export async function connectIronRdp(options: IronRdpOptions): Promise<IronRdpConnection> {
-  await initIronRdp()
+  const { Backend, displayControl } = await initIronRdp()
 
   const element = document.createElement(ELEMENT_TAG) as IronRdpElement
   element.setAttribute('verbose', 'false')
@@ -140,6 +152,12 @@ export async function connectIronRdp(options: IronRdpOptions): Promise<IronRdpCo
         ui.shutdown()
       } catch {
         // 已经断开时 shutdown 会抛，忽略
+      }
+      // 画布的后备存储要显式缩到 0，Chromium 才会尽快回收这块 surface
+      const canvas = element.shadowRoot?.querySelector('canvas')
+      if (canvas) {
+        canvas.width = 0
+        canvas.height = 0
       }
       element.remove()
     }
